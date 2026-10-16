@@ -22,8 +22,8 @@ docker compose up -d        # pulls published images from Docker Hub
 One script, both runtimes — compose by default, k3s with `--node <ip>`:
 
 ```bash
-./protected-api-demo.sh                       # compose
-./protected-api-demo.sh --node 192.168.1.74   # k3s cluster (namespace agentgw)
+demo/protected-api-demo.sh                       # compose
+demo/protected-api-demo.sh --node 192.168.1.74   # k3s cluster (namespace agentgw)
 ```
 
 What it proves, and how:
@@ -45,7 +45,7 @@ What it proves, and how:
    cryptographically valid.
 
 The component itself (and why it is a plain, un-licenced image) is
-documented in the product repository: `cmd/demoapi/README.md`.
+documented in the same repository, at `demo/api/README.md`.
 
 ## Demo 1 — scripted (`demo/demo.sh`)
 

@@ -113,7 +113,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
-| [`protected-api-demo.sh`](protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
+| [`demo/protected-api-demo.sh`](demo/protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
 | [`docs/Commercial-Licence.md`](docs/Commercial-Licence.md) | Licence terms: what you get, what is not warranted, liability limits, indemnity |
 | [`docs/Pricing.md`](docs/Pricing.md) | Licensing tiers and buying path |
@@ -122,6 +122,23 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 ## Quickstart
 
 Requirements: Docker Engine 24+, `docker compose`, `curl`, `jq` optional.
+
+### Building and publishing the demo API yourself
+
+The gateway-stack images ship from the product repo. The **demo API** lives
+here (`demo/api/`, standalone module) and is rebuilt with the repo Makefile:
+
+```bash
+make image                     # host arch into the local engine
+make push                      # multi-arch (amd64+arm64) → REGISTRY/IMAGE_NS
+make verify-arch               # assert an arm64 variant actually runs arm64 code
+```
+
+To publish to your own registry:
+`make push REGISTRY=ghcr.io/yourname IMAGE_NS=your-prefix` — then consume it:
+- compose: `DEMOAPI_IMAGE=ghcr.io/yourname/your-prefix-demoapi:1.0.3 docker compose -f demo/docker-compose.yml -f demo/docker-compose.opa.yml up -d`
+- k3s: change the `demoapi` image ref in `k3s/agentgw.yaml` to your registry.
+
 
 > Also available on Kubernetes: [`k3s/`](k3s/) deploys the same stack into a
 > k3s/`kubectl` cluster (own namespace `agentgw`, NodePorts, the live-policy
@@ -204,8 +221,8 @@ licence/encryption) since it represents *your* service, not a vendor part.
 Run it:
 
 ```bash
-./protected-api-demo.sh                      # compose (default)
-./protected-api-demo.sh --node 192.168.1.74  # k3s cluster
+./demo/protected-api-demo.sh                      # compose (default)
+./demo/protected-api-demo.sh --node 192.168.1.74  # k3s cluster
 ```
 
 The delegation carries an **`approval_rules`** entry
@@ -215,8 +232,8 @@ sensitive API is **held (202) and never executes**: demoapi's per-path
 other human) is refused even with the operator token; the **delegating user**
 approves (subject-bound), the retry executes **exactly once** (counter ↑ by
 1), and revocation kills the call path instantly. Walkthrough text:
-[docs/Demos.md](docs/Demos.md); the component and its Dockerfile live in the
-product repo (`cmd/demoapi`, `docker/Dockerfile.demoapi`).
+[docs/Demos.md](docs/Demos.md); the component's source, Dockerfile and
+detailed README live right here in [`demo/api/`](demo/api/README.md).
 
 ## URLs & endpoints (demo stack)
 

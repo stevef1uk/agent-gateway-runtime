@@ -90,7 +90,7 @@ services:
       retries: 5
 
   demoapi:
-    image: stevef1uk/agent-gateway-demoapi:1.0.0
+    image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.3}  # source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
     container_name: agent-gateway-demoapi
     restart: unless-stopped
     ports: ["8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire

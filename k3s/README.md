@@ -73,8 +73,8 @@ Notes:
   the first argument).
 * **Protected-API demo** (approval-before-execution via the delegation's
   `approval_rules`, against the demoapi upstream): the same script works on
-  both platforms — `./protected-api-demo.sh` (compose) or
-  `./protected-api-demo.sh --node <ip>` (k3s).
+  both platforms — `demo/protected-api-demo.sh` (compose) or
+  `demo/protected-api-demo.sh --node <ip>` (k3s; `make protected-api-k3s`).
 
 ## Rotate for anything real
 
