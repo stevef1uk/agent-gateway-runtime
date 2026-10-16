@@ -1,98 +1,116 @@
-# demoapi — the demo *protected API*
+# demoapi — a demo *protected API*
 
-`demoapi` is a stand-in for a **customer's own API** — the thing Agent Gateway
-exists to protect. It is deliberately plain: no secure-packager encryption, no
-licence token, no entrypoint ceremony, because unlike the authz/tokensvc/
-gateway/console images it is **not vendor-delivered** — in a real deployment
-this is *your* service.
+This folder contains a tiny API service that pretends to be **your
+(company's) sensitive API** — for example a payments endpoint.
 
-## What it shows
-
-The point of this component is to make the gateway's **two-phase execution**
-observable: a high-risk action returns **202 + an approval record** and the
-downstream must NOT have been called. When the human approves, the agent
-retries the identical action and it executes **exactly once, single-use**.
-That claim is normally invisible — here it is not: every response carries a
-per-path call counter (`executed_count`, mirrored on the
-`X-Demoapi-Call-Count` response header). If the counter says `1` after the
-retry, the API genuinely ran once — and nothing after the held phase meant
-the API never moved:
+Agent Gateway sits in front of it. Every call an agent makes must pass the
+gateway's policy first — and, for sensitive paths, a **human must approve
+before the API is allowed to run**.
 
 ```
-1st call  → 202 {"status":"approval_required","approval_id":"apr-…",
-                 "reason":"sensitive API access requires a human"}
-retry     → 200 {"status":"ok","executed_count":1,
-                 "note":"executed BEHIND the Agent Gateway"}
+ agent ──call──► Agent Gateway ──allowed?──► demoapi (executes)
+                     │
+                     └──sensitive?──► HELD (202) … human approves … then runs
 ```
 
-`demoapi` also echoes the actor-delegation headers the gateway injects on
-every allowed forward — `X-Auth-User`, `X-Auth-Agent`, `X-Delegation-ID`,
-`X-Request-ID` — showing what a real downstream service sees so it can apply
-its own secondary authz and log the actual actor.
+Two important facts about this folder:
 
-## Wiring
+* The image is **plain** (no encryption, no licence token). The other
+  images (authz, tokensvc, gateway, console) are vendor-delivered, so they
+  arrive encrypted and licence-gated. `demoapi` represents **your** own
+  service — you would never license your own code.
+* Every response includes `executed_count` — how many times THAT path has
+  been executed during this container's life. This turns a claim into
+  evidence: after the demo, the sensitive path's counter shows the API ran
+  **exactly once** (and only after the approval).
 
-The gateway forwards **allowed** calls to it via `UPSTREAM_URL`:
+## Run it (one command)
 
-| Platform | Where set | Values |
+From this repository's root:
+
+```bash
+demo/protected-api-demo.sh                       # local docker compose stack
+demo/protected-api-demo.sh --node 192.168.1.74   # the k3s cluster
+```
+
+(the cluster needs the namespace deployed first — `k3s/README.md`)
+
+### What you will see, step by step
+
+| # | What happens | Why it matters |
 |---|---|---|
-| docker compose (local) | `demo/docker-compose.yml` → `gateway.environment` | `UPSTREAM_URL=http://demoapi:8090`, plus the `demoapi` container itself |
-| k3s cluster | `k3s/agentgw.yaml` → `gateway.env` | `UPSTREAM_URL=http://demoapi:8090`, plus `demoapi` Deployment + Service (ClusterIP) |
+| 1 | Sign in at the IdP → a **verified subject** | the human is real, not a claimed name |
+| 2 | Create a delegation for agent `demoapi-agent` with an **approval rule** (below) | the human decides, the policy is written with the grant |
+| 3 | Agent mints a 5-minute token using the one-time secret | short-lived, scoped — not a reusable key |
+| 4 | `/orders` calls **run immediately** and are forwarded to demoapi | low-risk work is never blocked |
+| 5 | First `POST /api/sensitive/payment` → **202, HELD, not executed** | the `executed_count` did not move: the API never ran |
+| 6 | A different human ("mallory") tries to approve → **403 refused** | only the delegating user may authorize their agent |
+| 7 | The delegating user approves → **200** | single-use, bound to this exact action |
+| 8 | The agent retries → **200, `executed_count` + 1** | the API ran exactly once, after the human said yes |
+| 9 | Revoke the delegation → next call **403** | instant enforcement, even with the token still valid |
 
-Remove `UPSTREAM_URL` to restore the gateway's synthetic echo (no upstream
-reached; useful for pure PEP tests).
+## How "require approval" is switched on
 
-## Requiring human approval *before* the API is callable
-
-No gateway/UI change is needed — it is a **per-delegation approval rule**
-set at delegation creation. The OPA policy evaluates
-`input.delegation.approval_rules` and downgrades any matching call from
-*allow* to *requires-approval*:
+Inside the **delegation** (the human's grant), as an `approval_rules` entry.
+Nothing else is configured — no gateway edit, no policy file edit:
 
 ```json
-POST /v1/delegations/          (authz service; needs a verified OIDC ID token)
 {
-  "id_token": "<the human's ID token>",
-  "agent_id": "finance-agent-7",
   "resources": ["/orders", "/api/sensitive*"],
   "actions": ["read", "create"],
-  "expires_in_seconds": 1800,
   "approval_rules": [
-    { "when": { "resource_pattern": "/api/sensitive*" },
-      "require": true,
-      "rationale": "moving money always needs a human" }
+    {
+      "when":       { "resource_pattern": "/api/sensitive*" },
+      "require":    true,
+      "rationale":  "moving money always needs a human"
+    }
   ]
 }
 ```
 
-Notes on the rule:
+Reading the fields:
 
-* `resource_pattern` / `action_pattern` use **exact, prefix (`pre*`) or
-  suffix (`*suf`) matching** — a bare `*` is *not* a glob-all; to match any
-  action **omit the value** (an empty pattern always matches).
-* `rationale` is what the human sees in the 202 response and on the
-  console/webhook — write it for the approver.
-* Rules are **per-delegation**: the same gateway can serve delegations where
-  `/api/sensitive` auto-runs (no rule) and delegations where it always
-  requires a human — the human's grant decides.
+* `resources` — which paths the agent may reach at all (everything else is
+  denied outright, `403 resource not allowed`).
+* `approval_rules[].when.resource_pattern` — **prefix matching**: this rule
+  matches every path starting with `/api/sensitive`, e.g.
+  `/api/sensitive/payment`.
+* `rationale` — the sentence the approver sees in the 202 response and in
+  the console/webhook. Write it for the human, not for the log.
+* A rule is scoped to the **delegation it belongs to**: the same gateway
+  can serve agent A where the sensitive API auto-runs (no rule) and agent B
+  where it always needs a human.
 
-Who may approve: the **admin-token holder** (`X-Admin-Token` =
-`GATEWAY_ADMIN_TOKEN`, operator surfaces only — the agent runtime never has
-it) **and** the `approver_id` must equal the delegating user the approval is
-bound to (`APPROVAL_ENFORCE_APPROVER`); the console supplies the verified
-session subject automatically. Everything is audited
-(`audit_events.approver_id`).
+Match rules in one line: **exact**, `pre*` (prefix), `*suf` (suffix). To
+match "any action", leave `action_pattern` out — writing just `"*"` does
+NOT mean "everything".
 
-## Build & run
+## Who can approve?
 
-* Image: `demo/api/Dockerfile` — a **standalone module** (own go.mod, no
-  product dependencies; source lives in this directory next to the
-  Dockerfile) — plain alpine, non-root, multi-arch, and it declares
-  `ARG TARGETOS`/`ARG TARGETARCH`.
-* Build from this directory (in the agent-gateway-demo repo):
-  `cd demo/api && docker buildx build --platform linux/amd64,linux/arm64 \
-     -t stevef1uk/agent-gateway-demoapi:1.0.1 -t stevef1uk/agent-gateway-demoapi:latest --push .`
-* Locally (no docker): `go run .` then
-  `curl -s -X POST localhost:8090/whatever` — watch `executed_count`.
-* Full scripted walkthroughs: the compose demo and the k3s cluster both run
-  this flow; see `../docker-compose.yml` and `../../k3s/agentgw.yaml`. One script drives both: ``demo/protected-api-demo.sh` (compose by default, `--node <ip>` for the k3s cluster; run from the repo root).
+Two independent gates, both must pass:
+
+1. **`X-Admin-Token`** — an operator secret (`GATEWAY_ADMIN_TOKEN`). It is
+   given to the console and to trusted automation only. The agent runtime
+   never receives it, so an agent literally cannot reach the approve call
+   (`401 invalid admin token`).
+2. **The delegating user** — the `approver_id` in the decision must equal
+   the subject the delegation was created with; the console fills it in
+   automatically from your sign-in session. Everyone else: `403 only the
+   delegating user can approve`.
+
+Every decision lands in the audit trail with the approver recorded.
+
+## Under the hood (for maintainers)
+
+* Source: `main.go` (single file, Go standard library only — standalone
+  `go.mod`), tests: `main_test.go`.
+* Image: built from the `Dockerfile` in this directory; plain alpine,
+  non-root, multi-arch (it declares `ARG TARGETOS`/`ARG TARGETARCH` — keep
+  them!).
+* Publish your own copy from this repo root:
+  `make push REGISTRY=ghcr.io/yourname IMAGE_NS=your-prefix`
+  (compose consumes it via `DEMOAPI_IMAGE=…`, k3s by editing the image ref
+  in `k3s/agentgw.yaml`).
+* For a smoke test of just this service:
+  `go run .` then `curl -s -X POST localhost:8090/demo` — watch
+  `executed_count` climb.
