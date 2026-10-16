@@ -289,7 +289,7 @@ All configuration is via environment variables (12-factor style).
 | `authz` | `AUTHZ_ADDR` (`:8081`) |
 | `tokensvc` | `TOKENSVC_ADDR` (`:8082`), `AUTHZ_URL` (must point at authz, use the service name inside the compose/k8s network — **not** `localhost`), `TOKENSVC_ALLOW_NO_SECRET_MINT` (default off; legacy mint without an agent secret, dev only) |
 | `gateway` | `GATEWAY_ADDR` (`:8080`), `AUTHZ_URL`, `UPSTREAM_URL` (your protected backend; unset = synthetic response for demos), `GATEWAY_ADMIN_TOKEN` (guards `GET/POST /v1/approvals` + `POST /v1/tokens/revoke` via `X-Admin-Token`; unset = those endpoints disabled), `APPROVAL_WEBHOOK_URL` / `APPROVAL_WEBHOOK_SECRET` (push an `approval.required` event whenever an action is held — HMAC-signed; see [Notifications.md](Notifications.md)) |
-| `web` | `WEB_ADDR` (`:8083`), `AUTHZ_URL`, `GATEWAY_URL`, `WEB_DIR` (static assets, do not change), `GATEWAY_ADMIN_TOKEN` (forwarded to the gateway's operator endpoints), `WEB_SESSION_TTL` (default `8h`), `DEMO_UI` (default off — serves `demo.html`, `policy.html` and their APIs), `POLICY_FILE` + `POLICY_DEFAULT_FILE` (OPA playground, needs the OPA override) |
+| `web` | `WEB_ADDR` (`:8083`), `AUTHZ_URL`, `GATEWAY_URL`, `WEB_DIR` (static assets, do not change), `GATEWAY_ADMIN_TOKEN` (forwarded to the gateway's operator endpoints), `WEB_SESSION_TTL` (default `8h`), `DEMO_UI` (default off — serves `demo.html`, `policy.html` and their APIs), `POLICY_FILE` + `POLICY_DEFAULT_FILE` (OPA playground, needs the OPA override), `PUBLIC_GATEWAY_URL` (where agents reach the gateway from the browser's network — set on NodePort/Ingress deployments; see `k3s/`) |
 
 ### Container runtime keys (all four images)
 
@@ -354,9 +354,15 @@ console additionally enforces:
   findings.
 
 Scan note: an OWASP ZAP baseline + full scan against the console and the
-three core APIs is clean apart from informational noise (cacheability of 302
-redirects, session-management detection on the OIDC flow). Re-run both against
-your own deployment after changing any exposure:
+three core APIs reports **zero fails**; the remaining warnings are accepted
+informational noise — cacheability of 302 redirects, session-management
+detection on the OIDC flow, `script-src 'unsafe-inline'` in the CSP (pages
+ship inline scripts; nonce-based CSP is follow-up work), the words
+"user"/"token" appearing in benign JS comments, and the IdP-proxy responses
+relayed from Dex. Under active scan, an anonymous client can reach only
+`/api/config` (public metadata) — every actionable API answers 401, and
+POST-only APIs 404. Re-run both against your own deployment after changing
+any exposure:
 `docker run --rm --network host zaproxy/zap-stable zap-baseline.py -t http://<host>:8083/ -r report.html`.
 The playground's full journey (SSO sign-in → session-gated probe delegation →
 probes → broken-edit rejection → hot reload → restore) is covered by a checked-in

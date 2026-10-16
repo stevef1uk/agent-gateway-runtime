@@ -122,6 +122,11 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 
 Requirements: Docker Engine 24+, `docker compose`, `curl`, `jq` optional.
 
+> Also available on Kubernetes: [`k3s/`](k3s/) deploys the same stack into a
+> k3s/`kubectl` cluster (own namespace `agentgw`, NodePorts, the live-policy
+> shared volume) — see [`k3s/README.md`](k3s/README.md). The console, guided
+> demo and policy playground all run untouched at `http://<node>:30083`.
+
 ```bash
 cd demo
 docker compose up -d          # 7 containers, first pull takes a minute

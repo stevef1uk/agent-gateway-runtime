@@ -1,0 +1,432 @@
+# Agent Gateway on k3s — single manifest, namespace agentgw.
+#
+# Storage follows the shared-Gluster pattern: one ReadWriteMany PV on the
+# cluster file system (/mnt/clustervol/k8s/agentgw, DirectoryOrCreate), one
+# PVC, and subPath mounts so each consumer gets its own directory:
+#   postgres/  — database files
+#   redis/     — append-only store
+#   policies/  — the live OPA policy: web (playground) writes it,
+#                authz (engine) watches and serves it — any node
+#
+# Prereq (secrets are NOT in this file): from the demo repo's demo/keys run
+#   kubectl create ns agentgw
+#   kubectl -n agentgw create secret generic agentgw-keys \
+#     --from-file=customer_private.pem=keys/customer_private.pem \
+#     --from-file=license.token=keys/license.token
+#
+# Endpoints after rollout (NodePort on any node, e.g. 192.168.1.74):
+#   console  http://<node>:30083   (DEMO_UI=1 → guided demo + playground)
+#   gateway  http://<node>:30080   (agents; X-Admin-Token operator API)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentgw
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agentgw-secrets
+  namespace: agentgw
+stringData:
+  JWT_SECRET: "agent-gateway-demo-secret-change-in-prod"   # demo-grade: rotate
+  GATEWAY_ADMIN_TOKEN: "agent-gateway-demo-admin"          # demo-grade: rotate
+  POSTGRES_PASSWORD: "agentgw"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: agentgw-shared-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: gluster-shared
+  hostPath:
+    path: /mnt/clustervol/k8s/agentgw
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agentgw-shared-pvc
+  namespace: agentgw
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: gluster-shared
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: agentgw-shared-pv
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dex-config
+  namespace: agentgw
+data:
+  config.yaml: |
+    issuer: http://dex:5556/dex
+    storage:
+      type: memory
+    web:
+      http: 0.0.0.0:5556
+    oauth2:
+      skipApprovalScreen: true
+      passwordConnector: local
+    staticClients:
+      - id: agent-gateway
+        name: Agent Gateway
+        public: true
+        redirectURIs:
+          - http://192.168.1.74:30083/oidc/callback
+          - http://localhost:30083/oidc/callback
+    enablePasswordDB: true
+    staticPasswords:
+      - email: "alice@example.com"
+        hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+        username: "alice"
+        userID: "alice"
+    connectors:
+      - type: mockCallback
+        id: mock
+        name: "Mock (dev)"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: rpi58 }
+      initContainers:
+        - name: volume-ownership
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /data/pgdata && chown -R 70:70 /data"]
+          volumeMounts: [{ name: data, mountPath: /data }]
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - { name: POSTGRES_USER, value: agentgw }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: POSTGRES_PASSWORD } }
+            - { name: POSTGRES_DB, value: agent_gateway }
+            - { name: PGDATA, value: /data/pgdata }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "agentgw", "-d", "agent_gateway"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          hostPath: { path: /srv/agentgw/postgres, type: DirectoryOrCreate }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: agentgw
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: redis } }
+  template:
+    metadata: { labels: { app: redis } }
+    spec:
+      nodeSelector: { kubernetes.io/hostname: rpi58 }
+      initContainers:
+        - name: volume-ownership
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /data && chown -R 999:1000 /data"]
+          volumeMounts: [{ name: data, mountPath: /data }]
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["redis-server", "--appendonly", "yes"]
+          ports: [{ containerPort: 6379 }]
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+      volumes:
+        - name: data
+          hostPath: { path: /srv/agentgw/redis, type: DirectoryOrCreate }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: agentgw
+spec:
+  selector: { app: redis }
+  ports: [{ port: 6379, targetPort: 6379 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: dex } }
+  template:
+    metadata: { labels: { app: dex } }
+    spec:
+      containers:
+        - name: dex
+          image: ghcr.io/dexidp/dex:v2.41.1
+          args: ["dex", "serve", "/etc/dex/config.yaml"]
+          ports: [{ containerPort: 5556 }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/dex }
+      volumes:
+        - name: config
+          configMap: { name: dex-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: agentgw
+spec:
+  selector: { app: dex }
+  ports: [{ port: 5556, targetPort: 5556 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authz
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: authz } }
+  template:
+    metadata: { labels: { app: authz } }
+    spec:
+      containers:
+        - name: authz
+          image: stevef1uk/agent-gateway-authz:1.0.12
+          ports: [{ containerPort: 8081 }]
+          env:
+            - { name: PERSISTENCE, value: postgres }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: POSTGRES_PASSWORD } }
+            - name: DATABASE_URL
+              value: "postgres://agentgw:$(POSTGRES_PASSWORD)@postgres:5432/agent_gateway?sslmode=disable" 
+            - { name: REDIS_URL, value: "redis://redis:6379/0" }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: JWT_SECRET } }
+            - { name: OIDC_ISSUER_URL, value: "http://dex:5556/dex" }
+            - { name: OIDC_CLIENT_ID, value: agent-gateway }
+            # One-click mock sign-in (compose-demo parity); omit to show Dex's
+            # connector chooser — its links are proxied correctly since 1.0.30.
+            - { name: OIDC_CONNECTOR_ID, value: mock }
+            - { name: AUTHZ_POLICY_ENGINE, value: opa }
+            - { name: OPA_POLICY_PATH, value: /policy/authorizer.rego }
+          volumeMounts:
+            - { name: keys, mountPath: /keys, readOnly: true }
+            - { name: licence, mountPath: /licences/authz.token, subPath: authz.token, readOnly: true }
+            - { name: policies, mountPath: /policy, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8081 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: keys
+          secret: { secretName: agentgw-keys, items: [{ key: customer_private.pem, path: customer_private.pem }] }
+        - name: licence
+          secret: { secretName: agentgw-keys, items: [{ key: license.token, path: authz.token }] }
+        - name: policies
+          persistentVolumeClaim: { claimName: agentgw-shared-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authz
+  namespace: agentgw
+spec:
+  type: NodePort   # delegations are created at the decision point directly
+  selector: { app: authz }
+  ports: [{ port: 8081, targetPort: 8081, nodePort: 30081 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tokensvc
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: tokensvc } }
+  template:
+    metadata: { labels: { app: tokensvc } }
+    spec:
+      containers:
+        - name: tokensvc
+          image: stevef1uk/agent-gateway-tokensvc:1.0.5
+          ports: [{ containerPort: 8082 }]
+          env:
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: JWT_SECRET } }
+            - { name: AUTHZ_URL, value: "http://authz:8081" }
+          volumeMounts:
+            - { name: keys, mountPath: /keys, readOnly: true }
+            - { name: licence, mountPath: /licences/tokensvc.token, subPath: tokensvc.token, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8082 }
+            initialDelaySeconds: 8
+            periodSeconds: 5
+      volumes:
+        - name: keys
+          secret: { secretName: agentgw-keys, items: [{ key: customer_private.pem, path: customer_private.pem }] }
+        - name: licence
+          secret: { secretName: agentgw-keys, items: [{ key: license.token, path: tokensvc.token }] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tokensvc
+  namespace: agentgw
+spec:
+  type: NodePort   # agents mint against this directly (like gateway:30080)
+  selector: { app: tokensvc }
+  ports: [{ port: 8082, targetPort: 8082, nodePort: 30082 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      containers:
+        - name: gateway
+          image: stevef1uk/agent-gateway-gateway:1.0.8
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: AUTHZ_URL, value: "http://authz:8081" }
+            - { name: PERSISTENCE, value: postgres }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: POSTGRES_PASSWORD } }
+            - name: DATABASE_URL
+              value: "postgres://agentgw:$(POSTGRES_PASSWORD)@postgres:5432/agent_gateway?sslmode=disable" 
+            - { name: REDIS_URL, value: "redis://redis:6379/0" }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: JWT_SECRET } }
+            - name: GATEWAY_ADMIN_TOKEN
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
+            # - { name: APPROVAL_WEBHOOK_URL, value: "https://…" }   # Deployment.md §7.5
+            # - { name: APPROVAL_WEBHOOK_SECRET, value: "…" }
+          volumeMounts:
+            - { name: keys, mountPath: /keys, readOnly: true }
+            - { name: licence, mountPath: /licences/gateway.token, subPath: gateway.token, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 8
+            periodSeconds: 5
+      volumes:
+        - name: keys
+          secret: { secretName: agentgw-keys, items: [{ key: customer_private.pem, path: customer_private.pem }] }
+        - name: licence
+          secret: { secretName: agentgw-keys, items: [{ key: license.token, path: gateway.token }] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: agentgw
+spec:
+  type: NodePort
+  selector: { app: gateway }
+  ports: [{ port: 8080, targetPort: 8080, nodePort: 30080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: agentgw
+spec:
+  replicas: 1                     # console sessions are in-memory: single replica
+  selector: { matchLabels: { app: web } }
+  template:
+    metadata: { labels: { app: web } }
+    spec:
+      initContainers:
+        - name: seed-policy
+          image: stevef1uk/agent-gateway-web:1.0.30
+          # The shared Gluster file system root-squashes, and pods may run as an
+          # unprivileged uid, so the console runs as root (squashed to `nobody`
+          # by the share — the same owner the first seed created files with).
+          # Non-squashed volumes can drop this override.
+          securityContext: { runAsUser: 0 }
+          command: ["sh", "-c", "ls -la /policies; test -f /policies/authorizer.rego || cp /app/default-policy.rego /policies/authorizer.rego; chmod 666 /policies/authorizer.rego; ls -la /policies; exit 0"]
+          volumeMounts: [{ name: policies, mountPath: /policies }]
+      containers:
+        - name: web
+          image: stevef1uk/agent-gateway-web:1.0.30
+          securityContext: { runAsUser: 0 }
+          ports: [{ containerPort: 8083 }]
+          env:
+            - { name: AUTHZ_URL, value: "http://authz:8081" }
+            - { name: GATEWAY_URL, value: "http://gateway:8080" }
+            - { name: TOKENSVC_URL, value: "http://tokensvc:8082" }
+            - { name: OIDC_ISSUER_URL, value: "http://dex:5556/dex" }
+            - { name: OIDC_CLIENT_ID, value: agent-gateway }
+            # One-click mock sign-in (compose-demo parity); omit to show Dex's
+            # connector chooser — its links are proxied correctly since 1.0.30.
+            - { name: OIDC_CONNECTOR_ID, value: mock }
+            - name: GATEWAY_ADMIN_TOKEN
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
+            - { name: DEMO_UI, value: "1" }
+            - { name: PUBLIC_GATEWAY_URL, value: "http://192.168.1.74:30080" }  # agents reach the gateway here
+            - { name: POLICY_FILE, value: /policies/authorizer.rego }
+            - { name: POLICY_DEFAULT_FILE, value: /app/default-policy.rego }
+          volumeMounts:
+            - { name: keys, mountPath: /keys, readOnly: true }
+            - { name: licence, mountPath: /licences/web.token, subPath: web.token, readOnly: true }
+            - { name: policies, mountPath: /policies }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8083 }
+            initialDelaySeconds: 8
+            periodSeconds: 5
+      volumes:
+        - name: keys
+          secret: { secretName: agentgw-keys, items: [{ key: customer_private.pem, path: customer_private.pem }] }
+        - name: licence
+          secret: { secretName: agentgw-keys, items: [{ key: license.token, path: web.token }] }
+        - name: policies
+          persistentVolumeClaim: { claimName: agentgw-shared-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: agentgw
+spec:
+  type: NodePort
+  selector: { app: web }
+  ports: [{ port: 8083, targetPort: 8083, nodePort: 30083 }]

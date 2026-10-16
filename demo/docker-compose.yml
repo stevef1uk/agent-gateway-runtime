@@ -87,7 +87,7 @@ services:
       retries: 5
 
   web:
-    image: stevef1uk/agent-gateway-web:1.0.27  # 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
+    image: stevef1uk/agent-gateway-web:1.0.30  # 1.0.30 IdP-proxy chooser/link fix (provider links stay under /oidc/idp even without a pinned connector); 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
