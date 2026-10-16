@@ -1,0 +1,27 @@
+# OPA policy-engine override — layer it over the base stack to run authz
+# decisions through the Rego policy in ./policies/ instead of the built-in
+# engine:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.opa.yml up -d
+#
+# Then open http://localhost:8083/policy.html — the policy playground: read and
+# edit ./policies/authorizer.rego, apply, and watch the running service pick the
+# change up within 5 seconds (validated with `opa check` first; a broken edit is
+# rejected and the last good policy keeps serving).
+#
+# The ./policies directory is shared: authz reads it (mounted at /policy, the
+# path its hot-reloader watches) and web writes it (mounted at /policies), which
+# is what lets the playground edit the live policy. See ../docs/Policy-and-OPA.md.
+services:
+  authz:
+    environment:
+      - AUTHZ_POLICY_ENGINE=opa
+      - OPA_POLICY_PATH=/policy/authorizer.rego
+    volumes:
+      - ./policies:/policy:ro
+  web:
+    environment:
+      - POLICY_FILE=/policies/authorizer.rego
+      - AUTHZ_URL=http://authz:8081
+    volumes:
+      - ./policies:/policies

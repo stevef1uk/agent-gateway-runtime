@@ -1,0 +1,154 @@
+# Agent Gateway public demo stack — 7 containers from Docker Hub.
+#
+#   cd demo && docker compose up -d
+#   ./demo.sh                  (scripted walkthrough)
+#   open http://localhost:8083/demo.html   (graphical walkthrough)
+#
+# All binaries run from the published images; the images carry encrypted
+# payloads that need demo/keys/customer_private.pem + the vendor licence at
+# runtime (see ../docs/Security-and-Licensing.md).
+
+services:
+  authz:
+    image: stevef1uk/agent-gateway-authz:1.0.11  # 1.0.11 patched Go toolchain (govulncheck clean) + OPA 1.21.2
+    container_name: agent-gateway-authz
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ports: ["8081:8081"]
+    environment:
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - TOKEN_TTL=5m
+      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_CLIENT_ID=agent-gateway
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/authz.token:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      dex: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  tokensvc:
+    image: stevef1uk/agent-gateway-tokensvc:1.0.4  # 1.0.4 per-IP rate limit on /token + /token/exchange; patched toolchain
+    container_name: agent-gateway-tokensvc
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ports: ["8082:8082"]
+    environment:
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - TOKEN_TTL=5m
+      - AUTHZ_URL=http://authz:8081
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/tokensvc.token:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8082/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  gateway:
+    image: stevef1uk/agent-gateway-gateway:1.0.7  # 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain
+    container_name: agent-gateway-gateway
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ports: ["8080:8080"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # guards /v1/approvals + /v1/tokens/revoke (X-Admin-Token); rotate for anything real
+      # - APPROVAL_WEBHOOK_URL=http://n8n:5678/webhook/agent-gateway   # push approval.required events (Deployment Guide §7.5 / product Deployment.md §7.5)
+      # - APPROVAL_WEBHOOK_SECRET=<random 32 bytes>                    # HMAC-signs each delivery
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    depends_on:
+      authz: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    image: stevef1uk/agent-gateway-web:1.0.27  # 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
+    container_name: agent-gateway-web
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ports: ["8083:8083"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - GATEWAY_URL=http://gateway:8080
+      - TOKENSVC_URL=http://tokensvc:8082
+      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_CLIENT_ID=agent-gateway
+      - OIDC_CONNECTOR_ID=mock        # one-click sign-in for the demo
+      - WEB_ADDR=:8083
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # forwarded to the gateway's operator endpoints
+      - DEMO_UI=1                     # serve the R&D pages (/demo.html, /policy.html); production omits this
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/web.token:ro
+    depends_on:
+      authz: { condition: service_started }
+      gateway: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8083/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: agent-gateway-redis
+    restart: unless-stopped
+    # No published ports: only the gateway stack reaches redis, over the
+    # compose network (publishing 6379 would expose it to the LAN).
+    volumes: [redis-data:/data]
+    command: ["redis-server", "--appendonly", "yes"]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: agent-gateway-postgres
+    restart: unless-stopped
+    # No published ports: only the gateway stack reaches postgres, over the
+    # compose network (publishing 5432 would expose it to the LAN).
+    environment:
+      - POSTGRES_USER=agentgw
+      - POSTGRES_PASSWORD=agentgw
+      - POSTGRES_DB=agent_gateway
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentgw -d agent_gateway"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  dex:
+    image: ghcr.io/dexidp/dex:v2.41.1
+    container_name: agent-gateway-dex
+    restart: unless-stopped
+    ports: ["5556:5556"]
+    volumes:
+      - ./dex/config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+
+volumes:
+  redis-data:
+  postgres-data:
