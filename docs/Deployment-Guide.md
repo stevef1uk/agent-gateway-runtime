@@ -288,7 +288,7 @@ All configuration is via environment variables (12-factor style).
 |---|---|
 | `authz` | `AUTHZ_ADDR` (`:8081`) |
 | `tokensvc` | `TOKENSVC_ADDR` (`:8082`), `AUTHZ_URL` (must point at authz, use the service name inside the compose/k8s network — **not** `localhost`), `TOKENSVC_ALLOW_NO_SECRET_MINT` (default off; legacy mint without an agent secret, dev only) |
-| `gateway` | `GATEWAY_ADDR` (`:8080`), `AUTHZ_URL`, `UPSTREAM_URL` (your protected backend; unset = synthetic response for demos), `GATEWAY_ADMIN_TOKEN` (guards `GET/POST /v1/approvals` + `POST /v1/tokens/revoke` via `X-Admin-Token`; unset = those endpoints disabled), `APPROVAL_WEBHOOK_URL` / `APPROVAL_WEBHOOK_SECRET` (push an `approval.required` event whenever an action is held — HMAC-signed; setup in the product `Deployment.md` §7.5) |
+| `gateway` | `GATEWAY_ADDR` (`:8080`), `AUTHZ_URL`, `UPSTREAM_URL` (your protected backend; unset = synthetic response for demos), `GATEWAY_ADMIN_TOKEN` (guards `GET/POST /v1/approvals` + `POST /v1/tokens/revoke` via `X-Admin-Token`; unset = those endpoints disabled), `APPROVAL_WEBHOOK_URL` / `APPROVAL_WEBHOOK_SECRET` (push an `approval.required` event whenever an action is held — HMAC-signed; see [Notifications.md](Notifications.md)) |
 | `web` | `WEB_ADDR` (`:8083`), `AUTHZ_URL`, `GATEWAY_URL`, `WEB_DIR` (static assets, do not change), `GATEWAY_ADMIN_TOKEN` (forwarded to the gateway's operator endpoints), `WEB_SESSION_TTL` (default `8h`), `DEMO_UI` (default off — serves `demo.html`, `policy.html` and their APIs), `POLICY_FILE` + `POLICY_DEFAULT_FILE` (OPA playground, needs the OPA override) |
 
 ### Container runtime keys (all four images)
@@ -336,6 +336,8 @@ console additionally enforces:
   `approval.required` event to your automation (Slack/Teams/n8n/PagerDuty via
   a translator). The console also notifies in-page: a red pending-counter on
   the Approvals heading plus a toast when a new pending approval appears.
+  Full setup, payload, signature verification and receiver recipes:
+  [Notifications.md](Notifications.md).
 - **Token minting is secret-bound.** `POST /token` mints only with the
   delegation's agent secret; minting for legacy delegations without a digest
   requires `TOKENSVC_ALLOW_NO_SECRET_MINT=1` (dev only — leave unset).

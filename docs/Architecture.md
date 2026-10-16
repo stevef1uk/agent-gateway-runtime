@@ -71,9 +71,9 @@ engine in the codebase):
 3. **High-value actions are two-phase.** The upstream tool is never called
    until the specific action has a fresh, single-use human approval — and the
    human is *told*: the gateway pushes an HMAC-signed `approval.required`
-   webhook to operator automation (Slack/Teams/n8n/PagerDuty recipes in the
-   product `Deployment.md` §7.5), and the console surfaces a pending badge +
-   toast, so nobody has to poll by hand.
+   webhook to operator automation (Slack/Teams/n8n/PagerDuty — setup and
+   receiver recipes in [Notifications.md](Notifications.md)), and the console
+   surfaces a pending badge + toast, so nobody has to poll by hand.
 4. **Revocation beats token validity.** The gateway consults the Redis jti
    list on every call: revocation takes effect immediately even for tokens
    that would pass cryptographic validation for minutes more.
