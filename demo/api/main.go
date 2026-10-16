@@ -28,6 +28,13 @@ type api struct {
 	calls   map[string]int
 }
 
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
 // handler builds the demo API: the health endpoint plus the counting echo.
 func handler() http.Handler {
 	a := &api{started: time.Now(), calls: map[string]int{}}
@@ -51,11 +58,21 @@ func main() {
 }
 
 // handle records the invocation and answers with the counter inline.
+// handle records the invocation, logs it to stdout (kubectl logs shows one
+// line per EXECUTED call only — a held action produces nothing here), and
+// answers with the counter inline.
 func (a *api) handle(rw http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	a.calls[r.URL.Path]++
 	n := a.calls[r.URL.Path]
 	a.mu.Unlock()
+
+	log.Printf("executed method=%s path=%s count=%d user=%s agent=%s delegation=%s request=%s",
+		r.Method, r.URL.Path, n,
+		orDash(r.Header.Get("X-Auth-User")),
+		orDash(r.Header.Get("X-Auth-Agent")),
+		orDash(r.Header.Get("X-Delegation-ID")),
+		orDash(r.Header.Get("X-Request-ID")))
 
 	rw.Header().Set("Content-Type", "application/json")
 	rw.Header().Set("X-Demoapi-Call-Count", strconv.Itoa(n))

@@ -13,7 +13,7 @@ SHELL := /bin/bash
 # k3s/agentgw.yaml (k3s). See README "Building and publishing the demo API".
 REGISTRY         ?= docker.io/stevef1uk
 IMAGE_NS         ?= agent-gateway
-API_VERSION      ?= 1.0.3
+API_VERSION      ?= 1.0.4
 API_IMAGE        := $(REGISTRY)/$(IMAGE_NS)-demoapi
 BUILDER          ?= agent-gateway-builder
 PLATFORMS        ?= linux/amd64,linux/arm64

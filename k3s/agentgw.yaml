@@ -226,7 +226,7 @@ spec:
     spec:
       containers:
         - name: demoapi
-          image: stevef1uk/agent-gateway-demoapi:1.0.3   # plain image: the customer's own API; source at demo/api; change the ref to your own registry if you build it yourself
+          image: stevef1uk/agent-gateway-demoapi:1.0.4   # plain image: the customer's own API; kubectl logs shows a line per EXECUTED call; source at demo/api; change the ref to your own registry if you build it yourself
           ports: [{ containerPort: 8090 }]
           readinessProbe:
             httpGet: { path: /healthz, port: 8090 }
