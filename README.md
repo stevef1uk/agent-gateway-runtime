@@ -113,6 +113,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
+| [`protected-api-demo.sh`](protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
 | [`docs/Commercial-Licence.md`](docs/Commercial-Licence.md) | Licence terms: what you get, what is not warranted, liability limits, indemnity |
 | [`docs/Pricing.md`](docs/Pricing.md) | Licensing tiers and buying path |
@@ -196,6 +197,27 @@ version back, and **Reload from file** re-reads it after a host-side
 Full story: [docs/Policy-and-OPA.md](docs/Policy-and-OPA.md) and
 [docs/Demos.md](docs/Demos.md).
 
+## Demo 4 — the protected API (`demoapi`)
+
+A stand-in for a **customer's own API** — deliberately a plain image (no
+licence/encryption) since it represents *your* service, not a vendor part.
+Run it:
+
+```bash
+./protected-api-demo.sh                      # compose (default)
+./protected-api-demo.sh --node 192.168.1.74  # k3s cluster
+```
+
+The delegation carries an **`approval_rules`** entry
+(`resource_pattern:/api/sensitive*, require:true`) — so the first call to the
+sensitive API is **held (202) and never executes**: demoapi's per-path
+`executed_count` counter proves the upstream did not run. `mallory` (any
+other human) is refused even with the operator token; the **delegating user**
+approves (subject-bound), the retry executes **exactly once** (counter ↑ by
+1), and revocation kills the call path instantly. Walkthrough text:
+[docs/Demos.md](docs/Demos.md); the component and its Dockerfile live in the
+product repo (`cmd/demoapi`, `docker/Dockerfile.demoapi`).
+
 ## URLs & endpoints (demo stack)
 
 | Service | URL |
@@ -203,6 +225,7 @@ Full story: [docs/Policy-and-OPA.md](docs/Policy-and-OPA.md) and
 | Web console | http://localhost:8083 |
 | Guided demo (graphical) | http://localhost:8083/demo.html |
 | OPA policy playground | http://localhost:8083/policy.html *(needs the policy override)* |
+| demoapi (protected API) | http://localhost:8090 — only reachable OUT OF BAND; the gateway forwards to it, so normal traffic must go through :8080 |
 | Gateway (PEP) | http://localhost:8080 |
 | Authz service | http://localhost:8081 |
 | Token service | http://localhost:8082 |

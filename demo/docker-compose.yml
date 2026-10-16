@@ -71,6 +71,9 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # guards /v1/approvals + /v1/tokens/revoke (X-Admin-Token); rotate for anything real
+      # Real downstream: the demo protected API (executed_count proves how
+      # often it ran). Remove to restore the gateway's synthetic echo.
+      - UPSTREAM_URL=http://demoapi:8090
       # - APPROVAL_WEBHOOK_URL=http://n8n:5678/webhook/agent-gateway   # push approval.required events (Deployment Guide §7.5 / product Deployment.md §7.5)
       # - APPROVAL_WEBHOOK_SECRET=<random 32 bytes>                    # HMAC-signs each delivery
     volumes:
@@ -82,6 +85,17 @@ services:
       redis: { condition: service_started }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  demoapi:
+    image: stevef1uk/agent-gateway-demoapi:1.0.0
+    container_name: agent-gateway-demoapi
+    restart: unless-stopped
+    ports: ["8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8090/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5

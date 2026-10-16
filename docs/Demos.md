@@ -17,6 +17,36 @@ docker compose up -d        # pulls published images from Docker Hub
 | http://localhost:8080 | gateway (PEP) — what your agents call |
 | http://localhost:8081, :8082, :5556 | authz · tokensvc · SSO (Dex) |
 
+## Demo 4 — the protected API (`demoapi`, scripted)
+
+One script, both runtimes — compose by default, k3s with `--node <ip>`:
+
+```bash
+./protected-api-demo.sh                       # compose
+./protected-api-demo.sh --node 192.168.1.74   # k3s cluster (namespace agentgw)
+```
+
+What it proves, and how:
+
+1. **SSO** → the delegation is created *with an `approval_rules` entry*:
+   `{"when":{"resource_pattern":"/api/sensitive*"},"require":true,"rationale":"sensitive API access requires a human"}` —
+   policy-as-code at delegation time; no gateway or policy file is edited.
+2. **Low-risk call runs immediately**: `/orders` forwards to demoapi and the
+   response carries the demoapi call counter.
+3. **The protected call is HELD**: the first `POST /api/sensitive/payment`
+   returns **202 + approval record** — and demoapi's `executed_count` did
+   not move: the upstream genuinely was not called. This is the
+   *require-approval-before-execution* property, not merely "money held".
+4. **Only the delegating user can approve**: a different human ("mallory")
+   using the same operator token is refused (`403`, approver binding).
+5. **The retry executes exactly once**: after the bound subject approves,
+   the response counter increments by one — then **revocation** denies any
+   further call at the enforcement point (403), even with the token still
+   cryptographically valid.
+
+The component itself (and why it is a plain, un-licenced image) is
+documented in the product repository: `cmd/demoapi/README.md`.
+
 ## Demo 1 — scripted (`demo/demo.sh`)
 
 A terminal walkthrough of the complete story, with an explanation at every

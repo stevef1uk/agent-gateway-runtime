@@ -216,6 +216,35 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  name: demoapi
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: demoapi } }
+  template:
+    metadata: { labels: { app: demoapi } }
+    spec:
+      containers:
+        - name: demoapi
+          image: stevef1uk/agent-gateway-demoapi:1.0.0   # plain image: the customer's own API, not vendor-delivered
+          ports: [{ containerPort: 8090 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8090 }
+            initialDelaySeconds: 3
+      volumes: []
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demoapi
+  namespace: agentgw
+spec:
+  selector: { app: demoapi }
+  ports: [{ port: 8090, targetPort: 8090 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
   name: authz
   namespace: agentgw
 spec:
@@ -341,6 +370,7 @@ spec:
               valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
             # - { name: APPROVAL_WEBHOOK_URL, value: "https://…" }   # Deployment.md §7.5
             # - { name: APPROVAL_WEBHOOK_SECRET, value: "…" }
+            - { name: UPSTREAM_URL, value: "http://demoapi:8090" }   # the protected API the gateway forwards to
           volumeMounts:
             - { name: keys, mountPath: /keys, readOnly: true }
             - { name: licence, mountPath: /licences/gateway.token, subPath: gateway.token, readOnly: true }

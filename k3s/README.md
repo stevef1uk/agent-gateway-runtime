@@ -71,6 +71,10 @@ Notes:
 * Headless/CLI check of the whole lifecycle:
   `bash k3s/smoke.sh` (defaults to `192.168.1.74`; pass another node IP as
   the first argument).
+* **Protected-API demo** (approval-before-execution via the delegation's
+  `approval_rules`, against the demoapi upstream): the same script works on
+  both platforms — `./protected-api-demo.sh` (compose) or
+  `./protected-api-demo.sh --node <ip>` (k3s).
 
 ## Rotate for anything real
 
