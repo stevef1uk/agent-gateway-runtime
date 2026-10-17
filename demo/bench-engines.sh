@@ -21,12 +21,16 @@ cd "$(dirname "$0")"
 BENCH_DIR="$(cd bench && pwd)"
 
 # Prefer the compose plugin; fall back to the standalone docker-compose binary.
+# COMPOSE may be a multi-word command ("docker compose"), so split it into an
+# array — a quoted "$COMPOSE" would look for a binary literally named
+# "docker compose" and fail on hosts that only have the plugin.
 if [ -z "${COMPOSE:-}" ]; then
   COMPOSE="docker compose"
   if ! docker compose version >/dev/null 2>&1; then
     COMPOSE="docker-compose"
   fi
 fi
+read -ra COMPOSE <<< "$COMPOSE"
 
 CONC=20; DUR=10s; WARM=2s
 while [ $# -gt 0 ]; do
@@ -45,16 +49,16 @@ run_bench() {
 }
 
 echo "### engine: built-in (Go authorizer)"
-"$COMPOSE" -f docker-compose.yml up -d authz web >/dev/null
+"${COMPOSE[@]}" -f docker-compose.yml up -d authz web >/dev/null
 sleep 3
 run_bench
 
 echo
 echo "### engine: OPA (Rego via opa eval)"
-"$COMPOSE" -f docker-compose.yml -f docker-compose.opa.yml up -d authz web >/dev/null
+"${COMPOSE[@]}" -f docker-compose.yml -f docker-compose.opa.yml up -d authz web >/dev/null
 sleep 3
 run_bench
 
 echo
 echo "restoring the built-in engine"
-"$COMPOSE" -f docker-compose.yml up -d authz web >/dev/null
+"${COMPOSE[@]}" -f docker-compose.yml up -d authz web >/dev/null
