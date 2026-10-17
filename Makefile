@@ -1,6 +1,7 @@
 # Makefile for the agent-gateway-demo repository.
 #
-# The demo API's source lives at demo/api (standalone Go module). The
+# The demo API's source lives at demo/api (standalone Go module) and the
+# performance benchmark at demo/bench (standalone Go module). The
 # agent-gateway product images (authz/tokensvc/gateway/web) are built and
 # published from the product repo (agent-gateway/Makefile) — they are
 # pulled here, never built.
@@ -20,12 +21,16 @@ PLATFORMS        ?= linux/amd64,linux/arm64
 NODE             ?= 192.168.1.74
 COMPOSE          ?= docker compose
 
+# Arguments passed through to the benchmark by `make bench` (see docs/Benchmarking.md).
+BENCH_ARGS       ?=
+
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: test
-test: ## Run the demo API's Go tests
+test: ## Vet + test the demo API, and vet the benchmark tool
 	cd demo/api && go vet ./... && go test ./...
+	cd demo/bench && go vet ./...
 
 .PHONY: image
 image: ## Build the demo API image (host arch)
@@ -57,6 +62,10 @@ verify-arch: ## Assert the published image's arm64 variant runs arm64 code
 .PHONY: protected-api
 protected-api: ## Run the protected-API demo (compose)
 	./demo/protected-api-demo.sh
+
+.PHONY: bench
+bench: ## Benchmark the gateway: both engines (built-in + OPA)
+	./demo/bench-engines.sh $(BENCH_ARGS)
 
 .PHONY: protected-api-k3s
 protected-api-k3s: ## Run the protected-API demo against the k3s node

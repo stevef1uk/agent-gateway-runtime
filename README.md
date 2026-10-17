@@ -106,13 +106,14 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 
 | Path | What it is |
 |---|---|
-| [`demo/`](demo/) | One-command demo stack: `docker-compose.yml`, Dex config, demo keys, scripted walkthrough (`demo.sh`), and the default OPA policy (`policies/`) with a policy-engine override (`docker-compose.opa.yml`) |
+| [`demo/`](demo/) | One-command demo stack: `docker-compose.yml`, Dex config, demo keys, scripted walkthrough (`demo.sh`), the default OPA policy (`policies/`) with a policy-engine override (`docker-compose.opa.yml`), and the performance benchmark (`bench/`, `bench-engines.sh`) |
 | [`docs/Deployment-Guide.md`](docs/Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
 | [`docs/Agent-Identity.md`](docs/Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
 | [`docs/Integration-Patterns.md`](docs/Integration-Patterns.md) | Inserting the gateway between existing agents and back ends/MCP servers with zero or one-line changes |
 | [`docs/Local-Agents.md`](docs/Local-Agents.md) | Personal/local agent runtimes (OpenClaw, Hermes, your own) — per-skill delegations, MCP adapter, spend caps, phone-side revoke |
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
+| [`docs/Benchmarking.md`](docs/Benchmarking.md) | Measuring gateway performance — allowed vs denied passthroughs, built-in vs OPA engine, how to run and read it |
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
 | [`demo/protected-api-demo.sh`](demo/protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
@@ -235,6 +236,22 @@ approves (subject-bound), the retry executes **exactly once** (counter ↑ by
 1), and revocation kills the call path instantly. Walkthrough text:
 [docs/Demos.md](docs/Demos.md); the component's source, Dockerfile and
 detailed README live right here in [`demo/api/`](demo/api/README.md).
+
+## Performance
+
+The gateway is a policy enforcement point in front of every agent call, so its
+per-request cost matters. This repo ships a benchmark that measures an
+**allowed** passthrough (200, proxied upstream) and a **denied** one (403, no
+upstream), for both policy engines:
+
+```bash
+cd demo && docker compose up -d
+make bench            # or: ./demo/bench-engines.sh
+```
+
+It prints throughput and p50/p90/p99 latency per path and auto-detects the
+engine in use (built-in vs OPA). Flags, reference numbers and how to point it
+at k3s or read the JSON output: [docs/Benchmarking.md](docs/Benchmarking.md).
 
 ## URLs & endpoints (demo stack)
 
