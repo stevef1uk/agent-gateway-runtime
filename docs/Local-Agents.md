@@ -136,6 +136,37 @@ the gateway and hand the agent the token — the
 from plain HTTP (`/path` = resource, verb = action), with `X-Agent-*` headers
 as optional overrides.
 
+### Shape 2½ — the whole runtime behind the gateway (OpenClaw via OpenShell, proxy mode)
+
+The newest wiring treats the *agent itself* as the governed party: the
+gateway runs an **egress forward proxy** (`GATEWAY_PROXY_ADDR=:8088`) and
+the agent — typically an **OpenClaw** persona running inside an
+[NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandbox — routes
+*its entire outbound traffic* through it. Every destination becomes one
+authorization decision:
+
+| What OpenClaw does | What the gateway does |
+|---|---|
+| calls `https://api.github.com/…` | `read` on `api.github.com` → allow or **202 held for you** (per the delegation's approval rule) |
+| POSTs anywhere | method maps to an action — `create`/`update`/`delete` — held on the `*` rule |
+| `npm install` a fresh dependency | registry hosts are allowlisted per delegation; everything else is a flat **403 policy_denied**, no human needed |
+| revocation night | delegation revoked → the very next call is **403**, even with a valid token |
+
+The sandbox never sees your model keys (OpenShell's `inference.local`
+routing keeps provider credentials outside) and never gets a way around
+the gateway (OpenShell's default-deny policy allowlists exactly one
+egress target — the proxy). The same audit lines record
+`openclaw-agent-1 / alice / destination / why permitted` for every call.
+
+* Wiring and low-level setup:
+  [OpenShell-Integration.md](https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md)
+  (main repo) — including the Linux/Mac platform notes.
+* Call-by-call scripted walkthrough: **Demo 5** (`demo/egress-demo.sh`,
+  see [Demos.md](Demos.md)).
+* k3s deployments surface the proxy on NodePort `30088` — cluster
+  OpenShell gateways point their upstream at `http://<node>:30088`
+  ([k3s/README.md](../k3s/README.md)).
+
 ### Shape 3 — already-filed skills that call third-party SaaS
 
 If the skill talks to a *SaaS API* (mail, calendar, GitHub): register that
@@ -154,10 +185,12 @@ contextualised per delegation and fully audited.
 
 ## Honest current limits (so nothing over-promises)
 
-- **Shell/desktop tools** — a skill that executes `curl` in the OS bypasses
-  the HTTP gateway. Contain with the runtime's own sandbox (OpenClaw's
-  `sandbox.mode`) or a local egress proxy; a first-class egress-proxy mode is
-  on the roadmap.
+- **Shell/desktop tools** — a skill that executes `commands`/`curl` in the
+  OS historically bypassed the HTTP gateway. That is exactly what **Shape 2½**
+  solves: the entire runtime is put behind the egress proxy (OpenShell +
+  OpenClaw), so even OS-level outbound calls are governed. What remains
+  ungoverned today is a host you deliberately run *outside* an OpenShell
+  sandbox with root access to the network stack.
 - **MCP-native flows** — today you register the *adapter*, not the gateway
   itself, as an MCP server; a native gateway MCP servership (per-tool
   JSON-RPC parsing) is the planned default.

@@ -175,6 +175,52 @@ The message for an audience: guardrails are code you can review and version,
 the change is live in seconds without a redeploy, and a mistake cannot take
 the gateway down. How it works under the hood: [Policy-and-OPA.md](Policy-and-OPA.md).
 
+## Demo 5 — all outbound egress via the gateway, approved per call (`demo/egress-demo.sh`)
+
+The newest demo exercises the **egress proxy**: an agent runtime whose
+*every* outbound destination becomes one authorization decision —
+destination host is the resource, HTTP method (or CONNECT) is the action —
+identical guarantees to the tool path (revocation first, human approval for
+each call, audit for every allow/deny).
+
+```bash
+cd demo
+# enable the listener first (images >= gateway 1.0.22; the pinned public
+# images gain it when the version lands on Docker Hub; locally:
+#   make image-gateway   # from the agent-gateway repo, then point
+#                        # docker-compose at the local tag
+docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+./egress-demo.sh
+```
+
+What you will see, step by step:
+
+1. posture check — an unauthenticated request to the proxy is refused
+   (407): it is never an open relay
+2. SSO sign-in (same Dex machinery as `demo.sh`)
+3. an egress delegation: `example.com` only, `[read, connect]`, with the
+   approval rule `*` → **every outbound call needs a human decision**
+4. token minting (the JWT doubles as the `Proxy-Authorization` bearer)
+5. read call → **202 held** until approved (Telegram card / console entry
+   appear at the same moment) → approve → the same call **200**
+6. an undelegated host → **403 policy_denied**, no human involved
+7. HTTPS CONNECT tunnel → **202 held** on the *connect* action → approve →
+   `200 Connection established` (TLS stays end to end; the gateway saw the
+   destination, never the payload)
+8. delegation revoked → even the tunnel answers **403** instantly
+
+Notes:
+
+* `demo/egress-demo.sh` speaks the CONNECT leg through a raw socket, because
+  `curl` treats a non-200 CONNECT response as a failed tunnel and hides the
+  proxy's real answer.
+* Approvals expire (~15 min) — the demo approves immediately; a hold you
+  leave unanswered disappears from the console when it expires and the
+  next call raises a fresh one.
+* On approval cards: the Telegram cards include a console deep-link only
+  when `APPROVAL_CONSOLE_URL` is set to a *routable* address (the listener
+  `demo/docker-compose.egress.yml` sets it to the machine's LAN URL).
+
 ## Troubleshooting
 
 | Symptom | Fix |

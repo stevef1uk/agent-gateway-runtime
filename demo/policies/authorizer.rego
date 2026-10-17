@@ -26,16 +26,20 @@ default allow := false
 default require_approval := false
 
 # ---------------------------------------------------------------------------
-# Pattern matching — mirrors delegation.Match(): exact, prefix (pre*),
-# suffix (*suf).
+# Pattern matching — mirrors delegation.Match(): exact, a bare "*" (all),
+# trailing "*" prefix match, leading "*" suffix match.
 # ---------------------------------------------------------------------------
+match(pattern, s) if {
+	pattern == "*"
+}
+
 match(pattern, s) if {
 	pattern == s
 }
 
 match(pattern, s) if {
-	endswith(pattern, "*")
 	pattern != "*"
+	endswith(pattern, "*")
 	startswith(s, trim_suffix(pattern, "*"))
 }
 

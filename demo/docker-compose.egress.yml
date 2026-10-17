@@ -1,0 +1,22 @@
+# Demo 5 — egress enforcement overlay (gateway images >= 1.0.22).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+#
+# Enables gateway egressEverybody forward proxy: set GATEWAY_PROXY_ADDR and
+# point the approval cards' console deep-link at a routable URL.
+#
+# DEMO_CONSOLE_URL is used by the approval Telegram cards / webhook payloads
+# ("Open the console to decide") — Telegram refuses `localhost` in buttons,
+# so machines reached from other devices should set it to their LAN address,
+# e.g. DEMO_CONSOLE_URL=http://192.168.1.53:8083 compose -f ... up -d.
+#
+# With this overlay the guided demos stay on the built-in egress policy =
+# no extra approval rules for existing flows; enable the all-outbound rule
+# with a delegation carrying approval_rules: [{when:{resource_pattern:*}}]
+# — demo/egress-demo.sh does exactly that, and routes real requests
+# through the proxy as a scripted walkthrough.
+services:
+  gateway:
+    environment:
+      - GATEWAY_PROXY_ADDR=:8088
+      - APPROVAL_CONSOLE_URL=${DEMO_CONSOLE_URL:-http://localhost:8083}

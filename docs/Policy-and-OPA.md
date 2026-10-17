@@ -81,8 +81,12 @@ beside it). It reproduces the built-in engine's semantics and is meant to be
 read, copied and edited. It is five layers:
 
 1. **Pattern matching** — `match()` implements the delegation's scope
-   syntax: exact (`/orders`), prefix (`/orders/*`), suffix (`*/history`).
-   A bare `*` is deliberately *not* a wildcard; scope must name something.
+   syntax: exact (`/orders`), prefix (`/orders/*`), suffix (`*/history`),
+   and a bare `*` (**match-all**). The bare-`*` case mirrors
+   `delegation.Match()` in the Go source exactly — the two engines must
+   never disagree on a pattern (a divergence was caught by the egress demo:
+   the OPA path ignored a bare-`*` approval rule and let a held action
+   straight through; `match()` now carries the fix).
 2. **Derived predicates** — `resource_allowed`, `action_allowed`,
    `agent_bound`, `user_bound`: does the request fit the delegation's scope
    and identity binding?

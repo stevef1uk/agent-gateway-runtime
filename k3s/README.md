@@ -8,11 +8,35 @@ Redis) into the `agentgw` namespace.
 | Service | Image | Exposure |
 |---|---|---|
 | web (console + playground) | `agent-gateway-web:1.0.28` | NodePort **30083** |
-| gateway (enforcement) | `agent-gateway-gateway:1.0.8` | NodePort **30080** |
+| gateway (enforcement) | `agent-gateway-gateway:1.0.22` | NodePort **30080** + **30088** (egress proxy) |
 | authz (decision point) | `agent-gateway-authz:1.0.12` | NodePort **30081** |
 | tokensvc (minting) | `agent-gateway-tokensvc:1.0.5` | NodePort **30082** |
 | dex (local OIDC IdP) | `dexidp/dex:v2.41.1` | ClusterIP only (browser traffic is proxied via `/oidc/idp/…`) |
 | postgres / redis | official | ClusterIP, pinned to one node on local storage |
+
+### Egress proxy (gateway images ≥ 1.0.22)
+
+The gateway also runs a **forward proxy** listener (`GATEWAY_PROXY_ADDR`
+= `:8088`, node-exposed on **30088**): an agent runtime (an NVIDIA
+OpenShell sandbox, OpenClaw, or any tool that honours `HTTP_PROXY`)
+routes its **entire outbound traffic** through it — every destination is
+one delegated, audited, approval-gated decision (host = resource,
+method/CONNECT = action). The sandbox side points its upstream proxy at
+the node:
+
+```bash
+# on the OpenShell gateway host (~/.config/openshell/gateway.toml):
+[openshell.drivers.podman]
+https_proxy = "http://192.168.1.74:30088"
+proxy_auth_file = "/root/.config/openshell/upstream-proxy-auth"
+proxy_connect_by_hostname = true
+```
+
+See the main repo's [OpenShell-Integration.md](
+https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md)
+for the full wiring and the `egress-demo.sh` demo for the call-by-call
+walkthrough (smoke.sh checks the 407 posture on `:30088`).
+
 
 ## Storage (shared Gluster file system)
 

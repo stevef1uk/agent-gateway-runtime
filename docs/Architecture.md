@@ -9,7 +9,7 @@ class participant in the authorization loop.
 | Service | Role | State |
 |---|---|---|
 | `authz` (:8081) | **Decision point.** Owns delegations and the policy engine. Verifies the human's OIDC ID token at delegation creation, binds the delegation to the verified subject, issues agent tokens, answers "is this action allowed?" from the PEP. | delegations (+ decision cache in Redis) |
-| `gateway` (:8080) | **Policy enforcement point (PEP).** Sits in front of the tools. Resolves the caller's principal (JWT bearer or SPIFFE SVID), asks authz for a decision, gates approvals, forwards allowed calls to `UPSTREAM_URL`, writes audit events. | approvals store + audit sink |
+| `gateway` (:8080, egress proxy :8088 → NodePort 30088) | **Policy enforcement point (PEP).** Sits in front of the tools. Resolves the caller's principal (JWT bearer or SPIFFE SVID), asks authz for a decision, gates approvals, forwards allowed calls to `UPSTREAM_URL`, writes audit events. Also runs the **egress forward proxy** (`GATEWAY_PROXY_ADDR`): an agent runtime routes *all* its outbound networking through it — destination host becomes the resource, HTTP method/CONNECT the action, same decision pipeline (see "Egress enforcement" below). | approvals store + audit sink |
 | `tokensvc` (:8082) | Mints short-lived, delegation-scoped JWTs. Refuses to mint for expired or revoked delegations; embeds `jti` for instant revocation. | none |
 | `web` (:8083) | Admin console + guided demo. Thin proxy over authz/gateway; never a second source of truth. | none |
 | `postgres` | Durable store: `delegations`, `approvals`, `audit_events` (JSONB-first, indexed on the fields the services query). Schema auto-migrates on startup. | — |
@@ -45,6 +45,46 @@ class participant in the authorization loop.
 10 Revoke: delegation revoked_at set → decisions deny instantly (authz) and
    even still-valid JWTs are refused at the gateway (redis jti check)
 ```
+
+## Egress enforcement — every outbound call is one decision
+
+The loop above is *explicit*: the agent calls a declared tool on the gateway
+and the gateway sits in front of exactly one upstream. The gateway can
+additionally run an **egress forward proxy** (`GATEWAY_PROXY_ADDR`, e.g.
+:8088) through which an agent runtime routes *all* of its outbound
+networking — NVIDIA OpenShell sandboxes (and OpenClaw, via its community
+sandbox) plug in here, with their supervisor speaking the proxy auth
+(`Proxy-Authorization`: the delegation-scoped agent token):
+
+```
+agent process (sandboxed) ──► OpenShell supervisor ──► gateway egress proxy :8088
+                                                        │ verify JWT
+                                                        │ resource := destination host
+                                                        │ action    := HTTP method (or CONNECT)
+                                                        ▼
+                                     steps 6-9 of the authorization loop above
+                                     (policy → approval hold → audit → forward)
+```
+
+Guarantees, shared with the tool path:
+
+* the proxy is **never an open relay** — no `Proxy-Authorization`, no proxy
+  (407); an invalid token also answers 407 rather than 403
+* an undelegated destination is denied outright by policy (403); an
+  allowed destination whose delegation carries the all-outbound approval
+  rule is **held (202) per call** — approvals are single-use and bound to
+  (delegation, destination host, action)
+* the gateway's own control-plane services are unreachable through it
+  (internal denylist)
+* revocation beats everything, including approved-but-unconsumed holds
+* CONNECT tunnels are host:port-allowlisted and relayed blind: the gateway
+  sees the destination, never the TLS payload (a later TLS-terminating
+  mode can inspect further)
+
+Full bring-up with OpenShell — including the Linux/Mac platform notes —
+lives in the main repo's
+[`OpenShell-Integration.md`](https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md);
+Demo 5 below exercises the same call points with plain `curl`.
 
 ## Policy model
 

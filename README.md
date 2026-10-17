@@ -117,6 +117,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Benchmarking.md`](docs/Benchmarking.md) | Measuring gateway performance — allowed vs denied passthroughs, built-in vs OPA engine, how to run and read it |
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
 | [`demo/protected-api-demo.sh`](demo/protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
+| [`demo/egress-demo.sh`](demo/egress-demo.sh) | Demo 5 — all outbound traffic through the gateway's egress proxy: destination host = one authorization decision per call, human approval on each one (needs images ≥ gateway 1.0.22 with `GATEWAY_PROXY_ADDR=:8088`); the OpenShell/OpenClaw integration guide lives in the main repo |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
 | [`docs/Commercial-Licence.md`](docs/Commercial-Licence.md) | Licence terms: what you get, what is not warranted, liability limits, indemnity |
 | [`docs/Pricing.md`](docs/Pricing.md) | Licensing tiers and buying path |
@@ -243,6 +244,26 @@ flag list and the endpoint/env overrides:
 [docs/Demos.md](docs/Demos.md); the component's source, Dockerfile and
 detailed README live right here in [`demo/api/`](demo/api/README.md).
 
+## Demo 5 — all outbound egress via the gateway, approved per call
+
+For runs on the same stack, an extra demonstration: egress enforcement
+(one authorization decision per outbound destination, human approval for
+each, audit for everything):
+
+```bash
+cd demo
+docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+./egress-demo.sh      # needs images >= gateway 1.0.22 (GATEWAY_PROXY_ADDR=:8088)
+```
+
+407 at the door without credentials → the read call held (202) until you
+approve → an undelegated host refused outright (403) → the TLS CONNECT
+tunnel held on the `connect` action, then opened (blind, TLS end to end) →
+revocation is instant. Full walkthrough:
+[docs/Demos.md](docs/Demos.md §Demo-5); the OpenShell/OpenClaw integration
+(what makes the gateway the *shell* around agents) lives in the main repo's
+[`OpenShell-Integration.md`](https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md).
+
 ## Performance
 
 The gateway is a policy enforcement point in front of every agent call, so its
@@ -268,6 +289,7 @@ at k3s or read the JSON output: [docs/Benchmarking.md](docs/Benchmarking.md).
 | OPA policy playground | http://localhost:8083/policy.html *(needs the policy override)* |
 | demoapi (protected API) | http://localhost:8090 — only reachable OUT OF BAND; the gateway forwards to it, so normal traffic must go through :8080 |
 | Gateway (PEP) | http://localhost:8080 |
+| Gateway egress proxy | http://localhost:8088 — *opt-in*: publish + `GATEWAY_PROXY_ADDR=:8088` on the gateway service; routes every outbound call of an agent (e.g. an NVIDIA OpenShell sandbox running OpenClaw) through delegation-scoped per-request authorization + approval |
 | Authz service | http://localhost:8081 |
 | Token service | http://localhost:8082 |
 | OIDC provider (Dex) | http://localhost:5556 |

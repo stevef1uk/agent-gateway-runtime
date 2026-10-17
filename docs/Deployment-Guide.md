@@ -304,6 +304,16 @@ All configuration is via environment variables (12-factor style).
 | `./keys:/keys:ro` | all services (private key) |
 | `./keys/license.token:/licences/authz.token:ro` (per service) | all services (licence, named per service) |
 
+Optional egress listener (images ≥ gateway 1.0.22): setting
+`GATEWAY_PROXY_ADDR=:8088` on the gateway service starts a **forward proxy
+listener** through which an agent's entire outbound traffic is enforced
+(destination host = resource, method/CONNECT = action, same authz → approval
+→ audit pipeline). Unset = not listening, identical to earlier versions.
+Bring-up with NVIDIA OpenShell sandboxes / OpenClaw (including a
+per-outbound-request human-approval delegation) is documented in the main
+repo's [`OpenShell-Integration.md`](
+https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md).
+
 ### Security hardening (applied after an OWASP ZAP review)
 
 The images ship non-root: service processes run as unprivileged user `app`

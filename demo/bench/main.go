@@ -55,6 +55,12 @@ type options struct {
 	denyPath, denyMethod, denyBody    string
 	allowExpect, denyExpect           int
 
+	// egress-proxy mode: route through the gateway's forward proxy at
+	// -proxy; -allow-path/-deny-path then name DESTINATION HOSTS and the
+	// requests target http://<host>/ through the proxy (Proxy-Authorization
+	// carries the delegation token). Empty = classic tool-path bench.
+	proxy string
+
 	agentID     string
 	engineLabel string
 	tokenTTL    time.Duration
@@ -81,6 +87,7 @@ func main() {
 	flag.IntVar(&o.allowExpect, "allow-expect", http.StatusOK, "expected status for the allowed path")
 	flag.IntVar(&o.denyExpect, "deny-expect", http.StatusForbidden, "expected status for the denied path")
 
+	flag.StringVar(&o.proxy, "proxy", "", "egress-proxy base URL (e.g. http://localhost:8088): -allow-path/-deny-path become destination hostS; requests are absolute-URI via the proxy with Proxy-Authorization")
 	flag.StringVar(&o.agentID, "agent-id", "bench-agent", "agent id used for the benchmark delegation")
 	flag.StringVar(&o.engineLabel, "engine", "", "policy-engine label for the report (default: auto-detect from authz; \"opa\" runs through OPA/Rego)")
 	flag.DurationVar(&o.tokenTTL, "token-ttl", 30*time.Minute, "access-token TTL")
@@ -97,7 +104,23 @@ func main() {
 }
 
 func run(o options) error {
+	// Two clients: setup (SSO/delegation/mint) talks to LOCAL services and
+	// must stay unproxied; the measurement client routes its driver through
+	// the egress proxy (Transport.Proxy) — its requests below additionally
+	// carry Proxy-Authorization instead of a plain Authorization.
 	client := newClient(o.concurrency)
+	bench := client
+	if o.proxy != "" {
+		u, err := url.Parse(o.proxy)
+		if err != nil {
+			return fmt.Errorf("parse -proxy: %w", err)
+		}
+		if base, ok := client.Transport.(*http.Transport); ok {
+			tr := base.Clone()
+			tr.Proxy = http.ProxyURL(u)
+			bench = &http.Client{Transport: tr}
+		}
+	}
 
 	// --- setup: SSO -> delegation -> access token --------------------------
 	idToken, sub, err := mockSignIn(client, o.web)
@@ -127,10 +150,26 @@ func run(o options) error {
 
 	allowed := pathSpec{name: "allowed", method: o.allowMethod, path: o.allowPath, body: o.allowBody, expect: o.allowExpect}
 	denied := pathSpec{name: "denied", method: o.denyMethod, path: o.denyPath, body: o.denyBody, expect: o.denyExpect}
+	if o.proxy != "" {
+		// Egress mode: the proxies' decisions key on the destination host;
+		// requests go out as absolute-URI against http://<host>/ and the
+		// bearer credential moves to Proxy-Authorization. Egress bodies and
+		// exotic verbs are out of scope here: read-only probes.
+		allowed.name = "allowed (egress)"
+		allowed.method = http.MethodGet
+		allowed.path = "http://" + o.allowPath + "/"
+		allowed.body = ""
+		allowed.proxied = true
+		denied.name = "denied (egress)"
+		denied.method = http.MethodGet
+		denied.path = "http://" + o.denyPath + "/"
+		denied.body = ""
+		denied.proxied = true
+	}
 
 	// --- preflight: confirm each path behaves as configured -----------------
 	for _, ps := range []*pathSpec{&allowed, &denied} {
-		code, body, err := probe(client, o.gateway, token, *ps)
+		code, body, err := probe(bench, o.gateway, token, *ps)
 		if err != nil {
 			return fmt.Errorf("preflight %s %s: %w", ps.name, ps.path, err)
 		}
@@ -158,7 +197,7 @@ func run(o options) error {
 	// --- warmup (discarded) -------------------------------------------------
 	for _, ps := range []pathSpec{allowed, denied} {
 		wctx, cancel := context.WithTimeout(context.Background(), o.warmup)
-		_, _, _ = load(wctx, client, o.gateway, token, ps, o.concurrency)
+		_, _, _ = load(wctx, bench, o.gateway, token, ps, o.concurrency)
 		cancel()
 	}
 
@@ -167,7 +206,7 @@ func run(o options) error {
 	for _, ps := range []pathSpec{allowed, denied} {
 		mctx, cancel := context.WithTimeout(context.Background(), o.duration)
 		start := time.Now()
-		lat, statuses, errs := load(mctx, client, o.gateway, token, ps, o.concurrency)
+		lat, statuses, errs := load(mctx, bench, o.gateway, token, ps, o.concurrency)
 		elapsed := time.Since(start)
 		cancel()
 		results = append(results, summarize(ps, lat, statuses, errs, elapsed))
@@ -200,6 +239,10 @@ type pathSpec struct {
 	path   string
 	body   string
 	expect int
+	// proxied=true marks egress-proxy mode: path IS the full absolute-URL
+	// target, credentials ride Proxy-Authorization, and the client's
+	// Transport routes through the gateway's forward proxy.
+	proxied bool
 }
 
 type result struct {
@@ -307,6 +350,9 @@ func load(ctx context.Context, client *http.Client, gateway, token string, ps pa
 			var lats []time.Duration
 			local := map[int]int{}
 			target := gateway + ps.path
+			if ps.proxied {
+				target = ps.path // absolute URI via the proxy (Transport)
+			}
 			for time.Now().Before(deadline) {
 				var rdr io.Reader
 				if body != nil {
@@ -317,8 +363,12 @@ func load(ctx context.Context, client *http.Client, gateway, token string, ps pa
 					errCh[w]++
 					continue
 				}
-				req.Header.Set("Authorization", "Bearer "+token)
-				if body != nil {
+				if ps.proxied {
+					req.Header.Set("Proxy-Authorization", "Bearer "+token)
+				} else {
+					req.Header.Set("Authorization", "Bearer "+token)
+				}
+				if body != nil && !ps.proxied {
 					req.Header.Set("Content-Type", "application/json")
 				}
 				t0 := time.Now()
@@ -369,11 +419,19 @@ func probe(client *http.Client, gateway, token string, ps pathSpec) (int, string
 	if ps.body != "" {
 		body = strings.NewReader(ps.body)
 	}
-	req, err := http.NewRequestWithContext(ctx, ps.method, gateway+ps.path, body)
+	target := gateway + ps.path
+	if ps.proxied {
+		target = ps.path // absolute URI; Transport routes via the proxy
+	}
+	req, err := http.NewRequestWithContext(ctx, ps.method, target, body)
 	if err != nil {
 		return 0, "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	if ps.proxied {
+		req.Header.Set("Proxy-Authorization", "Bearer "+token)
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	if ps.body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}

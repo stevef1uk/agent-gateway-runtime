@@ -58,11 +58,11 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.21  # 1.0.14 cards link to the console (APPROVAL_CONSOLE_URL); 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
+    image: stevef1uk/agent-gateway-gateway:1.0.22  # 1.0.22 adds the egress forward proxy (GATEWAY_PROXY_ADDR, second listener on :8088) + approval cards carry the console deep-link on egress holds; 1.0.14 cards link to the console (APPROVAL_CONSOLE_URL); 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
-    ports: ["8080:8080"]
+    ports: ["8080:8080", "8088:8088"]
     environment:
       - AUTHZ_URL=http://authz:8081
       - PERSISTENCE=postgres
@@ -71,6 +71,12 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # guards /v1/approvals + /v1/tokens/revoke (X-Admin-Token); rotate for anything real
+      # Egress enforcement (OpenShell/OpenClaw): uncomment to route ALL of an
+      # agent's outbound traffic through the gateway — one delegated, audited,
+      # approval-gated decision per destination. See demo/egress-demo.sh and
+      # docs/OpenShell guide in the main repo. Default: off (behaviour
+      # unchanged from 1.0.21 unless enabled).
+      # - GATEWAY_PROXY_ADDR=:8088
       # Real downstream: the demo protected API (executed_count proves how
       # often it ran). Remove to restore the gateway's synthetic echo.
       - UPSTREAM_URL=http://demoapi:8090

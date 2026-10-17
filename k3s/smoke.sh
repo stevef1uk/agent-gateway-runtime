@@ -5,6 +5,7 @@ WEB=http://$NODE:30083
 GW=http://$NODE:30080
 TS=http://$NODE:30082
 AUTHZ=http://$NODE:30081
+EGRESS=http://$NODE:30088
 CALLBACK=http://$NODE:30083/oidc/callback
 
 JAR=$(mktemp)
@@ -54,3 +55,10 @@ echo "post-approval retry -> $C3 (want 200)"
 curl -s -o /dev/null -X DELETE "$AUTHZ/v1/delegations/$DELEG" -H "Authorization: Bearer $ID_TOKEN"
 C4=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/orders" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -d '{"amount":150,"supplier":"acme"}')
 echo "after revoke -> $C4 (want 403)"
+
+# --- egress proxy posture (gateway images >= 1.0.22) -------------------------
+EGRESS=http://$NODE:30088
+P=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$EGRESS/" || echo 000)
+echo "egress proxy unauth -> $P (want 407: opt-in listener refuses to relay without a delegation token)"
+curl -s -o /dev/null -X DELETE "$AUTHZ/v1/delegations/$DELEG" -H "Authorization: Bearer $ID_TOKEN" 2>/dev/null || true
+

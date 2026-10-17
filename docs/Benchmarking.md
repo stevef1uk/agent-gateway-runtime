@@ -196,6 +196,53 @@ Sizing the keep-alive pools and detaching the audit write took the allowed path
 from ~2.8 k rps *with ~1% `502`s* to ~12 k rps with **zero** errors. Run the
 benchmark after any change to enforcement, authz or the proxy path.
 
+## Egress-proxy benchmarking (gateway images ≥ 1.0.22)
+
+The gateway's **egress forward proxy** (`:8088`) is a second hot path: every
+outbound call an agent makes — requests arriving as absolute-URI or CONNECT
+with `Proxy-Authorization` — runs the same verification and decision
+pipeline as the tool path before reaching the destination. The benchmark can
+drive it:
+
+```bash
+cd demo/bench
+# example.com is the allowed destination (a REAL internet round trip);
+# nuiance.example.net is undelegated → denied outright, no upstream hop
+go run . -proxy http://localhost:8088 \
+         -allow-path example.com -deny-path nuiance.example.net \
+         -c 20 -d 10s -w 2s
+```
+
+What changes in egress mode:
+
+| Aspect | Tool path (default) | Egress proxy (`-proxy`) |
+|---|---|---|
+| measured target | `gateway:8080 /path` (local upstream) | `http://<host>/` through the proxy |
+| credential | `Authorization: Bearer` | `Proxy-Authorization: Bearer` |
+| upstream hop | the demo's local `demoapi` | **the real destination** (example.com → true internet latency inside the numbers) |
+| approval gate | none for this delegation | delegation without the approval rule (a `*` rule would 202-hold every probe — the egress-demo covers that path functionally) |
+
+Numbers measured on the author's workstation (April-oct 2026 build of the
+image, OPA engine, `-c 20 -d 10s`):
+
+| Path | Engine | rps | p50 |
+|---|---|---|---|
+| allowed (egress, example.com) | **opa** | ~550 | 35 ms |
+| allowed (egress, example.com) | **basic** | ~835 | 24 ms |
+| denied (egress, undelegated host) | **basic** | ~17.5 k | 1.1 ms |
+
+Reading: the denied path answers in ~1 ms (policy refusal, no tunnel) —
+the reject verdict is *cheap*. The allowed path contains a real TLS fetch
+to example.com; its ~24–35 ms is mostly that RTT plus the authz hop — the
+per-call *gateway overhead* is the delta you would get subtracting a
+direct fetch; the bench under the built-in engine vs OPA shows the same
+engine-split pattern as the tool path (OPA's model-call evaluates Rego
+per decision).
+
+**Note**: setup (SSO/delegation/mint) explicitly stays unproxied — the
+measurement client alone carries the proxy transport, so granting the egress
+delegation cannot be derailed by the egress policy itself.
+
 ## Where to go next
 
 - [Policy-and-OPA.md](Policy-and-OPA.md) — the two engines, the decision contract, and why OPA is a per-decision subprocess
