@@ -58,7 +58,7 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.10  # 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
+    image: stevef1uk/agent-gateway-gateway:1.0.19  # 1.0.14 cards link to the console (APPROVAL_CONSOLE_URL); 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -74,6 +74,14 @@ services:
       # Real downstream: the demo protected API (executed_count proves how
       # often it ran). Remove to restore the gateway's synthetic echo.
       - UPSTREAM_URL=http://demoapi:8090
+      # Telegram approval notifications: values come from demo/.env (gitignored)
+      # exported via the shell env; empty = channel off. Run compose FROM THIS
+      # DIRECTORY so demo/.env is picked up (or export the variables yourself).
+      # If your host only has the standalone binary, use `docker-compose`
+      # instead of `docker compose`.
+      - APPROVAL_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - APPROVAL_TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - APPROVAL_CONSOLE_URL=${APPROVAL_CONSOLE_URL:-}   # must be ROUTABLE by the recipient (Telegram rejects localhost in buttons)
       # - APPROVAL_WEBHOOK_URL=http://n8n:5678/webhook/agent-gateway   # push approval.required events (Deployment Guide §7.5 / product Deployment.md §7.5)
       # - APPROVAL_WEBHOOK_SECRET=<random 32 bytes>                    # HMAC-signs each delivery
       # - APPROVAL_TELEGRAM_BOT_TOKEN=<token from @BotFather>          # push approval.required to a Telegram chat (same event as the webhook)
@@ -103,7 +111,7 @@ services:
       retries: 5
 
   web:
-    image: stevef1uk/agent-gateway-web:1.0.30  # 1.0.30 IdP-proxy chooser/link fix (provider links stay under /oidc/idp even without a pinned connector); 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
+    image: stevef1uk/agent-gateway-web:1.0.40  # 1.0.31 #approvals deep-link (notification cards land on the pending-approvals view); 1.0.30 IdP-proxy chooser/link fix (provider links stay under /oidc/idp even without a pinned connector); 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]

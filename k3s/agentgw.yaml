@@ -354,7 +354,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: stevef1uk/agent-gateway-gateway:1.0.10
+          image: stevef1uk/agent-gateway-gateway:1.0.19
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -370,8 +370,17 @@ spec:
               valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
             # - { name: APPROVAL_WEBHOOK_URL, value: "https://…" }   # Deployment.md §7.5
             # - { name: APPROVAL_WEBHOOK_SECRET, value: "…" }
-            # - { name: APPROVAL_TELEGRAM_BOT_TOKEN, value: "<@BotFather token>" }
-            # - { name: APPROVAL_TELEGRAM_CHAT_ID, value: "<user/group id>" }
+            # Telegram approval notifications: values live IN CLUSTER ONLY —
+            # create the secret with kubectl (values never enter git):
+            #   kubectl -n agentgw create secret generic agentgw-telegram \
+            #     --from-literal=bot_token=<@BotFather token> \
+            #     --from-literal=chat_id=<user or group id>
+            - name: APPROVAL_TELEGRAM_BOT_TOKEN
+              valueFrom: { secretKeyRef: { name: agentgw-telegram, key: bot_token, optional: true } }
+            - name: APPROVAL_TELEGRAM_CHAT_ID
+              valueFrom: { secretKeyRef: { name: agentgw-telegram, key: chat_id, optional: true } }
+            - name: APPROVAL_CONSOLE_URL
+              value: "http://192.168.1.74:30083"   # notification cards link here (node-exposed console)
             - { name: UPSTREAM_URL, value: "http://demoapi:8090" }   # the protected API the gateway forwards to
           volumeMounts:
             - { name: keys, mountPath: /keys, readOnly: true }
@@ -409,7 +418,7 @@ spec:
     spec:
       initContainers:
         - name: seed-policy
-          image: stevef1uk/agent-gateway-web:1.0.30
+          image: stevef1uk/agent-gateway-web:1.0.40
           # The shared Gluster file system root-squashes, and pods may run as an
           # unprivileged uid, so the console runs as root (squashed to `nobody`
           # by the share — the same owner the first seed created files with).
@@ -419,7 +428,7 @@ spec:
           volumeMounts: [{ name: policies, mountPath: /policies }]
       containers:
         - name: web
-          image: stevef1uk/agent-gateway-web:1.0.30
+          image: stevef1uk/agent-gateway-web:1.0.40
           securityContext: { runAsUser: 0 }
           ports: [{ containerPort: 8083 }]
           env:

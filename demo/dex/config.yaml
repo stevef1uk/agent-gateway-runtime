@@ -38,15 +38,32 @@ staticClients:
     public: true
     redirectURIs:
       - http://localhost:8083/oidc/callback
+      # LAN addresses for multi-device approval notifications (the Telegram
+      # card's "Open the console" link lands on the console from whichever
+      # device the approver uses). Add one per host/port that can serve the
+      # console; in production the console sits behind a single TLS name.
+      - http://192.168.1.53:8083/oidc/callback
 
 # Static users for the password grant. The hash is bcrypt of "password". These
 # are development fixtures, never real credentials.
 enablePasswordDB: true
 staticPasswords:
   - email: "alice@example.com"
-    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"  # password
     username: "alice"
     userID: "alice"
+  - email: "bob@example.com"
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"  # password
+    username: "bob"
+    userID: "bob"
+  - email: "carol@example.com"   # a second fixture so demos can show a
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"  # password
+    username: "carol"            # DIFFERENT human being refused by the
+    userID: "carol"              # approver binding (403) — by design
+  - email: "eve@example.com"
+    hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"  # password
+    username: "eve"
+    userID: "eve"
   - email: "bob@example.com"
     hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
     username: "bob"

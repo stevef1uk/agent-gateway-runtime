@@ -85,6 +85,23 @@ for Dex's static users/mock connector — production points
 `Deployment.md` §7.2).
 
 
+## Telegram approval cards (tap-to-approve)
+
+The gateway pushes a card per held action (buttons ✅ Approve / ❌ Deny).
+The buttons deep-link to the console; the decision is made with YOUR verified
+sign-in (a foreign human tapping the same card is refused). Values live in
+the cluster only:
+
+```bash
+kubectl -n agentgw create secret generic agentgw-telegram \
+  --from-literal=bot_token=<@BotFather token> \
+  --from-literal=chat_id=<user or group id>
+kubectl -n agentgw rollout restart deploy/gateway
+```
+
+(The manifest references this secret with `optional: true`, so the stack
+runs normally with the channel disabled until you add it.)
+
 ## Tear-down and re-deploy
 
 `kubectl delete ns agentgw` removes pods, services and the keys secret — but

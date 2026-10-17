@@ -107,18 +107,20 @@ Operational notes:
 environment:
   - APPROVAL_TELEGRAM_BOT_TOKEN=<token from @BotFather>
   - APPROVAL_TELEGRAM_CHAT_ID=<your user id, or a group's chat id>
+  - APPROVAL_CONSOLE_URL=http://192.168.1.53:8083   # where the approver's link lands
 ```
 
-(Both are listed commented-out in `demo/docker-compose.yml` and in
-`k3s/agentgw.yaml`.)
-
-Finding the chat id: message the bot from the target chat, then call
+(Compose reads it from the gitignored `demo/.env`; the k3s manifest uses the
+cluster secret `agentgw-telegram` for both credentials. Finding the chat id:
+message the bot from the target chat, then call
 `https://api.telegram.org/bot<token>/getUpdates` once and read
-`result[0].message.chat.id`.
+`result[0].message.chat.id`.)
 
 Every held action then lands in that chat as an HTML-formatted card —
-agent/user, the action summary, the rule's rationale, the `approval_id` and
-its expiry — e.g.:
+agent/user, the action summary, the rule's rationale, the `approval_id`, its
+expiry, a **clickable "Open the console to approve" link**, and an
+**inline keyboard button** ("🔗 Open the console to decide") that opens the
+same view with one tap:
 
 > 🔐 **Approval required**
 >
@@ -127,7 +129,31 @@ its expiry — e.g.:
 >
 > Reason: amount 250 exceeds auto-approve limit 200 EUR; approval required
 >
-> Approval `apr-1f2e3d4c5b6a7f80` expires 15:30:00.
+> Approval `apr-1f2e3d4c5b6a7f80` expires 07:56:12.
+>
+> 👉 [Open the console to approve]
+> [ 🔗 Open the console to decide ]
+
+**What that looks like in the chat** — the card as the approver receives it,
+link and one-tap button included:
+
+<img src="../images/telegram.png"
+     alt="Telegram approval notification from the agent-gateway demo bot: a bold 🔐 Approval required heading, the agent (purchasing-agent-42) and the held create /orders action with its payload, the rule's reason, the approval id and expiry time, a clickable 'Open the console to approve' text link, and an inline keyboard button labelled '🔗 Open the console to decide' that opens the pending-approvals view."
+     width="760">
+
+**One console per deployment.** Each running stack (compose, k3s, and
+production alike) has its **own** approval store — a hold raised on k3s is
+not visible on the compose console and vice versa. The card's button links
+to the console of the stack that raised it (per-deployment
+`APPROVAL_CONSOLE_URL`), which is why the request you tapped appears on
+**that** console. Restraint tip: run one stack at a time — or expect two
+consoles, two pending lists.
+
+**Routing caveat (Telegram rule):** the button URL must be **routable by
+the recipient** — Telegram rejects non-routable addresses (e.g. `localhost`
+or `127.0.0.1`) with a 400 and the whole card fails to send. Use the
+machine's LAN/node address; `APPROVAL_CONSOLE_URL` is per-deployment
+(compose: the host IP; k3s: the NodePort address `http://<node>:30083`).
 
 Security notes: keep the bot token as an environment/secret (never in git);
 deliver to user or private approver chats — never public channels; all
