@@ -17,6 +17,11 @@ approvals) is engine-agnostic. Delegation revocation and expiry are enforced
 by the authz service **before** the policy runs; a Rego policy can never be
 talked into allowing a revoked or expired delegation.
 
+> **Which engine do you need?** The built-in engine enforces scope patterns,
+> the spend cap and the count limit out of the box; anything beyond that —
+> time windows, tenants, deny-lists, custom limits — needs OPA. The full
+> split, with a worked example: [Protecting-Your-API.md](Protecting-Your-API.md).
+
 ## The decision contract
 
 For every request the authz service builds this JSON input and evaluates
@@ -59,8 +64,10 @@ The gateway maps it to HTTP:
 | `allow` + `require_approval: true` | **holds** — returns 202 with an `approval_id`; a human approves, then the agent retries and gets 200 (single-use, bound to the exact action hash) |
 | `allow: false` | refuses — 403 with your `reason` in the body and the audit trail |
 
-`context` carries whatever the request body exposed (e.g. `amount`, `count`) —
-this is where money and volume rules read from. `limits` are keyed by the
+`context` carries **seven** of the request body's keys — `amount`, `count`,
+`recipient`, `to`, `resource`, `id`, `target` — this is where money and volume
+rules read from. Any other body field is invisible to the policy (see
+[Protecting-Your-API.md](Protecting-Your-API.md)). `limits` are keyed by the
 limit's **name** (`spend_per_order`, `max_count`); the `type` field is a
 human label (`currency`/`count`), `max`/`unit` do the arithmetic.
 
@@ -259,9 +266,9 @@ deny_reasons contains "orders outside 09:00–17:00 CET" if {
     hour < 9; hour >= 17
 }
 
-# anything touching refunds always needs a human, whatever the amount
+# anything addressed to the treasury always needs a human, whatever the amount
 require_approval if {
-    contains(input.action.context.description, "refund")
+    input.action.context.recipient == "treasury@acme.com"
 }
 
 # new tool namespaces are denied until explicitly scoped in
@@ -290,6 +297,7 @@ decision object keeps assembling itself — that is the whole convention.)
 
 ## Where to go next
 
+- [Protecting-Your-API.md](Protecting-Your-API.md) — the catalogue of constraints: what the built-in engine enforces directly and what needs OPA
 - [Architecture.md](Architecture.md) — the authorization loop these decisions sit in
 - [Demos.md](Demos.md) — watch allow/hold/approve/deny play out live
 - [Deployment-Guide.md](Deployment-Guide.md) — env vars and mounts in a production deployment

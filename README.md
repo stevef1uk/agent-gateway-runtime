@@ -113,6 +113,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Local-Agents.md`](docs/Local-Agents.md) | Personal/local agent runtimes (OpenClaw, Hermes, your own) — per-skill delegations, MCP adapter, spend caps, phone-side revoke |
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
+| [`docs/Protecting-Your-API.md`](docs/Protecting-Your-API.md) | Hands-on guide for new users: every constraint you can configure on a delegation, what the built-in engine enforces directly, what needs OPA, and the limitations to design around |
 | [`docs/Benchmarking.md`](docs/Benchmarking.md) | Measuring gateway performance — allowed vs denied passthroughs, built-in vs OPA engine, how to run and read it |
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
 | [`demo/protected-api-demo.sh`](demo/protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
@@ -272,6 +273,10 @@ at k3s or read the JSON output: [docs/Benchmarking.md](docs/Benchmarking.md).
 | OIDC provider (Dex) | http://localhost:5556 |
 
 ## Using it for real
+
+Pointing it at **your** API? [docs/Protecting-Your-API.md](docs/Protecting-Your-API.md)
+walks through the delegation fields and the constraints you can set — directly
+or via OPA — with a worked example.
 
 When you are done playing: [docs/Deployment-Guide.md](docs/Deployment-Guide.md)
 covers production operation of the same images — Postgres/Redis HA, Kubernetes,

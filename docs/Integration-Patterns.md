@@ -12,6 +12,11 @@ Agents need no gateway-specific code at all: whatever they already send on
 the wire, the gateway can authorise and forward, adding the decision, the
 hold-for-approval gate and the audit record around it.
 
+> **Deciding what to put in the delegation?** See
+> [Protecting-Your-API.md](Protecting-Your-API.md) for the full catalogue of
+> constraints (scope patterns, spend/count limits, approval rules) and which of
+> them the built-in engine enforces directly vs. which need OPA.
+
 ## The four integration patterns
 
 ### Pattern A — base-URL cutover (the one-line change)  *recommended first*
