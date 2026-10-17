@@ -69,7 +69,7 @@ Set these on the **delegation** (per user, per agent). "Where" tells you which
 surface exposes each one today.
 
 | Knob | Delegation field | Effect | Direct (console) | Direct (API) | OPA |
-|---|---|---|---|:---:|:---:|:---:|
+|---|---|---|:---:|:---:|:---:|
 | Who the agent is | `agent_id` | agent must match | ✅ | ✅ | (pre-checked) |
 | Who delegated | `user_id` | bound to the verified user | ✅ (sign-in) | ✅ (id_token) | (pre-checked) |
 | Which resources | `resources[]` | scope patterns the path must match | ✅ | ✅ | ✅ |
@@ -136,21 +136,71 @@ engine reads exactly two names:
 }
 ```
 
-- **`spend_per_order`** reads `context.amount`. If it is **greater than**
-  `max`, the decision becomes *allow + require_approval* (a human hold), with a
-  reason like `amount 250 exceeds auto-approve limit 200 EUR; approval required`.
-- **`max_count`** reads `context.count`. If it is **greater than** `max`, the
-  decision is a hard **deny** (`count 5 exceeds limit 3`).
+- **`spend_per_order`** reads `context.amount` — the `amount` in **this**
+  request's body. Above `max` → *allow + require_approval* (a human hold).
+- **`max_count`** reads `context.count` — the `count` in **this** request's
+  body. Above `max` → a hard **deny**.
 
 Everything else in `limits` is stored and passed to the engine, but the
 **built-in engine ignores it**. The `type` field (`count`/`currency`/`bytes`/
 `duration`) is a human label — only the map **key** is acted on. To enforce
 `bytes`, `duration`, or your own limit names you write it in OPA (§6).
 
-> **The `amount`/`count` must be in the JSON body** under those exact keys for
-> the built-in caps to see them. A custom API that puts the amount somewhere
-> else needs the agent to add `"amount": …` to the request body, or a Rego
-> rule that reads whatever the context *does* carry (§5).
+### What `max_count` actually counts
+
+This one is easy to misread, so here it is explicitly: **`max_count` is a
+per-request batch cap, not a budget.** It reads a number the *caller* declares
+in the request body under the key `count`. It is not a tally the gateway
+maintains, so:
+
+- **Nothing accumulates.** The gateway stores no counter for the delegation.
+  Ten calls of `count: 3` cost you nothing — the 11th `count: 3` is still fine.
+- **Nothing resets**, because nothing ever filled up. There is no window, no
+  cooldown, no "resets at midnight".
+- **No `count` in the body → the limit never fires.** Absent or non-numeric
+  `count` is simply ignored (`{"count": null}` and `{}` behave the same).
+
+What it *is* good for is bounding the blast radius of **one** call: "a single
+request may not ask to act on more than 3 things at once."
+
+| Request body | Result |
+|---|---|
+| `{"count": 2}` | **allow** — 2 is under the limit of 3 |
+| `{"count": 3}` | **allow** — 3 is exactly the limit; equal is not over it |
+| `{"count": 12}` | **deny** — `count 12 exceeds limit 3` |
+| `{"amount": 50}` (no `count`) | **allow** — limit not applicable |
+
+> **It does not stop an agent from doing 12 by other means.** If the cap is 3,
+> an agent that wants 12 can simply call `count: 3` four times. Stopping that
+> needs an aggregate — a running total across requests, which neither engine
+> keeps. Either enforce the volume in your own API (where the real side effects
+> happen), or use `max_depth`/delegation expiry to bound how long the agent
+> can keep calling (see §6).
+
+### What `spend_per_order` actually does
+
+Same trick: the `amount` is whatever the request body says. It is not a
+balance the gateway debits.
+
+- **Nothing accumulates.** A €50 order does not move the cap to €150. Every
+  request is judged on its own `amount`.
+- **No `amount` in the body → the limit never fires**, exactly like `count`.
+- **It never denies.** Breaching it produces `require_approval`, so the call
+  is *held*, not refused — that asymmetry with `max_count` is deliberate.
+
+So `spend_per_order: 200` means "a single order above €200 needs a human",
+not "you get €200 to spend". Four €150 orders auto-approve; nothing is
+subtracting them from a budget.
+
+| Body | Delegation cap €200 | Result |
+|---|---|---|
+| `{"amount": 150}` | €200 | **allow** |
+| `{"amount": 200}` | €200 | **allow** — the cap is 200 and this is not above it |
+| `{"amount": 250}` | €200 | **hold** → 202, `amount 250 exceeds auto-approve limit 200 EUR` |
+| `{"count": 12}` (no `amount`) | €200 | **allow** — no amount to judge |
+
+If you need a real spending budget — "€1000 per agent per day, whatever the
+number of orders" — that is an aggregate, which neither engine tracks. See §6.
 
 ---
 
@@ -176,6 +226,39 @@ An approval rule forces a human hold when it matches, independent of amounts:
   `{ "recipient": "treasury@acme.com" }`. Matching is **exact string equality**.
 - `require: true` turns the match into an approval hold; `rationale` becomes
   the reason the approver sees.
+
+The rule above only ever fires on something matching `/refunds/*`, so
+`GET /refunds/7` (an `action_pattern` miss) is unaffected, and neither is
+`POST /orders`. Concrete bodies:
+
+| Request body | Matches the rule? | Why |
+|---|---|---|
+| `{"amount": 20}` | yes | resource `/refunds/*` + action `create`, no `extra` to fail |
+| `{"amount": 20, "recipient": "treasury@acme.com"}` | yes | same — no `extra` in this rule |
+| `{"amount": 20}` on `GET /refunds/7` | no | `action_pattern: "create"` does not match `read` |
+| `{"amount": 20}` on `POST /orders` | no | resource `/orders` does not match `/refunds/*` |
+
+Now add an `extra` to the rule and watch it narrow:
+
+```json
+{
+  "when": { "resource_pattern": "/refunds/*", "action_pattern": "create",
+            "extra": { "recipient": "treasury@acme.com" } },
+  "require": true,
+  "rationale": "treasury refunds need finance sign-off"
+}
+```
+
+| Body | Matches? | Why |
+|---|---|---|
+| `{"amount":20,"recipient":"treasury@acme.com"}` | yes | both patterns and the `extra` equality hold |
+| `{"amount":20,"recipient":"alice@acme.com"}` | no | `extra` is exact equality — this recipient is not `treasury@…` |
+| `{"amount":20}` | no | `recipient` is absent, so `extra` cannot match |
+| `{"amount":20,"recipient":"treasury@acme.com","department":"finance"}` | yes | extra body keys are ignored |
+
+Note the last row: the rule does not *restrict* what the body may contain, it
+only *reads* the keys it names. And "matches" here means "the human is asked",
+not "the call is refused" — `require` produces a hold, always.
 
 ### ⚠ No body context except seven keys
 
