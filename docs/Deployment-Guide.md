@@ -334,7 +334,8 @@ console additionally enforces:
 - **Approval notifications**: with `APPROVAL_WEBHOOK_URL` (HMAC-signed via
   `APPROVAL_WEBHOOK_SECRET`) set on the gateway, every held action pushes an
   `approval.required` event to your automation (Slack/Teams/n8n/PagerDuty via
-  a translator). The console also notifies in-page: a red pending-counter on
+  a translator); or send the card to a Telegram chat
+  (`APPROVAL_TELEGRAM_BOT_TOKEN` + `APPROVAL_TELEGRAM_CHAT_ID`). The console also notifies in-page: a red pending-counter on
   the Approvals heading plus a toast when a new pending approval appears.
   Full setup, payload, signature verification and receiver recipes:
   [Notifications.md](Notifications.md).

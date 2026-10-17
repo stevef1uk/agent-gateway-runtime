@@ -354,7 +354,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: stevef1uk/agent-gateway-gateway:1.0.8
+          image: stevef1uk/agent-gateway-gateway:1.0.10
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -370,6 +370,8 @@ spec:
               valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
             # - { name: APPROVAL_WEBHOOK_URL, value: "https://…" }   # Deployment.md §7.5
             # - { name: APPROVAL_WEBHOOK_SECRET, value: "…" }
+            # - { name: APPROVAL_TELEGRAM_BOT_TOKEN, value: "<@BotFather token>" }
+            # - { name: APPROVAL_TELEGRAM_CHAT_ID, value: "<user/group id>" }
             - { name: UPSTREAM_URL, value: "http://demoapi:8090" }   # the protected API the gateway forwards to
           volumeMounts:
             - { name: keys, mountPath: /keys, readOnly: true }

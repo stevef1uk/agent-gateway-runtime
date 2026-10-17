@@ -101,7 +101,43 @@ Operational notes:
 * Use an `https://` webhook URL; the secret and approval metadata travel in
   the body.
 
-## 3. Quick test with a local sink
+## 3. Telegram instead of (or alongside) the webhook
+
+```yaml
+environment:
+  - APPROVAL_TELEGRAM_BOT_TOKEN=<token from @BotFather>
+  - APPROVAL_TELEGRAM_CHAT_ID=<your user id, or a group's chat id>
+```
+
+(Both are listed commented-out in `demo/docker-compose.yml` and in
+`k3s/agentgw.yaml`.)
+
+Finding the chat id: message the bot from the target chat, then call
+`https://api.telegram.org/bot<token>/getUpdates` once and read
+`result[0].message.chat.id`.
+
+Every held action then lands in that chat as an HTML-formatted card —
+agent/user, the action summary, the rule's rationale, the `approval_id` and
+its expiry — e.g.:
+
+> 🔐 **Approval required**
+>
+> Agent `purchasing-agent-42` (user `Cg0w…`) wants to
+> **create /orders `{"amount":250,"supplier":"acme"}`**
+>
+> Reason: amount 250 exceeds auto-approve limit 200 EUR; approval required
+>
+> Approval `apr-1f2e3d4c5b6a7f80` expires 15:30:00.
+
+Security notes: keep the bot token as an environment/secret (never in git);
+deliver to user or private approver chats — never public channels; all
+user-controlled values are escaped before sending; failed sends are logged
+and never change enforcement. Approving from chat is deliberately out of
+scope (no reply flows): decide in the console or via your webhook
+automation; an interactive chat-button approver bot is tracked on the
+roadmap.
+
+## 4. Quick test with a local sink
 
 ```bash
 # terminal 1 — a throwaway receiver that prints what it gets
@@ -119,7 +155,7 @@ PY
 #   (compose service on the same network, then run the demo / playground)
 ```
 
-## 4. Where this is enforced
+## 5. Where this is enforced
 
 - Only the delegating user can approve: the gateway refuses decisions whose
   `approver_id` differs from the approval's bound user

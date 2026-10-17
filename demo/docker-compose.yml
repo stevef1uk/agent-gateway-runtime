@@ -58,7 +58,7 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.7  # 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain
+    image: stevef1uk/agent-gateway-gateway:1.0.10  # 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -76,6 +76,8 @@ services:
       - UPSTREAM_URL=http://demoapi:8090
       # - APPROVAL_WEBHOOK_URL=http://n8n:5678/webhook/agent-gateway   # push approval.required events (Deployment Guide §7.5 / product Deployment.md §7.5)
       # - APPROVAL_WEBHOOK_SECRET=<random 32 bytes>                    # HMAC-signs each delivery
+      # - APPROVAL_TELEGRAM_BOT_TOKEN=<token from @BotFather>          # push approval.required to a Telegram chat (same event as the webhook)
+      # - APPROVAL_TELEGRAM_CHAT_ID=<user or group id>
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/gateway.token:ro

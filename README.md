@@ -60,8 +60,9 @@ in front of every tool call:
 3. **High-risk actions stop — and reach a human** — anything above the cap
    returns *held for approval*. Money hasn't moved. The gateway pushes an
    HMAC-signed `approval.required` webhook to your automation (Slack, Teams,
-   n8n, PagerDuty — setup in [docs/Notifications.md](docs/Notifications.md))
-   and the console shows a pending badge, so the human is told, not polled. A named human approves
+   n8n, PagerDuty — setup in [docs/Notifications.md](docs/Notifications.md)),
+   or push a card straight into a **Telegram** chat; the console also shows a
+   pending badge, so the human is told, not polled. A named human approves
    (or denies) the exact action hash — single-use, replay-proof.
 4. **Revocation is instant** — revoke the delegation and even an
    unexpired, correctly-signed agent token is refused at the gateway. Token
