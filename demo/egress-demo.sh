@@ -5,9 +5,16 @@
 #
 # Requires the gateway egress proxy listener (images >= gateway 1.0.22):
 #     GATEWAY_PROXY_ADDR=:8088   (+ published port 8088)
-# The repo's demo compose with docker-compose.localtest.yml enables it —
-# or set the env yourself:  docker compose -f docker-compose.yml \
-#   -f docker-compose.localtest.yml up -d
+# Enable it with the committed overlay:
+#     docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+# ============================================================================
+if [ -z "${BASH_VERSION:-}" ]; then
+  echo "this script must run under BASH — the way it was invoked bypassed the" >&2
+  echo "shebang (e.g. 'zsh ./egress-demo.sh' or sourcing it), and bash constructs" >&2
+  echo "are not valid zsh syntax (typical symptom: 'zsh: number expected')." >&2
+  echo "Run it as:  bash ./egress-demo.sh   (or: chmod +x ./egress-demo.sh; ./egress-demo.sh)" >&2
+  exit 64
+fi
 #
 # The story, inTraffic terms:
 #   SSO sign-in → delegation for egress (hosts, not tool paths) → agent token
