@@ -412,8 +412,14 @@ spec:
   type: NodePort
   selector: { app: gateway }
   ports:
-    - { port: 8080, targetPort: 8080, nodePort: 30080 }
-    - { port: 8088, targetPort: 8088, nodePort: 30088 }   # egress proxy (gateways OpenShell sandboxes)
+    - name: pep
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080
+    - name: egress-proxy
+      port: 8088
+      targetPort: 8088
+      nodePort: 30088   # egress proxy (gateways OpenShell sandboxes)
 ---
 apiVersion: apps/v1
 kind: Deployment
