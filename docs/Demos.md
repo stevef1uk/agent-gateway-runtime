@@ -19,12 +19,49 @@ docker compose up -d        # pulls published images from Docker Hub
 
 ## Demo 4 — the protected API (`demoapi`, scripted)
 
-One script, both runtimes — compose by default, k3s with `--node <ip>`:
+`demo/protected-api-demo.sh` plays the whole protected-API story from the shell
+against the `demoapi` upstream: a delegation's **approval rule** holds a
+sensitive call **before it executes**, a human approves, the retry runs exactly
+once, then revocation denies everything after. It needs only `curl` and
+`python3`, and the stack must already be up ([`demo/`](../demo/) — compose mode
+is the default).
+
+### Run it
 
 ```bash
-demo/protected-api-demo.sh                       # compose
-demo/protected-api-demo.sh --node 192.168.1.74   # k3s cluster (namespace agentgw)
+demo/protected-api-demo.sh                        # compose, scripted approval
+demo/protected-api-demo.sh --await-human          # stop at the hold: YOU approve
+
+demo/protected-api-demo.sh --node 192.168.1.74            # k3s cluster (namespace agentgw)
+demo/protected-api-demo.sh --node 192.168.1.74 --await-human
 ```
+
+By default the script plays *both* roles — it creates the hold, then approves as
+the delegating user — so it runs unattended. With **`--await-human`** it stops
+at the held call instead and polls the gateway for up to 360 s: approve on the
+**Telegram card** (or in the console) and the retry executes once; deny and
+nothing runs. Wiring up the card is covered in
+[Notifications.md](Notifications.md).
+
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `--node <ip>` | target the k3s cluster at `<ip>` (NodePorts 30080–30083) instead of local compose |
+| `--await-human` | stop at the hold and wait for a human verdict, instead of auto-approving |
+
+### Endpoint / secret overrides (env)
+
+| Variable | Default (compose · `--node`) | Meaning |
+|---|---|---|
+| `WEB` | `http://localhost:8083` · `http://<node>:30083` | console / SSO base URL |
+| `GW` | `http://localhost:8080` · `http://<node>:30080` | gateway (PEP) base URL |
+| `AUTHZ` | `http://localhost:8081` · `http://<node>:30081` | authz service base URL |
+| `TS` | `http://localhost:8082` · `http://<node>:30082` | token service base URL |
+| `ADMIN_TOKEN` | `agent-gateway-demo-admin` | operator token used for the approval call |
+| `AWAIT_HUMAN` | `0` | set to `1` for the same behaviour as `--await-human` |
+
+`--node` sets `WEB`/`GW`/`AUTHZ`/`TS` for you; an explicit env value wins.
 
 What it proves, and how:
 

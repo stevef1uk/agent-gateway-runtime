@@ -16,7 +16,7 @@
 #                       (--await-human --node 192.168.1.74 …)
 #
 # Endpoints or secrets can be overridden with env vars:
-#   WEB, GW, AUTHZ, TS, API, ADMIN_TOKEN
+#   WEB, GW, AUTHZ, TS, ADMIN_TOKEN
 set -euo pipefail
 
 NODE_ARG=""

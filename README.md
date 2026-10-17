@@ -227,13 +227,18 @@ Run it:
 ./demo/protected-api-demo.sh --node 192.168.1.74  # k3s cluster
 ```
 
+By default the script auto-approves as the delegating user so it runs
+unattended; add **`--await-human`** to stop at the hold and approve on the
+Telegram card (or in the console) yourself.
+
 The delegation carries an **`approval_rules`** entry
 (`resource_pattern:/api/sensitive*, require:true`) — so the first call to the
 sensitive API is **held (202) and never executes**: demoapi's per-path
 `executed_count` counter proves the upstream did not run. `mallory` (any
 other human) is refused even with the operator token; the **delegating user**
 approves (subject-bound), the retry executes **exactly once** (counter ↑ by
-1), and revocation kills the call path instantly. Walkthrough text:
+1), and revocation kills the call path instantly. Walkthrough text, the full
+flag list and the endpoint/env overrides:
 [docs/Demos.md](docs/Demos.md); the component's source, Dockerfile and
 detailed README live right here in [`demo/api/`](demo/api/README.md).
 
