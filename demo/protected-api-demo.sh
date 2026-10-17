@@ -109,8 +109,9 @@ echo "   (the demoapi counter did NOT move — no downstream call was made)"
 
 if [ "$AWAIT_HUMAN" = "1" ]; then
   step "6. AWAITING HUMAN DECISION — approve/deny on the Telegram card (or the console)"
-  echo "   polling the gateway for your verdict (up to 180 s)…"
+  echo "   polling the gateway for your verdict (up to 360 s)…"
   DECIDED=""
+  R3_AWAIT=""
   for i in $(seq 1 72); do
     # The agent retries the IDENTICAL bound action: before the decision the
     # gateway answers 202 again; after an approve it executes (200 — the
@@ -120,7 +121,7 @@ if [ "$AWAIT_HUMAN" = "1" ]; then
       -H 'Content-Type: application/json' -d '{"amount":500,"iban":"DE00"}')
     case "$CODE" in
       202) ;;                    # still awaiting the human
-      200) DECIDED=approved; break ;;
+      200) R3_AWAIT=$(cat /tmp/pa-poll.json); DECIDED=approved; break ;;
       403) DECIDED=denied;   break ;;
       *)   ;;                # transient — keep polling
     esac
@@ -151,7 +152,15 @@ else
 fi
 
 step "8. retry executes — the counters prove the API ran exactly once"
-R3=$(curl -s -X POST "$GW/api/sensitive/payment" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -d '{"amount":500,"iban":"DE00"}')
+if [ "$AWAIT_HUMAN" = "1" ] && [ -n "${R3_AWAIT:-}" ]; then
+  # In --await-human mode the approval-consuming retry in step 6 already
+  # executed the call (200), so report THAT response rather than firing a new
+  # request — a fresh POST would be a brand-new held action (a second call).
+  R3="$R3_AWAIT"
+  echo "   (the approved retry polled in step 6 already executed this call)"
+else
+  R3=$(curl -s -X POST "$GW/api/sensitive/payment" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -d '{"amount":500,"iban":"DE00"}')
+fi
 echo "   executed_count/note → $(echo "$R3" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("executed_count"), d.get("note"))')"
 echo "   (counter is cumulative per demoapi container; the held call contributed nothing)"
 

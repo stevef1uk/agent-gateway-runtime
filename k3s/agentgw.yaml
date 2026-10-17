@@ -354,7 +354,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: stevef1uk/agent-gateway-gateway:1.0.19
+          image: stevef1uk/agent-gateway-gateway:1.0.20
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }

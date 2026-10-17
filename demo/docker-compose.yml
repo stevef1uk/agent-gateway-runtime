@@ -58,7 +58,7 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.19  # 1.0.14 cards link to the console (APPROVAL_CONSOLE_URL); 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
+    image: stevef1uk/agent-gateway-gateway:1.0.20  # 1.0.14 cards link to the console (APPROVAL_CONSOLE_URL); 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
