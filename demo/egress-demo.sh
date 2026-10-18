@@ -50,6 +50,13 @@ if ! docker compose version >/dev/null 2>&1; then COMPOSE="docker-compose"; fi
 PROXY_URL="http://localhost:8088"
 PROXY_HOST="${PROXY_URL#*//}"; PROXY_HOST="${PROXY_HOST%%:*}"
 PROXY_PORT="${PROXY_URL##*:}"
+# Published PEP port: GATEWAY_HOST_PORT (env or .env) overrides 8080, e.g. when
+# a local OpenShell gateway already owns :8080.
+if [ -z "${GATEWAY_HOST_PORT:-}" ] && [ -f .env ]; then
+  GATEWAY_HOST_PORT="$(sed -n 's/^GATEWAY_HOST_PORT=//p' .env | tail -1)"
+fi
+GW=${GW:-http://localhost:${GATEWAY_HOST_PORT:-8080}}
+GW_PORT=${GW##*:}
 ADMIN_TOKEN="${ADMIN_TOKEN:-agent-gateway-demo-admin}"
 HOST_ALLOW="example.com"
 HOST_DENY="nuiance.example.net"
@@ -59,7 +66,7 @@ step "Step 1 — services & health (incl. the egress proxy)"
 $COMPOSE up -d --no-recreate >/dev/null 2>&1 || true
 sleep 2
 HEALTHY=1
-for port in 8081 8082 8080 8083; do
+for port in 8081 8082 "$GW_PORT" 8083; do
   if curl -sf "http://localhost:$port/healthz" >/dev/null 2>&1; then
     okk "service on :$port healthy"
   else
@@ -160,7 +167,7 @@ call_tls() { # url -> code (CONNECT tunnel, host allowlisted by the gateway)
     --proxy "$PROXY_URL" --proxy-header "Proxy-Authorization: Bearer $AGENT_TOKEN" "$1" || echo 000
 }
 approve() { # approval_id -> code
-  curl -s -o /tmp/demo_appr.json -w "%{http_code}" -X POST http://localhost:8080/v1/approvals/ \
+  curl -s -o /tmp/demo_appr.json -w "%{http_code}" -X POST $GW/v1/approvals/ \
     -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
     -d "{\"approval_id\":\"$1\",\"approver_id\":\"$APPROVER\",\"approved\":true}"
 }

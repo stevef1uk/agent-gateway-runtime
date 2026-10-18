@@ -332,3 +332,38 @@ of fitness for any particular purpose**; you evaluate it before production
 use; liability is capped at fees paid in the preceding 12 months (nil on free
 tiers); and every consequential action an agent takes under a delegation
 remains your organisation's responsibility.
+
+## OpenShell integration
+
+For users of the OpenShell mobile agent framework: this repository contains
+helper scripts to run an agent **inside** an OpenShell sandbox, and to
+register the local Agent Gateway as an OpenShell upstream proxy so that
+sandbox's egress is governed.
+
+| Path | What it does |
+|---|---|
+| [`demo/openclaw-sandbox.sh`](demo/openclaw-sandbox.sh) | Run OpenClaw confined to an OpenShell sandbox: build the image, create the sandbox, configure the model provider + egress allowlist, and chat. `make openclaw-demo` runs the whole path. **Start here** — see [docs/OpenClaw-OpenShell.md](docs/OpenClaw-OpenShell.md) |
+| [`demo/openshell-gateway-setup.sh`](demo/openshell-gateway-setup.sh) | One-command OpenShell + Agent Gateway prep: register the local gateway, write the token to `~/.config/openshell/upstream-proxy-auth`, create the delegation for normal provider traffic, and apply the sandbox policy to the active OpenClaw runtime |
+| [`demo/openshell.sh`](demo/openshell.sh) | Verifies the allow-path and approval-gated paths using the delegation described above |
+
+To run an agent inside a sandbox:
+
+```bash
+make openclaw-demo        # build → sandbox → provider → chat
+```
+
+Then, to govern that sandbox's egress through the Agent Gateway:
+
+```bash
+cd demo
+./openshell-gateway-setup.sh
+```
+
+Then follow the [OpenShell quickstart](https://github.com/stevef/openshell/blob/main/README.md#quickstart)
+to install OpenShell, import the gateway as an upstream proxy, and run the
+sandbox.
+
+The default delegation and policy are designed for demonstration and testing
+only; review and adjust them for your production use. See
+[docs/Integration-Patterns.md](docs/Integration-Patterns.md) for details on
+how to wire existing agents and back ends to the gateway.

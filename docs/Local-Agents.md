@@ -158,6 +158,10 @@ the gateway (OpenShell's default-deny policy allowlists exactly one
 egress target — the proxy). The same audit lines record
 `openclaw-agent-1 / alice / destination / why permitted` for every call.
 
+* **Run the sandbox step first**: [OpenClaw-OpenShell.md](OpenClaw-OpenShell.md)
+  builds the image, launches the OpenClaw sandbox and proves a model call works
+  — `make openclaw-demo`. Do that before wiring the proxy, so a later failure
+  is unambiguously about egress governance and not about the sandbox.
 * Wiring and low-level setup:
   [OpenShell-Integration.md](https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md)
   (main repo) — including the Linux/Mac platform notes.

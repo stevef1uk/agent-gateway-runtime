@@ -37,7 +37,7 @@ if [ -n "$NODE_ARG" ]; then
 else
   NODE=""
   WEB=${WEB:-http://localhost:8083}
-  GW=${GW:-http://localhost:8080}
+  GW=${GW:-http://localhost:${GATEWAY_HOST_PORT:-8080}}
   AUTHZ=${AUTHZ:-http://localhost:8081}
   TS=${TS:-http://localhost:8082}
 fi

@@ -221,6 +221,30 @@ Notes:
   when `APPROVAL_CONSOLE_URL` is set to a *routable* address (the listener
   `demo/docker-compose.egress.yml` sets it to the machine's LAN URL).
 
+## Demo 6 — OpenClaw confined to an OpenShell sandbox (`demo/openclaw-sandbox.sh`)
+
+Runs the whole agent — process, filesystem, network — inside an
+[NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandbox, then chats
+with it. This is the sandbox-step-only path: it proves isolation and a working
+model call, without the Agent Gateway egress proxy.
+
+```bash
+# needs Docker + the openshell CLI + NVIDIA_API_KEY in demo/.env
+make openclaw-demo
+```
+
+What you will see:
+
+1. the image builds (Ubuntu 24.04 + Node 22 + OpenClaw, non-root `sandbox`
+   user, provider config baked in with the key as an env SecretRef)
+2. the sandbox is created and the OpenClaw gateway starts as its main process
+3. `configure` writes the provider config and applies the default-deny egress
+   allowlist (model provider + OpenClaw catalog, no `::tcp`)
+4. a chat turn returns a real reply from the model
+
+Full walkthrough, required flags, model selection and troubleshooting:
+[OpenClaw-OpenShell.md](OpenClaw-OpenShell.md).
+
 ## Troubleshooting
 
 | Symptom | Fix |

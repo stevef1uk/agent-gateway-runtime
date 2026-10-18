@@ -63,6 +63,52 @@ verify-arch: ## Assert the published image's arm64 variant runs arm64 code
 protected-api: ## Run the protected-API demo (compose)
 	./demo/protected-api-demo.sh
 
+# ---------------------------------------------------------------------------
+# OpenClaw in an NVIDIA OpenShell sandbox (demo/openclaw-sandbox.sh).
+#
+# The sandbox is the isolation boundary: OpenClaw runs as an unprivileged user
+# in a container with no host filesystem, no Docker socket, and default-deny
+# egress. Requires Docker + the `openshell` CLI (https://docs.nvidia.com/openshell).
+# The API key comes from demo/.env (NVIDIA_API_KEY) or the environment.
+# ---------------------------------------------------------------------------
+OPENCLAW_SH := ./demo/openclaw-sandbox.sh
+
+.PHONY: openclaw-image
+openclaw-image: ## Build the OpenClaw sandbox image
+	$(OPENCLAW_SH) build
+
+.PHONY: openclaw-up
+openclaw-up: ## Create the OpenShell sandbox and start the OpenClaw gateway
+	$(OPENCLAW_SH) up
+
+.PHONY: openclaw-configure
+openclaw-configure: ## Configure the model provider + egress allowlist inside the sandbox
+	$(OPENCLAW_SH) configure
+
+.PHONY: openclaw-chat
+openclaw-chat: ## Send one message: make openclaw-chat MSG="hello"
+	$(OPENCLAW_SH) chat "$(MSG)"
+
+.PHONY: openclaw-chat-gateway
+openclaw-chat-gateway: ## Chat via Agent Gateway proxy (SSO → delegation → token): make openclaw-chat-gateway MSG="hello"
+	$(OPENCLAW_SH) chat-gateway "$(MSG)"
+
+.PHONY: openclaw-shell
+openclaw-shell: ## Interactive shell inside the sandbox
+	$(OPENCLAW_SH) shell
+
+.PHONY: openclaw-status
+openclaw-status: ## Show sandbox + gateway status
+	$(OPENCLAW_SH) status
+
+.PHONY: openclaw-down
+openclaw-down: ## Delete the OpenShell sandbox
+	$(OPENCLAW_SH) down
+
+.PHONY: openclaw-demo
+openclaw-demo: openclaw-image openclaw-up openclaw-configure ## Full path: image → sandbox → provider → chat
+	$(OPENCLAW_SH) chat "Reply with exactly: hello from the sandbox"
+
 .PHONY: bench
 bench: ## Benchmark the gateway: both engines (built-in + OPA)
 	./demo/bench-engines.sh $(BENCH_ARGS)

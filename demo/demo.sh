@@ -33,6 +33,14 @@ if ! docker compose version >/dev/null 2>&1; then
   COMPOSE="docker-compose"
 fi
 
+# Published PEP port: GATEWAY_HOST_PORT (env or .env) overrides 8080, e.g. when
+# a local OpenShell gateway already owns :8080. Compose reads the same .env.
+if [ -z "${GATEWAY_HOST_PORT:-}" ] && [ -f "$DEMO_DIR/.env" ]; then
+  GATEWAY_HOST_PORT="$(sed -n 's/^GATEWAY_HOST_PORT=//p' "$DEMO_DIR/.env" | tail -1)"
+fi
+GW=${GW:-http://localhost:${GATEWAY_HOST_PORT:-8080}}
+GW_PORT=${GW##*:}
+
 # --- 0. stack & health ------------------------------------------------------
 step "Step 1 — services & health"
 # --no-recreate: start anything missing, but never touch containers that are
@@ -42,7 +50,7 @@ step "Step 1 — services & health"
 $COMPOSE up -d --no-recreate 2>/dev/null | grep -c "Started\|Running" >/dev/null 2>&1 || true
 sleep 2
 HEALTHY=1
-for port in 8081 8082 8080 8083; do
+for port in 8081 8082 "$GW_PORT" 8083; do
   if curl -sf "http://localhost:$port/healthz" >/dev/null 2>&1; then
     okk "service on :$port healthy"
   else
@@ -123,7 +131,7 @@ fi
 
 # --- 4. low-risk action: auto-allow -----------------------------------------
 step "Step 5 — agent acts: €150 order  (auto-allow ≤ €200)"
-CODE150=$(curl -s -o /tmp/demo_low.json -w "%{http_code}" -X POST http://localhost:8080/orders \
+CODE150=$(curl -s -o /tmp/demo_low.json -w "%{http_code}" -X POST $GW/orders \
   -H "Authorization: Bearer $AGENT_TOKEN" -H "Content-Type: application/json" \
   -d '{"amount":150,"supplier":"acme"}')
 if [ "$CODE150" = "200" ]; then
@@ -135,7 +143,7 @@ fi
 
 # --- 5. high-risk action: held for approval ---------------------------------
 step "Step 6 — agent acts: €250 order  (above cap → approval required)"
-HIGH=$(curl -s -X POST http://localhost:8080/orders \
+HIGH=$(curl -s -X POST $GW/orders \
   -H "Authorization: Bearer $AGENT_TOKEN" -H "Content-Type: application/json" \
   -d '{"amount":250,"supplier":"acme"}')
 APPROVAL_ID=$(printf '%s' "$HIGH" | python3 -c "import sys,json; print(json.load(sys.stdin).get('approval_id',''))" 2>/dev/null || true)
@@ -151,7 +159,7 @@ fi
 step "Step 7 — you decide: approve the €250 order"
 # The gateway binds the decision to the delegating user: approver_id must be
 # the SSO subject the delegation was created with (APPROVAL_ENFORCE_APPROVER).
-DEC=$(curl -s -o /tmp/demo_appr.json -w "%{http_code}" -X POST http://localhost:8080/v1/approvals/ \
+DEC=$(curl -s -o /tmp/demo_appr.json -w "%{http_code}" -X POST $GW/v1/approvals/ \
   -H "Content-Type: application/json" \
   -H "X-Admin-Token: ${ADMIN_TOKEN:-agent-gateway-demo-admin}" \
   -d "{\"approval_id\":\"$APPROVAL_ID\",\"approver_id\":\"$APPROVER\",\"approved\":true}")
@@ -163,7 +171,7 @@ fi
 
 # --- 7. retry succeeds ------------------------------------------------------
 step "Step 8 — the agent retries the €250 order"
-CODE250=$(curl -s -o /tmp/demo_retry.json -w "%{http_code}" -X POST http://localhost:8080/orders \
+CODE250=$(curl -s -o /tmp/demo_retry.json -w "%{http_code}" -X POST $GW/orders \
   -H "Authorization: Bearer $AGENT_TOKEN" -H "Content-Type: application/json" \
   -d '{"amount":250,"supplier":"acme"}')
 if [ "$CODE250" = "200" ]; then
@@ -177,7 +185,7 @@ step "Step 9 — revoke the delegation (instant enforcement)"
 RVC=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE "http://localhost:8081/v1/delegations/$DELEGATION_ID")
 if [ "$RVC" = "204" ] || [ "$RVC" = "200" ]; then
   okk "delegation revoked — even though the token is still cryptographically valid"
-  DENY=$(curl -s -o /tmp/demo_deny.json -w "%{http_code}" -X POST http://localhost:8080/orders \
+  DENY=$(curl -s -o /tmp/demo_deny.json -w "%{http_code}" -X POST $GW/orders \
     -H "Authorization: Bearer $AGENT_TOKEN" -H "Content-Type: application/json" \
     -d '{"amount":150,"supplier":"acme"}')
   if [ "$DENY" = "403" ]; then

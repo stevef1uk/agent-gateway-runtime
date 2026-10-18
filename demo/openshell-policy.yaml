@@ -1,0 +1,20 @@
+# Sandbox egress policy for the OpenClaw integration test:
+# allow ONLY ddirect destinations that the Agent Gateway governs, and let the
+# GATEWAY's delegation decide whether each call may proceed.
+# This file is deliberately minimal — OpenShell default-deny + this allowlist
+# = all egress forced through the gateway (which OpenShell's own supervisor
+# proxies upstream).
+network_policies:
+  agentgw_egress_allow:
+    endpoints:
+      - host: example.com
+        port: 443
+      - host: example.com
+        port: 80
+    binaries:
+      - path: /usr/bin/bash
+      - path: /usr/bin/bash5
+      - path: /usr/local/bin/node
+      - path: /usr/local/bin/openclaw
+      - path: /usr/bin/curl
+      - path: /usr/bin/wget
