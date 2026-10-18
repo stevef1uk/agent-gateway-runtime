@@ -179,6 +179,8 @@ services:
     ports: ["5556:5556"]
     volumes:
       - ./dex/config.yaml:/etc/dex/config.yaml:ro
+    environment:
+      - DEX_MOCK_REDIRECT_URIS=${DEX_MOCK_REDIRECT_URIS:-http://localhost:8083/oidc/callback,http://host.docker.internal:8083/oidc/callback}
     command: ["dex", "serve", "/etc/dex/config.yaml"]
 
 volumes:

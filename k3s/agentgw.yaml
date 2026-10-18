@@ -82,8 +82,12 @@ data:
         name: Agent Gateway
         public: true
         redirectURIs:
-          - http://192.168.1.74:30083/oidc/callback
           - http://localhost:30083/oidc/callback
+          - http://192.168.1.74:30083/oidc/callback
+          - http://192.168.1.53:30083/oidc/callback
+          - http://192.168.1.45:30083/oidc/callback
+          - http://192.168.1.63:30083/oidc/callback
+          - http://host.docker.internal:30083/oidc/callback
     enablePasswordDB: true
     staticPasswords:
       - email: "alice@example.com"
@@ -94,6 +98,14 @@ data:
       - type: mockCallback
         id: mock
         name: "Mock (dev)"
+        config:
+          redirectURIs:
+            - http://localhost:30083/oidc/callback
+            - http://192.168.1.74:30083/oidc/callback
+            - http://192.168.1.53:30083/oidc/callback
+            - http://192.168.1.45:30083/oidc/callback
+            - http://192.168.1.63:30083/oidc/callback
+            - http://host.docker.internal:30083/oidc/callback
 ---
 apiVersion: apps/v1
 kind: Deployment

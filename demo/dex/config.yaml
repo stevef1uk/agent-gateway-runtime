@@ -72,13 +72,16 @@ staticPasswords:
 connectors:
   # mockCallback needs no interaction and always signs in as a fixed test user,
   # making the browser flow a single click.
+  # redirectURIs can be overridden via DEX_MOCK_REDIRECT_URIS env var
+  # (comma-separated). Defaults to localhost + host.docker.internal for Docker Desktop.
   - type: mockCallback
     id: mock
     name: "Mock (dev)"
     config:
       redirectURIs:
         - http://localhost:8083/oidc/callback
-        - http://192.168.1.53:8083/oidc/callback
+        - http://host.docker.internal:8083/oidc/callback
+        - $DEX_MOCK_REDIRECT_URIS
 
   # --- Swap in a real identity provider for production ---------------------
   # Each entry below replaces (or joins) the mock connector; the Go code does
