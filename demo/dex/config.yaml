@@ -75,6 +75,10 @@ connectors:
   - type: mockCallback
     id: mock
     name: "Mock (dev)"
+    config:
+      redirectURIs:
+        - http://localhost:8083/oidc/callback
+        - http://192.168.1.53:8083/oidc/callback
 
   # --- Swap in a real identity provider for production ---------------------
   # Each entry below replaces (or joins) the mock connector; the Go code does
