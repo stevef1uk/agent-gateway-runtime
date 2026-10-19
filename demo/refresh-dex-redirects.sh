@@ -81,7 +81,12 @@ for line in text.splitlines(keepends=True):
         out.append(line)
         for ip in new_ips:
             uri = "http://%s:%s/oidc/callback" % (ip, port)
-            if uri not in text:
+            # this list's membership only: dex validates the redirect at BOTH
+            # the staticClient and the connector list, so "uri anywhere in the
+            # file" would silently leave a half-registered (and failing) state
+            list_re = re.compile(
+                r"^%s- http://%s:%s/oidc/callback$" % (re.escape(m.group(1)), re.escape(ip), re.escape(port)), re.M)
+            if not list_re.search(text):
                 out.append("%s- %s\n" % (m.group(1), uri))
                 added.append(uri)
     else:
