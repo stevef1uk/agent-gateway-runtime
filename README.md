@@ -129,6 +129,21 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 
 Requirements: Docker Engine 24+, `docker compose`, `curl`, `jq` optional.
 
+**Opening the console from another device (or via `127.0.0.1`/a LAN IP)?**
+SSO sign-in fails with `Bad Request — Unregistered redirect_uri` unless the
+exact browser URI is registered in `demo/dex/config.yaml`
+(`staticClients[].redirectURIs`). `localhost`/`127.0.0.1` are in the list
+already; for a LAN address (e.g. a Mac signing in at
+`http://192.168.1.20:8083`) add its URI and re-apply the config:
+
+```bash
+echo "      - http://<your-lan-ip>:8083/oidc/callback" >> demo/dex/config.yaml  # under staticClients redirectURIs
+docker compose -f demo/docker-compose.yml up -d --force-recreate dex
+```
+
+(on k3s the same list lives in the `dex-config` ConfigMap in
+[`k3s/agentgw.yaml`](k3s/agentgw.yaml)/README).
+
 ### Building and publishing the demo API yourself
 
 The gateway-stack images ship from the product repo. The **demo API** lives

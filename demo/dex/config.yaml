@@ -38,6 +38,7 @@ staticClients:
     public: true
     redirectURIs:
       - http://localhost:8083/oidc/callback
+      - http://127.0.0.1:8083/oidc/callback
       # LAN addresses for multi-device approval notifications (the Telegram
       # card's "Open the console" link lands on the console from whichever
       # device the approver uses). Add one per host/port that can serve the
@@ -80,6 +81,7 @@ connectors:
     config:
       redirectURIs:
         - http://localhost:8083/oidc/callback
+        - http://127.0.0.1:8083/oidc/callback
         - http://host.docker.internal:8083/oidc/callback
         - $DEX_MOCK_REDIRECT_URIS
 
