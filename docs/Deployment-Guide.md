@@ -55,16 +55,16 @@ running more replicas in front of your load balancer.
 | Licence token file (e.g. `license.token`) | Time-limited right-to-run, signed by the vendor |
 
 Throughout this document replace the image prefix with the registry path on
-your licence, e.g. `docker.io/stevef1uk/agent-gateway-authz:1.0.11`.
+your licence, e.g. `docker.io/stevef1uk/agent-gateway-authz:1.0.12`.
 
 The images are published on Docker Hub under `stevef1uk` and can be pulled
 as:
 
 ```bash
-docker pull stevef1uk/agent-gateway-authz:1.0.11
-docker pull stevef1uk/agent-gateway-gateway:1.0.3
-docker pull stevef1uk/agent-gateway-tokensvc:1.0.4
-docker pull stevef1uk/agent-gateway-web:1.0.22
+docker pull stevef1uk/agent-gateway-authz:1.0.12
+docker pull stevef1uk/agent-gateway-gateway:1.0.24
+docker pull stevef1uk/agent-gateway-tokensvc:1.0.5
+docker pull stevef1uk/agent-gateway-web:1.0.42
 ```
 
 Each tag is a **multi-arch** manifest (`linux/amd64` + `linux/arm64`), so the
@@ -128,7 +128,7 @@ later.
 ```yaml
 services:
   authz:
-    image: stevef1uk/agent-gateway-authz:1.0.11
+    image: stevef1uk/agent-gateway-authz:1.0.12
     restart: unless-stopped
     ports: ["8081:8081"]
     environment:
@@ -140,7 +140,7 @@ services:
       - ./keys/license.token:/licences/authz.token:ro
 
   tokensvc:
-    image: stevef1uk/agent-gateway-tokensvc:1.0.4
+    image: stevef1uk/agent-gateway-tokensvc:1.0.5
     restart: unless-stopped
     ports: ["8082:8082"]
     environment:
@@ -151,7 +151,7 @@ services:
       - ./keys/license.token:/licences/tokensvc.token:ro
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.3
+    image: stevef1uk/agent-gateway-gateway:1.0.24
     restart: unless-stopped
     ports: ["8080:8080"]
     environment:
@@ -163,7 +163,7 @@ services:
       - ./keys/license.token:/licences/gateway.token:ro
 
   web:
-    image: stevef1uk/agent-gateway-web:1.0.22
+    image: stevef1uk/agent-gateway-web:1.0.42
     restart: unless-stopped
     ports: ["8083:8083"]
     environment:
@@ -442,7 +442,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: stevef1uk/agent-gateway-gateway:1.0.3
+          image: stevef1uk/agent-gateway-gateway:1.0.24
           ports: [{ containerPort: 8080 }]
           env:
             - name: PERSISTENCE

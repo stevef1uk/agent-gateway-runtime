@@ -32,6 +32,14 @@ if [ -z "${COMPOSE:-}" ]; then
 fi
 read -ra COMPOSE <<< "$COMPOSE"
 
+# The PEP's published host port may differ from 8080 (a local OpenShell
+# gateway often owns :8080). Compose reads demo/.env; the bench must too, so
+# the load it generates targets the same port the stack publishes.
+if [ -z "${GATEWAY_HOST_PORT:-}" ] && [ -f .env ]; then
+  GATEWAY_HOST_PORT="$(sed -n 's/^GATEWAY_HOST_PORT=//p' .env | tail -1)"
+fi
+GATEWAY_URL="http://localhost:${GATEWAY_HOST_PORT:-8080}"
+
 CONC=20; DUR=10s; WARM=2s
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,20 +53,25 @@ done
 [ -f "$BENCH_DIR/main.go" ] || { echo "benchmark tool not found at $BENCH_DIR" >&2; exit 1; }
 
 run_bench() {
-  ( cd "$BENCH_DIR" && go run . -c "$CONC" -d "$DUR" -w "$WARM" )
+  ( cd "$BENCH_DIR" && go run . -c "$CONC" -d "$DUR" -w "$WARM" -gateway "$GATEWAY_URL" )
 }
 
+# --no-deps: only authz/web are recreated. `web` depends on `gateway`, and
+# without --no-deps compose would recreate the gateway from the base file
+# alone, silently dropping any overlay it was started with (e.g. the egress
+# overlay's GATEWAY_PROXY_ADDR). The bench switches policy engines, not the
+# running topology.
 echo "### engine: built-in (Go authorizer)"
-"${COMPOSE[@]}" -f docker-compose.yml up -d authz web >/dev/null
+"${COMPOSE[@]}" -f docker-compose.yml up -d --no-deps authz web >/dev/null
 sleep 3
 run_bench
 
 echo
 echo "### engine: OPA (Rego via opa eval)"
-"${COMPOSE[@]}" -f docker-compose.yml -f docker-compose.opa.yml up -d authz web >/dev/null
+"${COMPOSE[@]}" -f docker-compose.yml -f docker-compose.opa.yml up -d --no-deps authz web >/dev/null
 sleep 3
 run_bench
 
 echo
 echo "restoring the built-in engine"
-"${COMPOSE[@]}" -f docker-compose.yml up -d authz web >/dev/null
+"${COMPOSE[@]}" -f docker-compose.yml up -d --no-deps authz web >/dev/null

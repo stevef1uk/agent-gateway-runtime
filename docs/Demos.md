@@ -5,7 +5,9 @@ and make **real** calls — nothing is simulated. Run the stack first:
 
 ```bash
 cd demo
-docker compose up -d        # pulls published images from Docker Hub
+docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+                            # pulls published images from Docker Hub;
+                            # the egress overlay adds the gateway's :8088 proxy (Demos 5–7)
 ./demo.sh
 ```
 
@@ -15,74 +17,8 @@ docker compose up -d        # pulls published images from Docker Hub
 | http://localhost:8083/demo.html | graphical guided demo |
 | http://localhost:8083/policy.html | OPA policy playground *(needs the policy override — see Demo 3)* |
 | http://localhost:8080 | gateway (PEP) — what your agents call |
+| http://localhost:8088 | gateway egress proxy (needs the egress overlay — Demos 5–7) |
 | http://localhost:8081, :8082, :5556 | authz · tokensvc · SSO (Dex) |
-
-## Demo 4 — the protected API (`demoapi`, scripted)
-
-`demo/protected-api-demo.sh` plays the whole protected-API story from the shell
-against the `demoapi` upstream: a delegation's **approval rule** holds a
-sensitive call **before it executes**, a human approves, the retry runs exactly
-once, then revocation denies everything after. It needs only `curl` and
-`python3`, and the stack must already be up ([`demo/`](../demo/) — compose mode
-is the default).
-
-### Run it
-
-```bash
-demo/protected-api-demo.sh                        # compose, scripted approval
-demo/protected-api-demo.sh --await-human          # stop at the hold: YOU approve
-
-demo/protected-api-demo.sh --node 192.168.1.74            # k3s cluster (namespace agentgw)
-demo/protected-api-demo.sh --node 192.168.1.74 --await-human
-```
-
-By default the script plays *both* roles — it creates the hold, then approves as
-the delegating user — so it runs unattended. With **`--await-human`** it stops
-at the held call instead and polls the gateway for up to 360 s: approve on the
-**Telegram card** (or in the console) and the retry executes once; deny and
-nothing runs. Wiring up the card is covered in
-[Notifications.md](Notifications.md).
-
-### Flags
-
-| Flag | Meaning |
-|---|---|
-| `--node <ip>` | target the k3s cluster at `<ip>` (NodePorts 30080–30083) instead of local compose |
-| `--await-human` | stop at the hold and wait for a human verdict, instead of auto-approving |
-
-### Endpoint / secret overrides (env)
-
-| Variable | Default (compose · `--node`) | Meaning |
-|---|---|---|
-| `WEB` | `http://localhost:8083` · `http://<node>:30083` | console / SSO base URL |
-| `GW` | `http://localhost:8080` · `http://<node>:30080` | gateway (PEP) base URL |
-| `AUTHZ` | `http://localhost:8081` · `http://<node>:30081` | authz service base URL |
-| `TS` | `http://localhost:8082` · `http://<node>:30082` | token service base URL |
-| `ADMIN_TOKEN` | `agent-gateway-demo-admin` | operator token used for the approval call |
-| `AWAIT_HUMAN` | `0` | set to `1` for the same behaviour as `--await-human` |
-
-`--node` sets `WEB`/`GW`/`AUTHZ`/`TS` for you; an explicit env value wins.
-
-What it proves, and how:
-
-1. **SSO** → the delegation is created *with an `approval_rules` entry*:
-   `{"when":{"resource_pattern":"/api/sensitive*"},"require":true,"rationale":"sensitive API access requires a human"}` —
-   policy-as-code at delegation time; no gateway or policy file is edited.
-2. **Low-risk call runs immediately**: `/orders` forwards to demoapi and the
-   response carries the demoapi call counter.
-3. **The protected call is HELD**: the first `POST /api/sensitive/payment`
-   returns **202 + approval record** — and demoapi's `executed_count` did
-   not move: the upstream genuinely was not called. This is the
-   *require-approval-before-execution* property, not merely "money held".
-4. **Only the delegating user can approve**: a different human ("mallory")
-   using the same operator token is refused (`403`, approver binding).
-5. **The retry executes exactly once**: after the bound subject approves,
-   the response counter increments by one — then **revocation** denies any
-   further call at the enforcement point (403), even with the token still
-   cryptographically valid.
-
-The component itself (and why it is a plain, un-licenced image) is
-documented in the same repository, at `demo/api/README.md`.
 
 ## Demo 1 — scripted (`demo/demo.sh`)
 
@@ -175,6 +111,78 @@ The message for an audience: guardrails are code you can review and version,
 the change is live in seconds without a redeploy, and a mistake cannot take
 the gateway down. How it works under the hood: [Policy-and-OPA.md](Policy-and-OPA.md).
 
+## Demo 4 — the protected API (`demoapi`, scripted)
+
+`demo/protected-api-demo.sh` plays the whole protected-API story from the shell
+against the `demoapi` upstream: a delegation's **approval rule** holds a
+sensitive call **before it executes**, a human approves, the retry runs exactly
+once, then revocation denies everything after. It needs only `curl` and
+`python3`, and the stack must already be up ([`demo/`](../demo/) — compose mode
+is the default).
+
+### Run it
+
+For compose, the stack must already be up (base + egress overlay, the same
+stack the other demos use):
+
+```bash
+cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+cd ..
+demo/protected-api-demo.sh                        # compose, scripted approval
+demo/protected-api-demo.sh --await-human          # stop at the hold: YOU approve
+
+demo/protected-api-demo.sh --node 192.168.1.74            # k3s cluster (namespace agentgw)
+demo/protected-api-demo.sh --node 192.168.1.74 --await-human
+```
+
+By default the script plays *both* roles — it creates the hold, then approves as
+the delegating user — so it runs unattended. With **`--await-human`** it stops
+at the held call instead and polls the gateway for up to 360 s: approve on the
+**Telegram card** (or in the console) and the retry executes once; deny and
+nothing runs. Wiring up the card is covered in
+[Notifications.md](Notifications.md).
+
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `--node <ip>` | target the k3s cluster at `<ip>` (NodePorts 30080–30083) instead of local compose |
+| `--await-human` | stop at the hold and wait for a human verdict, instead of auto-approving |
+
+### Endpoint / secret overrides (env)
+
+| Variable | Default (compose · `--node`) | Meaning |
+|---|---|---|
+| `WEB` | `http://localhost:8083` · `http://<node>:30083` | console / SSO base URL |
+| `GW` | `http://localhost:8080` · `http://<node>:30080` | gateway (PEP) base URL |
+| `AUTHZ` | `http://localhost:8081` · `http://<node>:30081` | authz service base URL |
+| `TS` | `http://localhost:8082` · `http://<node>:30082` | token service base URL |
+| `ADMIN_TOKEN` | `agent-gateway-demo-admin` | operator token used for the approval call |
+| `AWAIT_HUMAN` | `0` | set to `1` for the same behaviour as `--await-human` |
+
+`--node` sets `WEB`/`GW`/`AUTHZ`/`TS` for you; an explicit env value wins.
+
+What it proves, and how:
+
+1. **SSO** → the delegation is created *with an `approval_rules` entry*:
+   `{"when":{"resource_pattern":"/api/sensitive*"},"require":true,"rationale":"sensitive API access requires a human"}` —
+   policy-as-code at delegation time; no gateway or policy file is edited.
+2. **Low-risk call runs immediately**: `/orders` forwards to demoapi and the
+   response carries the demoapi call counter.
+3. **The protected call is HELD**: the first `POST /api/sensitive/payment`
+   returns **202 + approval record** — and demoapi's `executed_count` did
+   not move: the upstream genuinely was not called. This is the
+   *require-approval-before-execution* property, not merely "money held".
+4. **Only the delegating user can approve**: a different human ("mallory")
+   using the same operator token is refused (`403`, approver binding).
+5. **The retry executes exactly once**: after the bound subject approves,
+   the response counter increments by one — then **revocation** denies any
+   further call at the enforcement point (403), even with the token still
+   cryptographically valid.
+
+The component itself (and why it is a plain, un-licenced image) is
+documented in the same repository, at `demo/api/README.md`.
+
 ## Demo 5 — all outbound egress via the gateway, approved per call (`demo/egress-demo.sh`)
 
 The newest demo exercises the **egress proxy**: an agent runtime whose
@@ -244,6 +252,23 @@ What you will see:
 
 Full walkthrough, required flags, model selection and troubleshooting:
 [OpenClaw-OpenShell.md](OpenClaw-OpenShell.md).
+
+## Demo 7 — prove the sandbox's egress rules (`demo/openclaw-egress-test.sh`)
+
+The scripted gate for Demo 6's network story: it asks **OpenClaw itself** to
+fetch an allowed host, a blocked host and the OpenClaw telemetry host, then —
+with **`--gateway`** — drives the Agent-Gateway loop against the real upstream
+(`api.github.com`): CONNECT held (`202`-shape/approval id), auto- or
+human-approved, executed exactly once, single-use rebind on a second connect.
+
+```bash
+./demo/openclaw-egress-test.sh                       # sandbox policy alone
+make openclaw-egress-test GW=--gateway               # + Agent-Gateway checks (you approve)
+GW="--gateway --no-human" make openclaw-egress-test  # unattended: every hold auto-approved
+```
+
+Needs only the stack + the sandbox (`make openclaw-demo` first); `--no-human`
+makes it CI-safe. Step-by-step: [OpenClaw-OpenShell.md](OpenClaw-OpenShell.md).
 
 ## Troubleshooting
 

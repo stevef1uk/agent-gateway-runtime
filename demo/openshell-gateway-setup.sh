@@ -1,17 +1,25 @@
 #!/usr/bin/env bash
 # OpenShell + Agent Gateway local setup helper
 #
-# This script matches the commands used during the live OpenShell/OpenClaw
-# setup:
-#   - configure the OpenShell gateway to send all sandbox outbound traffic to
-#     the Agent Gateway egress proxy on http://127.0.0.1:8088
+# Verified against OpenShell 0.1.4 with the DOCKER compute driver and the
+# schema-v2 gateway config. What it does:
+#   - verify the demo's Agent Gateway stack is up
+#   - PATCH the OpenShell gateway config (~/.config/openshell/gateway.toml)
+#     with the upstream-proxy stanza that chains every policy-approved tunnel
+#     through the Agent Gateway egress proxy. Existing TLS/mTLS/JWT settings
+#     are preserved — the script edits only the driver block. You still have
+#     to restart the OpenShell gateway yourself (it is not supervised here).
 #   - register the local OpenShell gateway
-#   - create a delegation allowing ordinary OpenRouter API calls while keeping
+#   - create a delegation allowing ordinary provider API calls while keeping
 #     CONNECT and DELETE under the gateway approval policy
-#   - write the delegation token to ~/.config/openshell/upstream-proxy-auth
+#   - mint the delegation token and write it to
+#     ~/.config/openshell/upstream-proxy-auth (token as Basic username) — the
+#     0.1.x docker driver copies this file into the supervisor volume at
+#     sandbox START, so existing running sandboxes get stop+started here to
+#     pick it up.
 #   - update the live sandbox policy so it can only reach the endpoints needed
-#     for provider traffic, OpenClaw metadata refresh, and GitHub update checks.
-#     The gateway remains the real decision point for risky actions.
+#     for provider traffic, OpenClaw metadata refresh, and GitHub update checks;
+#     the gateway remains the real decision point for risky actions.
 #
 # Usage:
 #   ./demo/openshell-gateway-setup.sh
@@ -20,12 +28,15 @@
 #   DEX_USER=alice DEX_PASSWORD=password ./demo/openshell-gateway-setup.sh
 #
 # Notes:
+#   - requires OpenShell >= 0.1.x (schema v2). A v1 config (OpenShell 0.0.x)
+#     is reported and left untouched — migrate it per
+#     docs/OpenClaw-OpenShell.md ("Advanced" section) first.
 #   - the sandbox policy accepts DNS hostnames; wildcards like "*.openrouter.ai"
 #     are valid in the gateway delegation, but not in OpenShell's network policy
 #     syntax. Use exact hosts there.
 #   - the proxy itself (127.0.0.1:8088 / localhost:8088) is never added to the
-#     sandbox allowlist in the loopback-guarded policy; the OpenShell gateway
-#     config is what forwards the request upstream.
+#     sandbox allowlist; the OpenShell gateway config is what forwards the
+#     request upstream.
 #   - we explicitly allow the OpenClaw catalog and GitHub update endpoints here,
 #     because OpenClaw probes them during model/provider discovery and update
 #     checks. This is still a narrow allowlist, not a blanket outbound permit.
@@ -38,7 +49,15 @@ if [ "${1:-}" = "--check" ]; then
   shift
 fi
 
-PROXY_URL="${PROXY_URL:-http://127.0.0.1:8088}"
+PROXY_URL="${PROXY_URL:-}"
+# Mac (Darwin): the Agent Gateway runs in a container, so the supervisor's
+# upstream dial goes through Docker Desktop's host-gateway alias.
+if [ -z "$PROXY_URL" ]; then
+  case "$(uname -s)" in
+    Darwin) PROXY_URL="http://host.docker.internal:8088" ;;
+    *)      PROXY_URL="http://127.0.0.1:8088" ;;
+  esac
+fi
 GATEWAY_URL="${GATEWAY_URL:-https://127.0.0.1:17670}"
 AUTHZ_URL="${AUTHZ_URL:-http://127.0.0.1:8081}"
 TOKENSVC_URL="${TOKENSVC_URL:-http://127.0.0.1:8082/token}"
@@ -128,21 +147,99 @@ fi
 
 mkdir -p "$OPENSSH_CONFIG_DIR"
 
-# Configure the OpenShell host gateway to forward all sandbox egress to the
-# Agent Gateway egress proxy listener.
-cat > "$OPENSSH_CONFIG_DIR/gateway.toml" <<EOF
-[openshell]
-version = 2
+if [ "$CHECK_ONLY" -eq 1 ]; then
+  info "--check: reporting current state only (no writes)"
+  if [ -f "$OPENSSH_CONFIG_DIR/gateway.toml" ]; then
+    grep -E "^(version|https_proxy|proxy_auth_file|proxy_connect_by_hostname|proxy_auth_allow_insecure) ?=" "$OPENSSH_CONFIG_DIR/gateway.toml" || true
+    grep -q '^https_proxy.*=.*8088' "$OPENSSH_CONFIG_DIR/gateway.toml" \
+      && echo "  ✓ upstream proxy stanza present" \
+      || echo "  ✗ upstream proxy stanza missing"
+  else
+    echo "  ✗ $OPENSSH_CONFIG_DIR/gateway.toml missing"
+  fi
+  exit 0
+fi
 
-[openshell.drivers.podman]
-allow_driver_config = true
-https_proxy = "${PROXY_URL}"
-proxy_auth_file = "${OPENSSH_CONFIG_DIR}/upstream-proxy-auth"
-proxy_auth_allow_insecure = true
-proxy_connect_by_hostname = true
+# ---------------------------------------------------------------------------
+# Patch the OpenShell gateway config with the upstream-proxy stanza WITHOUT
+# clobbering the rest (TLS, mTLS, JWT, credential config stay as they are).
+# ---------------------------------------------------------------------------
+GW_TOML="$OPENSSH_CONFIG_DIR/gateway.toml"
+if [ ! -f "$GW_TOML" ]; then
+  cat >&2 <<EOF
+$GW_TOML does not exist. An OpenShell gateway config already includes TLS,
+mTLS and JWT settings generated by openshell-gateway's first boot; creating a
+fresh one here would silently drop them. Start the gateway once so it
+generates its config, or copy the verified layout from
+docs/OpenClaw-OpenShell.md ("Advanced" section), then rerun this script.
 EOF
+  exit 1
+fi
 
-chmod 600 "$OPENSSH_CONFIG_DIR/gateway.toml" 2>/dev/null || true
+if grep -q '^version = 1' "$GW_TOML"; then
+  cat >&2 <<EOF
+$GW_TOML is schema v1 (OpenShell 0.0.x). The upstream-proxy stanza needs
+schema v2 (OpenShell >= 0.1.x): migrate per docs/OpenClaw-OpenShell.md
+("Advanced" section) — version = 2, compute_driver, guest_tls_ca moved to
+[openshell.gateway], drop sandbox_namespace/network_name/guest_tls_cert/
+guest_tls_key — then rerun this script.
+EOF
+  exit 1
+fi
+
+mkdir -p "$OPENSSH_CONFIG_DIR"
+UPSTREAM_BLOCK='[openshell.drivers.docker]'
+
+# Upsert the upstream-proxy keys into the ACTIVE driver section of the
+# schema-v2 gateway config (or append the docker driver section when absent).
+python3 - "$GW_TOML" "$PROXY_URL" "$OPENSSH_CONFIG_DIR/upstream-proxy-auth" <<'PYEOF'
+import re, sys
+
+path, proxy, authfile = sys.argv[1], sys.argv[2], sys.argv[3]
+src = open(path).read()
+keys = {
+    'https_proxy':                proxy,
+    'proxy_auth_file':            authfile,
+    'proxy_auth_allow_insecure':  'true',
+    'proxy_connect_by_hostname':  'true',
+}
+for name, tbl in (('docker', '[openshell.drivers.docker]'), ('podman', '[openshell.drivers.podman]')):
+    mt = re.search(rf'^\[{re.escape(tbl)}\]\s*$', src, re.M)
+    if mt:
+        break
+else:
+    name, tbl, mt = 'docker', '[openshell.drivers.docker]', None
+
+if mt is None:
+    src = src.rstrip('\n') + f'\n\n{tbl}\n' + '\n'.join(f'{k} = "{v if name == "https_proxy" or k != "proxy_auth_allow_insecure" else v}"' if k != 'proxy_auth_allow_insecure' else f'{k} = true' for k, v in keys.items()) + '\n'
+else:
+    section = re.compile(rf'(?ms)^\[{re.escape(tbl)}\]\s*$.*?(?=^\[|\Z)')
+    def section_body(c):
+        body = c.group(0)
+        for k, v in keys.items():
+            lit = f'{k} = true' if v in ('true', 'false') else f'{k} = "{v}"'
+            pat = rf'^{k} ?=.*$'
+            if re.search(pat, body, re.M):
+                body = re.sub(pat, lit, body, flags=re.M)
+            else:
+                body = body.rstrip('\n') + '\n' + lit + '\n'
+        return body
+    src = section.sub(section_body, src, count=1)
+
+open(path, 'w').write(src)
+print(f'patched [{tbl}] in {path}')
+PYEOF
+
+# Preserve restrictive perms on the TOML (it names the credential file).
+chmod 600 "$GW_TOML" 2>/dev/null || true
+
+info "Gateway config patched — RESTART the OpenShell gateway to activate it"
+cat <<EOF
+  NemoClaw/system-managed box:  systemctl --user restart openshell-gateway
+  manually-run gateway:         stop the exact 'openshell-gateway' process and
+                                relaunch it with the same flags/env
+  macOS:                        brew services restart openshell-gateway
+EOF
 
 # Register the local OpenShell gateway if needed.
 if ! openshell gateway list 2>/dev/null | grep -q '^\*\s*openshell\s'; then

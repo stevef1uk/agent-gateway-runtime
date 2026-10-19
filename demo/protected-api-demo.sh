@@ -19,6 +19,8 @@
 #   WEB, GW, AUTHZ, TS, ADMIN_TOKEN
 set -euo pipefail
 
+DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 NODE_ARG=""
 AWAIT_HUMAN=${AWAIT_HUMAN:-0}
 while [ $# -gt 0 ]; do
@@ -36,6 +38,11 @@ if [ -n "$NODE_ARG" ]; then
   TS=${TS:-http://$NODE:30082}
 else
   NODE=""
+  # The PEP's published host port may differ from 8080 (e.g. a local OpenShell
+  # gateway already owns :8080). Compose reads demo/.env; mirror it here.
+  if [ -z "${GATEWAY_HOST_PORT:-}" ] && [ -f "$DEMO_DIR/.env" ]; then
+    GATEWAY_HOST_PORT="$(sed -n 's/^GATEWAY_HOST_PORT=//p' "$DEMO_DIR/.env" | tail -1)"
+  fi
   WEB=${WEB:-http://localhost:8083}
   GW=${GW:-http://localhost:${GATEWAY_HOST_PORT:-8080}}
   AUTHZ=${AUTHZ:-http://localhost:8081}

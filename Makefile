@@ -93,13 +93,21 @@ openclaw-chat: ## Send one message: make openclaw-chat MSG="hello"
 openclaw-chat-gateway: ## Chat via Agent Gateway proxy (SSO → delegation → token): make openclaw-chat-gateway MSG="hello"
 	$(OPENCLAW_SH) chat-gateway "$(MSG)"
 
+.PHONY: openclaw-egress-test
+openclaw-egress-test: ## Prove egress rules from the sandbox [GW=--gateway for Agent Gateway checks; add --no-human to skip approval waits]
+	./demo/openclaw-egress-test.sh $(GW)
+
 .PHONY: openclaw-shell
 openclaw-shell: ## Interactive shell inside the sandbox
 	$(OPENCLAW_SH) shell
 
 .PHONY: openclaw-status
-openclaw-status: ## Show sandbox + gateway status
+openclaw-status: ## Sandbox + gateway health
 	$(OPENCLAW_SH) status
+
+.PHONY: openclaw-restart
+openclaw-restart: ## Delete + recreate + configure (fixes stale sessions)
+	$(OPENCLAW_SH) restart
 
 .PHONY: openclaw-down
 openclaw-down: ## Delete the OpenShell sandbox

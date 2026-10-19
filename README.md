@@ -118,6 +118,8 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
 | [`demo/protected-api-demo.sh`](demo/protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
 | [`demo/egress-demo.sh`](demo/egress-demo.sh) | Demo 5 — all outbound traffic through the gateway's egress proxy: destination host = one authorization decision per call, human approval on each one (needs images ≥ gateway 1.0.22 with `GATEWAY_PROXY_ADDR=:8088`); the OpenShell/OpenClaw integration guide lives in the main repo |
+| [`demo/openclaw-sandbox.sh`](demo/openclaw-sandbox.sh) | Demo 6 — the full agent (OpenClaw) inside an OpenShell sandbox: `make openclaw-demo` builds → sandbox → configure → one chat turn |
+| [`demo/openclaw-egress-test.sh`](demo/openclaw-egress-test.sh) | Demo 7 — proves the sandbox's egress rules from inside the sandbox (`--gateway` adds the Agent-Gateway checks: allow/deny/CONNECT-hold/approved-retry; `--no-human` auto-approves holds for unattended runs) |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
 | [`docs/Commercial-Licence.md`](docs/Commercial-Licence.md) | Licence terms: what you get, what is not warranted, liability limits, indemnity |
 | [`docs/Pricing.md`](docs/Pricing.md) | Licensing tiers and buying path |
@@ -222,9 +224,13 @@ Full story: [docs/Policy-and-OPA.md](docs/Policy-and-OPA.md) and
 
 A stand-in for a **customer's own API** — deliberately a plain image (no
 licence/encryption) since it represents *your* service, not a vendor part.
-Run it:
+
+For compose it needs the stack running first (base + egress overlay, so the
+same stack the other demos use):
 
 ```bash
+cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+cd ..                                    # back to the repo root
 ./demo/protected-api-demo.sh                      # compose (default)
 ./demo/protected-api-demo.sh --node 192.168.1.74  # k3s cluster
 ```

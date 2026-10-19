@@ -14,8 +14,8 @@ as that command.
 
 | Need | Check |
 |---|---|
-| Docker | `docker version` |
-| OpenShell CLI | `openshell --version` — see install below |
+| Docker | `docker version` — for the Advanced egress layering, a current engine (≥ ~29): older moby (26.x) hits the `getent unable to find entry "1001:1001"` bug in `sandbox create` |
+| OpenShell CLI | `openshell --version` — see install below; **0.1.x required** for the Advanced egress layering (schema-v2 config) |
 | An NVIDIA API key | in `demo/.env` as `NVIDIA_API_KEY=nvapi-…` |
 
 The key is read from `demo/.env` (gitignored). You can also export
@@ -223,20 +223,29 @@ without reaching the network.
 
 ## Choosing a model
 
-The default is `nvidia/nemotron-3-super-120b-a12b`. Not every model listed by
-`/v1/models` is callable on a given key: some return `410` (end of life) or a
-`404 … Not found for account` (not enabled for that key). If chat fails, check
-the model directly from the host before blaming the sandbox:
+The demo default is `nvidia/nemotron-3.5-lightning-30b-a3b` — the fastest
+*nvidia/-front* model verified callable on the free NVIDIA key
+(~0.7 s time-to-first-token direct; **6 s OpenClaw turns** vs ~90 s on the
+reasoning-heavy `nvidia/nemotron-3-super-120b-a12b`, whose thinking phase
+dominated each turn). Not every model listed by
+`/v1/models` is callable on a given key: some return `404 … Not found for
+account` (not enabled for that key), and it can also answer `503` during a
+capacity lull — the same key can succeed again minutes later.
+
+If chat fails or turns drag, check the model directly from the host before
+blaming the sandbox:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' --max-time 30 \
   -H "Authorization: Bearer $NVIDIA_API_KEY" -H 'Content-Type: application/json' \
   https://integrate.api.nvidia.com/v1/chat/completions \
-  -d '{"model":"nvidia/nemotron-3-super-120b-a12b","messages":[{"role":"user","content":"hi"}],"max_tokens":8}'
+  -d '{"model":"nvidia/nemotron-3.5-lightning-30b-a3b","messages":[{"role":"user","content":"hi"}],"max_tokens":8}'
 ```
 
 `200` means the model is fine — then any failure is on the sandbox side.
-Override the model with `PROVIDER_MODEL=<bare-id> make openclaw-demo`.
+Override the model with `PROVIDER_MODEL=<model-id> make openclaw-demo`; ids may
+carry their catalog namespace (`meta/llama-3.2-11b-vision-instruct`) — anything
+with a `/` is used verbatim, bare ids get the `nvidia/` provider prefix.
 
 ## Platform notes
 
@@ -255,6 +264,7 @@ macOS with Docker Desktop.
 | `LLM request failed: network connection error` | egress allowlist missing the provider host — rerun `make openclaw-configure` |
 | `HTTP 410` / `404 … Not found for account` | the model is EOL or not enabled on your key (see *Choosing a model*) |
 | `gateway not answering on :18789 yet` | wait a few seconds and rerun `make openclaw-status` |
+| Chat returns `reasoning-only retries exhausted` or `provider=nvidia/nvidia/…` | stale session with a double-prefixed model id — `make openclaw-restart` (deletes the sandbox and recreates it cleanly) |
 | `ControlSupervisorStartFailed ... failed to connect to OpenShell server` | The supervisor can't reach the gateway at 127.0.0.1:17670 inside the Docker VM. Create the `gw-fwd` forwarder (macOS step 4). |
 | `openshell status: Connection reset by peer`, and gateway.log shows `Rejected plaintext HTTP` | The gateway registration is http:// / plaintext (check `~/.config/openshell/gateways/<name>/metadata.json`). Run `openshell gateway remove <name>`, then `openshell gateway add --local https://127.0.0.1:17670 --name <name>`. |
 | `pkill openshell-gateway` doesn't stop it | macOS truncates process names. Use `pkill -f openshell-gateway`. |
@@ -262,12 +272,31 @@ macOS with Docker Desktop.
 
 ## Advanced: routing the sandbox's egress through the Agent Gateway proxy
 
-By default the sandbox uses OpenShell's built-in HTTP proxy (`HTTPS_PROXY=http://10.200.0.1:3128`),
-which enforces the default-deny policy locally. If you want *every* outbound call to go through
-the Agent Gateway's egress proxy (so each destination becomes one authorization decision per call),
-you can layer the Agent Gateway on top. The steps are:
+> **OpenShell version note:** the upstream-proxy wiring below needs OpenShell **0.1.x** with the
+> schema-**v2** gateway config (schema v1 in 0.0.x rejects the proxy keys outright —
+> `unknown field https_proxy`). The demo was brought up on 0.1.4 + Docker CE 29.9.1; the moby
+> `getent 1001:1001` bug in older engines (26.x) also breaks `sandbox create` under the 0.1.x
+> docker driver — see the engine note at the end.
 
-1. **Start the Agent Gateway stack** (from `demo/`):
+By default the sandbox's egress is governed by OpenShell's own proxy enforcement (default-deny
+allowlist installed by `openclaw-sandbox.sh configure`). When you want *every* outbound call to go
+through the Agent Gateway's egress proxy (so each destination becomes one authorization decision
+per call), you can layer the Agent Gateway on top using OpenShell's **upstream proxy** feature:
+
+```
+agent (in sandbox) → OpenShell supervisor (policy check) → CONNECT host:443 → Agent Gateway
+                                                          (approval hold)    → destination
+```
+
+The OpenShell supervisor opens one top-level `CONNECT` per destination and chains it through the
+Agent Gateway. Nothing extra runs inside the sandbox — no local proxy process, no `HTTP_PROXY`
+tweaks — and OpenShell keeps enforcing its default-deny sandbox policy *before* consulting the
+gateway, so the two layers compose cleanly: OpenShell decides *whether traffic may reach* the
+gateway; the gateway decides *whether the request may proceed*, holding risky actions for a human.
+
+The steps are:
+
+1. **Start the Agent Gateway stack with the egress overlay** (from `demo/`):
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
    ```
@@ -276,74 +305,141 @@ you can layer the Agent Gateway on top. The steps are:
    - Egress forward proxy on `:8088`
    - Authz on `:8081`, TokenSvc on `:8082`, Web console on `:8083`
 
-2. **Set the console URL for Telegram notifications** (required for approval buttons):
-   ```bash
-   # Replace with your machine's LAN IP or a public tunnel URL
-   export DEMO_CONSOLE_URL=http://192.168.1.53:8083
-   # Or add to demo/.env:
-   echo 'DEMO_CONSOLE_URL=http://YOUR_LAN_IP:8083' >> demo/.env
-   docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+2. **Configure OpenShell to use the Agent Gateway as its upstream proxy** in the OpenShell
+   gateway config (`~/.config/openshell/gateway.toml`, under the `[openshell.drivers.docker]`
+   section — that is the driver section this demo uses). Schema v2 renames the 0.0.x layout
+   (`version = 2`, `compute_driver`, [`openshell.gateway`]-level `guest_tls_ca`; drop
+   `sandbox_namespace`, `network_name`, `guest_tls_cert`/`guest_tls_key`, and `ttl_secs = 0` —
+   v2 needs a nonzero value):
+
+   ```toml
+   [openshell]
+   version = 2
+
+   [openshell.gateway]
+   compute_driver = "docker"
+   guest_tls_ca = "/home/YOU/.config/openshell/tls/ca.crt"
+
+   [openshell.drivers.docker]
+   grpc_endpoint = "https://127.0.0.1:17670"
+   supervisor_image = "ghcr.io/nvidia/openshell/supervisor:0.1.4"
+   supervisor_bin = "/home/YOU/.local/bin/openshell-sandbox"
+
+   # The Agent Gateway egress proxy becomes the upstream "corporate proxy":
+   https_proxy = "http://127.0.0.1:8088"
+   proxy_auth_file = "/home/YOU/.config/openshell/upstream-proxy-auth"
+   proxy_auth_allow_insecure = true   # acknowledges cleartext Basic over http:// loopback
+   proxy_connect_by_hostname = true   # keep the destination hostname as the resource
    ```
-   Without this, Telegram rejects the approval card's "Open the console" button
-   (it blocks `localhost` URLs in inline keyboards).
+
+   Then restart the OpenShell gateway so the new config takes effect
+   (on a NemoClaw-managed box: restart the `openshell-gateway` process; the active config path
+   is shown in its `OPENSHELL_GATEWAY_CONFIG` environment).
 
 3. **Create a delegation for the NVIDIA model host** (via mock SSO):
-   ```bash
-   # The demo stack includes a Dex mock connector for easy testing.
-   # You can script this or use `demo/egress-demo.sh` which automates the full flow.
-   ```
+
    The delegation grants the agent access to `integrate.api.nvidia.com:443`
    and returns an `agent_secret` (used to mint short-lived tokens via TokenSvc).
 
-   **Approval rule examples:**
-   - *Auto-allow NVIDIA model calls* (connect + read):
-     ```json
-     {
-       "resources": ["integrate.api.nvidia.com"],
-       "actions": ["read", "connect", "create", "delete"],
-       "approval_rules": [
-         {"when": {"action_pattern": "create", "resource_pattern": "*"}, "require": true, "rationale": "POST/create require approval"},
-         {"when": {"action_pattern": "delete", "resource_pattern": "*"}, "require": true, "rationale": "DELETE require approval"}
-       ]
-     }
-     ```
-     This allows GET + CONNECT (model calls) automatically, only holding POST/DELETE.
+4. **Mint a short-lived token** from the `agent_secret` (valid 30 min) and write it to the
+   upstream proxy auth file as OpenShell expects it (token as Basic **username**):
 
-   - *Require approval for all outbound* (OpenShell-style):
-     ```json
-     "approval_rules": [
-       {"when": {"action_pattern": "connect", "resource_pattern": "*"}, "require": true},
-       {"when": {"action_pattern": "create", "resource_pattern": "*"}, "require": true}
-     ]
-     ```
-
-3. **Mint a short-lived token** from the `agent_secret` (valid 30 min):
    ```bash
-   curl -X POST http://localhost:8082/token \
+   TOKEN=$(curl -s -X POST http://localhost:8082/token \
      -H "Content-Type: application/json" \
-     -d '{"delegation_id":"...","ttl_seconds":1800,"agent_secret":"..."}'
+     -d '{"delegation_id":"...","ttl_seconds":1800,"agent_secret":"..."}' \
+     | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+   printf '%s:x\n' "$TOKEN" > ~/.config/openshell/upstream-proxy-auth
+   chmod 600 ~/.config/openshell/upstream-proxy-auth
    ```
 
-4. **Run a local CONNECT proxy inside the sandbox** that adds the Bearer token
-   and forwards to the Agent Gateway proxy at `http://172.21.0.1:8088`
-   (the Docker network gateway IP visible from inside the sandbox).
-   
-   A pre-built `connect-proxy` binary is included in the repo at
-   `demo/connect-proxy` (or build it from `demo/connect-proxy.go` with `go build`).
+   The 0.1.x docker driver copies that file into the supervisor's volume **at sandbox start**,
+   so a rotated token needs one `openshell sandbox stop <name> && openshell sandbox start <name>`
+   (the workspace survives; the OpenClaw gateway inside restarts, and
+   `demo/openclaw-egress-test.sh` performs the stop/start itself when it refreshes credentials).
 
-   ```bash
-   ./demo/connect-proxy "http://172.21.0.1:8088" "<agent_token>" &
-   ```
+5. **Point the agent at its destination — not at the proxy.** The sandbox policy allowlists the
+   *destination* (e.g. `integrate.api.nvidia.com:443::tcp` for the model binaries); the Agent
+   Gateway proxy is never named in the sandbox policy. OpenShell forwards the staged connection
+   transparently through the upstream proxy configured on the gateway, and the destination
+   hostname survives as the authorization resource the gateway evaluates.
 
-4. **Configure OpenClaw to use the local proxy**:
-   ```bash
-   HTTPS_PROXY=http://127.0.0.1:8888 NODE_USE_ENV_PROXY=1 openclaw agent -m "hello"
-   ```
+### Why Basic auth — and how it is kept safe
 
-The `demo/egress-demo.sh` script demonstrates the full automated flow
-(SSO sign-in → delegation → agent token → proxied requests) against the
-running stack, using `example.com` as the target host. Adapt it for
-`integrate.api.nvidia.com` by changing the delegation's `resources` field.
+Two credential schemes can reach the egress proxy (`Proxy-Authorization`):
+
+- **Bearer** — `Proxy-Authorization: Bearer <token>`, the default scheme for explicit proxy
+  clients (curl, the Go helper). Always accepted at any source address.
+- **Basic** — `Proxy-Authorization: Basic base64(<token>:x)`, the only scheme OpenShell's
+  upstream proxy can produce: its `proxy_auth_file` holds a static `token:pass` line and is sent
+  with every chained connection.
+
+Basic is therefore **explicitly enabled and tightly scoped** (in the
+`docker-compose.egress.yml` overlay, or as plain env on the gateway):
+
+```bash
+PROXY_BASIC_AUTH=1                            # enable the scheme (default: off)
+PROXY_BASIC_AUTH_CIDRS=127.0.0.0/8,::1/128,172.21.0.0/16   # peers allowed to use it
+```
+
+What those settings mean in practice:
+
+- With `PROXY_BASIC_AUTH` unset (or `0`), a Basic credential answers **407** even with a valid
+  token — Bearer keeps working. Basic is an explicitly opted-in compatibility surface, never a
+  silent second path.
+- `PROXY_BASIC_AUTH_CIDRS` pins *who* may authenticate with Basic: a Basic request from a source
+  IP outside these networks answers 407 **before the token is even resolved**. Bearer callers are
+  unaffected by the CIDR list.
+- The owner's connections arrive via Docker's userland proxy and surface at the gateway
+  container as its *compose network's* gateway IP (e.g. `172.26.0.1` for the stack's
+  `demo_default` network) — not `127.0.0.1`. The demo overlay therefore defaults the CIDR list
+  to loopback **plus the RFC1918 block Docker compose networks live in**
+  (`127.0.0.0/8,::1/128,172.16.0.0/12`). Narrow it to the exact /24 when you know it; never
+  widen it to `0.0.0.0/0`.
+- `proxy_auth_allow_insecure = true` on the OpenShell side acknowledges that this one hop sends
+  the credential as cleartext Basic over plain HTTP. On a same-host demo that is the trade-off;
+  for a remote gateway put it behind TLS and drop the flag.
+
+Note that a *rotating* token (re-mint after expiry, as `agent-gateway` requires for long
+sessions) means re-writing `proxy_auth_file` plus one
+`openshell sandbox stop <name> && openshell sandbox start <name>` — the docker driver copies the
+credential into the supervisor volume at start, so no gateway restart is needed.
+
+### Platform notes (macOS)
+
+On Apple Silicon the same flow works with three Mac deltas:
+
+- **AGW runs in a container.** The stack is the same `docker compose ... up -d` (the images are
+  multi-arch, so 1.0.24 runs natively), and its egress proxy is reachable from the VM only via
+  `host.docker.internal`. Consequently the OpenShell gateway config uses
+  `https_proxy = "http://host.docker.internal:8088"` instead of `127.0.0.1`.
+- **The source IP the gateway sees is Docker Desktop's bridge, not localhost.** Set the CIDR
+  list in `demo/.env` before `docker compose ... up -d`:
+  ```bash
+  echo 'PROXY_BASIC_AUTH_CIDRS=127.0.0.0/8,::1/128,192.168.65.0/24,172.16.0.0/12' >> demo/.env
+  ```
+  (`192.168.65.0/24` is Docker Desktop's host-gateway block; widen to `192.168.0.0/16` if your
+  compose network lands there. If the Basic request still answers `not permitted from <ip>`,
+  the IP in that message is exactly the address to allow.)
+- **Credentials live on the Mac's home**, so `proxy_auth_file` points at the macOS
+  `~/.config/openshell/upstream-proxy-auth`, and the OpenShell gateway itself runs through
+  `brew services start openshell-gateway` (no systemd), with the driver pinned to `docker`.
+
+### Approval holds and draining them
+
+When the gateway's decision says `RequireApproval` (e.g. every `connect` under the all-egress
+rule), the proxied call gets a **202 approval_required** and the human decides — via the web
+console, the admin API, or Telegram (the demo's default channel).
+
+Approval binding is exact: (delegation, destination host, action), and **single-use** — the next
+matches a fresh hold. For the demo's automated flow, `demo/egress-demo.sh` walks the entire loop
+using `example.com` as the target host; the guided egress test
+(`make openclaw-egress-test GW=--gateway`) walks the same loop against the real NVIDIA host,
+with the agent's dialogue shown and an undelegated-host denial. Each of the first two holds opens a
+60 s human window — the script polls the approvals list every few seconds, so approving the live
+Telegram card or the web console continues the run immediately; if no one decides within the window
+the script auto-approves. For unattended or CI runs, pass `--no-human`
+(`GW="--gateway --no-human" make openclaw-egress-test`) to auto-approve every hold immediately.
 
 For production use, replace the mock Dex connector with your real OIDC
 provider and use the web console (`http://localhost:8083`) or the approval
