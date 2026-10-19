@@ -81,10 +81,209 @@ Guarantees, shared with the tool path:
   sees the destination, never the TLS payload (a later TLS-terminating
   mode can inspect further)
 
-Full bring-up with OpenShell — including the Linux/Mac platform notes —
+## Trust boundaries
+
+```
+┌──────────────────────── browser ─────────────────────────┐
+│ human signs in via OIDC; web relays tokens;              │
+│ web never verifies them (authz does) ── the web tier     │
+│ being compromised cannot mint rights for someone else;   │
+│ secrets live in cookies only to power forms in dev       │
+└───────────────────────────────────────────────────────────┘
+┌─ agents ──► gateway: nothing crosses without a delegation ─┐
+│ gateway ──► authz: every decision over the wire            │
+│ gateway ──► upstream: only forwarded when ALLOW            │
+└────────────────────────────────────────────────────────────┘
+```
+
+The web tier is deliberately thin: it relays ID tokens and approval decisions
+but cryptographic verification lives only in `authz`, so there is exactly one
+place that must trust the IdP.
+
+## Scaling & HA
+
+All four services are stateless when `PERSISTENCE=postgres` (state in
+Postgres/Redis), so HA = more replicas behind a load balancer, a managed
+Postgres, and managed Redis. No sticky sessions are needed — the OIDC flow is
+cookie-based state that any replica can validate. See
+[Deployment-Guide.md](Deployment-Guide.md) §6 for the full runbook.
+
+## OpenShell + OpenClaw integration — agent egress through Agent Gateway
+
+### Overview
+
+OpenShell sandboxes (and the OpenClaw agent running inside them) route **all**
+outbound networking through the Agent Gateway's **egress forward proxy**.
+This brings every outbound call — HTTP, HTTPS, CONNECT tunnels — under the
+same authorization loop as explicit tool calls: destination host = resource,
+HTTP method/CONNECT = action, same decision pipeline (policy → approval hold →
+audit → forward/deny).
+
+### Technical diagram
+
+```mermaid
+flowchart TD
+    subgraph Sandbox["OpenShell Sandbox"]
+        Agent["OpenClaw agent"]
+    end
+
+    subgraph Notify["Notifications"]
+        T["Telegram"]
+        W["Webhook"]
+        C["Web console"]
+    end
+
+    subgraph Proxy["Agent Gateway :8088"]
+        P["Proxy auth + decision pipeline"]
+    end
+
+    subgraph AuthZ["AuthZ"]
+        D["Delegations"]
+        A["Approvals"]
+        L["Audit"]
+    end
+
+    O["External API"]
+    X["403 denied"]
+
+    Agent -->|"HTTPS_PROXY"| P
+    P -->|"ALLOW"| O
+    P -->|"HOLD"| A
+    P -->|"notify"| Notify
+    P --> D
+    P --> L
+    P -->|"DENY"| X
+
+    Agent ~~~ Notify
+    Notify ~~~ P
+
+    classDef sandbox fill:#e8f5e9,stroke:#a5d6a7,color:#1b5e20;
+    classDef notify fill:#fff3e0,stroke:#ffcc80,color:#e65100;
+    classDef proxy fill:#e3f2fd,stroke:#90caf9,color:#0d47a1;
+    classDef authz fill:#f3e5f5,stroke:#ce93d8,color:#4a148c;
+    classDef dest fill:#fafafa,stroke:#bdbdbd,color:#424242;
+
+    class Agent sandbox;
+    class T,W,C notify;
+    class P proxy;
+    class D,A,L authz;
+    class O,X dest;
+```
+
+### The Go egress forward proxy — what it does and why it's there
+
+
+The **Go egress forward proxy** (enabled via `GATEWAY_PROXY_ADDR=:8088` in the gateway container) is a custom HTTP/HTTPS forward proxy written in Go that runs inside the gateway container. It serves a single purpose: **turn every outbound network connection from a sandboxed agent into an authorization decision**.
+
+#### What it handles
+
+| Traffic type | How it's handled |
+|--------------|------------------|
+| HTTP (plain) | Intercepted as `CONNECT` to destination:80 → becomes HTTP request to proxy |
+| HTTPS | Intercepted as `CONNECT` to destination:443 → TLS tunnel established, proxy sees only host:port |
+| CONNECT tunnel (raw TLS) | Blind relay after `CONNECT` + `200 Connection established`; proxy never sees plaintext |
+
+#### Authentication
+
+Every request to the proxy must carry `Proxy-Authorization: Bearer <agent-token>`, where the token is a short-lived JWT minted by `tokensvc` from a valid delegation. The proxy:
+
+1. Validates the JWT signature and expiry
+2. Checks revocation in Redis (jti list)
+3. Extracts the principal (delegation user_id, agent_id, delegation_id)
+4. Passes the principal to the decision pipeline
+
+#### Why a custom Go proxy?
+
+| Requirement | Why custom Go proxy? |
+|-------------|---------------------|
+| **Proxy-Authorization header** | Standard forward proxies use `Authorization` or `Proxy-Authorization` with Basic auth; we need Bearer JWT validation with jti revocation check |
+| **Decision pipeline integration** | Must call authz service for each CONNECT/HTTP request, handle 202 holds, webhook notifications |
+| **Audit integration** | Every proxy decision writes a structured audit event (principal, host, action, decision, approval_id) |
+| **CONNECT tunnel transparency** | Must relay TLS bytes unchanged after `200 Connection established` |
+| **Performance** | Go's net/http and concurrency model handles thousands of concurrent tunnels with low latency |
+
+#### Deployment
+
+| Environment | How it's deployed |
+|-------------|-------------------|
+| Docker Compose (demo) | `GATEWAY_PROXY_ADDR=:8088` in `docker-compose.egress.yml`; gateway image includes proxy |
+| k3s / Kubernetes | Same image; `GATEWAY_PROXY_ADDR=:8088` env var; NodePort 30088 exposes proxy to cluster |
+| OpenShell sandbox | Sandbox env `HTTPS_PROXY=http://gateway:8088` + `NODE_USE_ENV_PROXY=1`; agent routes all outbound via proxy |
+
+### OpenShell sandbox ↔ Gateway wiring
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        OpenShell Sandbox (Docker VM)                    │
+│  ┌──────────────────┐    HTTPS_PROXY=http://gateway:8088               │
+│  │ OpenClaw Agent   │ ──────────────────────────────────────────────►  │
+│  │ (Node.js proc)   │    HTTPS_PROXY / NODE_USE_ENV_PROXY=1           │
+│  └────────┬─────────┘                                                   │
+│           │                                                              │
+│           ▼                                                              │
+│  ┌──────────────────┐    CONNECT/HTTP + Proxy-Auth                    │
+│  │ OpenShell Super- │ ──────────────────────────────────────────────►  │
+│  │ visor (nftables) │    Proxy-Authorization: Bearer <agent-token>    │
+│  └────────┬─────────┘                                                   │
+│           │                                                              │
+└───────────┼─────────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Agent Gateway Container                               │
+│  ┌──────────────────────────────────────────────────────────────────┐   │
+│  │  Egress Forward Proxy (:8088)                                     │   │
+│  │  • Validates Proxy-Authorization: Bearer <agent-token>          │   │
+│  │  • Validates JWT, checks revocation (Redis jti)                 │   │
+│  │  • Calls AuthZ /decision (principal, resource=host, action)     │   │
+│  │  • On HOLD: returns 202, pushes webhook, waits for approval     │   │
+│  │  • On ALLOW: forwards CONNECT/HTTP to destination               │   │
+│  │  • On DENY: returns 403                                          │   │
+│  │  • Writes audit event to Postgres                                │   │
+│  └──────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### OpenClaw specifics
+
+OpenClaw runs inside an OpenShell sandbox as a Node.js process. It uses the
+standard Node.js `https`/`http` modules, which respect `HTTPS_PROXY` and
+`HTTP_PROXY` environment variables when `NODE_USE_ENV_PROXY=1` is set. The
+OpenShell sandbox sets these automatically, so OpenClaw requires **no code
+changes** to route all its outbound traffic (model calls, tool calls, plugin
+fetches) through the Agent Gateway proxy.
+
+### What the sandbox sees vs. what the gateway sees
+
+| Sandbox / OpenClaw | Agent Gateway |
+|--------------------|---------------|
+| `https://integrate.api.nvidia.com/v1/chat/completions` (HTTPS POST) | Sees `CONNECT integrate.api.nvidia.com:443` + TLS handshake; if delegation allows, relays TLS tunnel |
+| `curl https://api.openrouter.ai/v1/models` | Sees `CONNECT api.openrouter.ai:443`; policy check on `api.openrouter.ai:443` |
+| `openclaw plugin install github.com/...` | Sees CONNECT to GitHub/GitLab; policy check on destination host |
+| Raw TCP (non-HTTP) | Blocked unless delegation explicitly allows `connect` on that host:port |
+
+### k3s deployment specifics
+
+| Component | Address | Notes |
+|-----------|---------|-------|
+| Gateway egress proxy | `http://<node>:30088` | NodePort 30088 |
+| OpenShell sandbox | `HTTPS_PROXY=http://<gateway-node>:30088` | Sandbox env |
+| Dex OIDC | `http://dex:5556/dex` (cluster DNS) | Cluster-internal |
+| `host.docker.internal` | Resolves to gateway pod IP via `host.docker.internal` in k3s | k3s doesn't support `host.docker.internal` by default; use node IP or CoreDNS |
+
+### Platform notes
+
+| Platform | Gateway IP for sandbox | Notes |
+|----------|------------------------|-------|
+| Docker Desktop (Mac/Windows) | `host.docker.internal` (resolves to host) | `gw-fwd` forwarder required |
+| Linux (Docker Engine) | `172.17.0.1` (docker0 gateway) | Or use `host.docker.internal` if configured |
+| k3s / Kubernetes | `<node-ip>:30088` (NodePort) | Use `host.docker.internal` via CoreDNS or node IP |
+
+---
+
+The full bring-up with OpenShell — including the Linux/Mac platform notes —
 lives in the main repo's
-[`OpenShell-Integration.md`](https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md);
-Demo 5 below exercises the same call points with plain `curl`.
+[`OpenShell-Integration.md`](https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md).
 
 ## Policy model
 
