@@ -241,6 +241,10 @@ model call, without the Agent Gateway egress proxy.
 make openclaw-demo
 ```
 
+> Signing in at the console (approval decision / Telegram-card link) on a LAN
+> address, not `localhost`? The bring-up runs `demo/refresh-dex-redirects.sh`
+> for you (see its `DEX_EXTRA_IPS` override for foreign devices).
+
 What you will see:
 
 1. the image builds (Ubuntu 24.04 + Node 22 + OpenClaw, non-root `sandbox`

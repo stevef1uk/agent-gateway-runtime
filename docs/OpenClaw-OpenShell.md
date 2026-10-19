@@ -257,6 +257,7 @@ macOS with Docker Desktop.
 
 | Symptom | Cause / fix |
 |---|---|
+| Console sign-in fails with `Bad Request — Unregistered redirect_uri` | this machine's URI is not in dex's allow-list. Run `./demo/refresh-dex-redirects.sh` (adds the machine's LAN IPv4s + recreates dex; bring-up paths run it automatically). From a *foreign* device only: `DEX_EXTRA_IPS="<that ip>" ./demo/refresh-dex-redirects.sh`. On k3s edit the `dex-config` ConfigMap in [`k3s/agentgw.yaml`](../k3s/agentgw.yaml). |
 | `sandbox create` returns immediately, sandbox phase `Error` | the gateway exited — run `openshell logs <name>`; usually a missing `--allow-unconfigured` |
 | `fts5: error creating shadow table … unable to open database file` | `SQLITE_TMPDIR=/tmp` is missing from the create `--env` list |
 | `Secret owner provider:… is unavailable` | `PROVIDER_API_KEY` is not in the gateway process env — recreate via `make openclaw-up` with `demo/.env` present |

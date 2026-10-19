@@ -70,8 +70,11 @@ kubectl -n agentgw get pods -w
 ```
 
 Then open `http://<node>:30083` (Dex mock connector → one-click sign-in;
-the OIDC redirect whitelist already contains `http://192.168.1.74:30083/...`
-— update `dex-config` if you expose it elsewhere).
+the OIDC redirect whitelist already contains `http://127.0.0.1:30083/...`,
+`localhost` and `host.docker.internal` — **add your node's URI form** (as in
+the committed `http://192.168.1.74:30083/...`) to the `dex-config` ConfigMap
+in [`agentgw.yaml`](agentgw.yaml) if you expose the console elsewhere; then
+`kubectl apply` + `kubectl rollout restart deployment/dex -n agentgw`).
 
 ## Running the console & demo UIs
 

@@ -133,16 +133,18 @@ Requirements: Docker Engine 24+, `docker compose`, `curl`, `jq` optional.
 SSO sign-in fails with `Bad Request — Unregistered redirect_uri` unless the
 exact browser URI is registered in `demo/dex/config.yaml`
 (`staticClients[].redirectURIs`). `localhost`/`127.0.0.1` are in the list
-already; for a LAN address (e.g. a Mac signing in at
-`http://192.168.1.20:8083`) add its URI and re-apply the config:
+already, and every bring-up path (`demo/demo.sh`, `openclaw-sandbox.sh
+stack-up`, the Makefile demo targets) runs
+**`demo/refresh-dex-redirects.sh`** first, which appends this machine's LAN
+IPv4 addresses automatically. To add addresses by hand (e.g. the console is
+reached from *another* device that the local machine has no knowledge of):
 
 ```bash
-echo "      - http://<your-lan-ip>:8083/oidc/callback" >> demo/dex/config.yaml  # under staticClients redirectURIs
-docker compose -f demo/docker-compose.yml up -d --force-recreate dex
+DEX_EXTRA_IPS="192.168.1.45" ./demo/refresh-dex-redirects.sh    # appends + recreates dex
 ```
 
 (on k3s the same list lives in the `dex-config` ConfigMap in
-[`k3s/agentgw.yaml`](k3s/agentgw.yaml)/README).
+[`k3s/agentgw.yaml`](k3s/agentgw.yaml)).
 
 ### Building and publishing the demo API yourself
 

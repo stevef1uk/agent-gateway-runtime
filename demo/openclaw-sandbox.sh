@@ -267,6 +267,9 @@ apply_egress_rule() {
 stack_up() {
   # Bring the Agent Gateway stack up with the egress overlay (idempotent).
   step "Agent Gateway stack (base compose + egress overlay)"
+  # Register this machine's console URIs in the dex client first (no-op when
+  # already listed) so browser sign-in works on a fresh clone/Mac.
+  bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/refresh-dex-redirects.sh" || true
   "${COMPOSE[@]}" -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d
   okk "stack up (egress proxy on :8088)"
 }

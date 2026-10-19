@@ -43,6 +43,11 @@ GW_PORT=${GW##*:}
 
 # --- 0. stack & health ------------------------------------------------------
 step "Step 1 — services & health"
+# Register this machine's console URIs in the dex client first (no-op when
+# they are already listed) so browser sign-in never trips
+# "Bad Request — Unregistered redirect_uri" on a fresh clone. demo.sh has
+# already cd'd into demo/, so the helper is addressed absolutely.
+bash "$DEMO_DIR/refresh-dex-redirects.sh" || true
 # --no-recreate: start anything missing, but never touch containers that are
 # already running — so a stack brought up with an override (e.g.
 # docker-compose.opa.yml, which switches authz to the Rego policy engine) is
