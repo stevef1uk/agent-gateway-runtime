@@ -1,0 +1,5 @@
+# Local runtime credentials — never commit, at any depth.
+# (demo/keys/* are intentional public development fixtures; only .env is secret.)
+.env
+**/.env
+!**/.env.example
