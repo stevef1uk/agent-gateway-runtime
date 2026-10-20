@@ -131,9 +131,9 @@ NO_HUMAN=0
 NO_DIALOGUE=0
 for _arg in "$@"; do
   case "$_arg" in
-    --gateway)                   RUN_GW=1 ;;
-    --no-human|-nohuman)         NO_HUMAN=1 ;;
-    --no-dialogue|-nodialogue)   NO_DIALOGUE=1 ;;
+    --gateway|-gateway)          RUN_GW=1 ;;
+    --no-human|-nohuman|--nohuman)          NO_HUMAN=1 ;;
+    --no-dialogue|-nodialogue|--nodialogue) NO_DIALOGUE=1 ;;
   esac
 done
 
@@ -240,6 +240,20 @@ fi
 
 # ============================================================================
 step "Part A — OpenShell allowlist policy (default sandbox egress)"
+# Framing matters: Part A proves the SANDBOX's own policy only when its egress
+# is NOT wired through the Agent Gateway. On machines whose gateway.toml has
+# the upstream stanza (this demo got there via openclaw-sandbox.sh stack-up),
+# allowed-host tunnels reach the gateway, where a human-held rule refuses the
+# tunnel — correct gateway behavior, not a policy failure. Say so instead of
+# letting the GitHub check report a confusing ✗, and point at the mode to use.
+plain_ok=1
+if [ "$RUN_GW" = 0 ] && [ -f "${HOME}/.config/openshell/gateway.toml" ] \
+   && grep -q '^https_proxy' "${HOME}/.config/openshell/gateway.toml" 2>/dev/null; then
+  plain_ok=0
+  info "this sandbox routes its egress through the Agent Gateway (upstream stanza in ~/.config/openshell/gateway.toml)"
+  line "     Part A's direct-path expectation does not hold here; the GitHub check is skipped."
+  line "     run with --gateway to exercise the gateway-mediated path (add --no-human for unattended)."
+fi
 line "OpenClaw itself is asked to make the calls; its reply shows what it saw."
 
 step "Ask OpenClaw to fetch the NVIDIA model list (ALLOWED host)"
@@ -253,7 +267,7 @@ C1=$(code -o /dev/null -w '%{http_code}' \
        https://integrate.api.nvidia.com/v1/models)
 record "curl check — allowed host: NVIDIA model list"   "200" "$C1"
 
-if [ "$RUN_GW" = 0 ]; then
+if [ "$RUN_GW" = 0 ] && [ "$plain_ok" = 1 ]; then
   C2=$(code -o /dev/null -w '%{http_code}' --max-time 15 https://api.github.com)
   record "curl check — allowed host: GitHub API"          "200" "$C2"
 fi
@@ -302,6 +316,26 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
     return 1
   }
 
+  # A connect that returns 200 means no hold fired — either the tunnel never
+  # reached the gateway (the sandbox's egress bypasses it, typically because the
+  # OpenShell gateway daemon still runs the gateway.toml it read at start-up)
+  # or the hold did not trigger. The gateway's own log decides which: holds are
+  # logged with a `proxy:` prefix, so silence over the window implicates routing.
+  route_evidence() {
+    docker logs agent-gateway-gateway --since 3m 2>/dev/null | grep -c 'proxy: ' || true
+  }
+  teach_routing() {
+    if [ "$(route_evidence)" = "0" ]; then
+      line "  evidence: the gateway logged NO proxied traffic in the last 3m —"
+      line "  the sandbox's egress is bypassing it (its supervisor started before the"
+      line "  upstream stanza existed). Restart the OpenShell gateway so gateway.toml"
+      line "  takes effect — ./demo/start-openshell-gateway.sh — then rerun this test."
+    else
+      line "  evidence: the gateway IS routing this sandbox — a 200 here means the"
+      line "  hold did not trigger; check the delegation's approval_rules / authz policy."
+    fi
+  }
+
   step "First HTTPS tunnel to GitHub — held for your approval"
   C5=$(code -o /dev/null -w '%{http_code}' --max-time 20 https://api.github.com)
   # A refused tunnel is the hold signal: the gateway did not execute the call.
@@ -325,6 +359,7 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
     fi
   else
     bad "first connect executed without approval (curl=$C5)"; FAIL=$((FAIL+1))
+    teach_routing
   fi
 
   # 4. Let the human decide (Telegram/web console), then auto-approve if the
@@ -395,6 +430,7 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
     record "second GET after approval: executed" "200" "$C6b"
   else
     bad "second connect executed without a fresh approval (curl=$C6)"; FAIL=$((FAIL+1))
+    teach_routing
   fi
 
   # Undelegated host — OpenShell's default-deny refuses before the gateway

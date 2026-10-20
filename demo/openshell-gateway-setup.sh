@@ -79,6 +79,13 @@ apply_openrouter_policy() {
   # Start from a clean rule name so the allowlist does not accumulate stale
   # endpoints from prior runs. The sandbox remains default-deny; the gateway is
   # still the real decision point for risky outbound behavior.
+  #
+  # No `::tcp` suffix on any endpoint here (same as demo/openclaw-sandbox.sh's
+  # openclaw_egress rule): the sandbox routes egress through OpenShell's HTTP
+  # proxy (HTTPS_PROXY is pre-set), which does not register as the transparent
+  # TCP substrate — and an endpoint shared with openclaw_egress in a different
+  # substrate makes OpenShell's overlap validation reject the whole update
+  # ("overlap on port(s) 443 with conflicting metadata").
   openshell policy update "$sandbox_name" --remove-rule openrouter_egress >/dev/null 2>&1 || true
 
   # Normal model/provider traffic.
@@ -89,7 +96,7 @@ apply_openrouter_policy() {
     --binary /usr/bin/curl \
     --binary /usr/bin/wget \
     --binary /usr/local/bin/openclaw \
-    --add-endpoint 'api.openrouter.ai:443::tcp' \
+    --add-endpoint 'api.openrouter.ai:443' \
     --wait
 
   openshell policy update "$sandbox_name" \
@@ -99,7 +106,7 @@ apply_openrouter_policy() {
     --binary /usr/bin/curl \
     --binary /usr/bin/wget \
     --binary /usr/local/bin/openclaw \
-    --add-endpoint 'openrouter.ai:443::tcp' \
+    --add-endpoint 'openrouter.ai:443' \
     --wait
 
   # OpenClaw metadata discovery / plugin catalog / release checks.
@@ -110,7 +117,7 @@ apply_openrouter_policy() {
     --binary /usr/bin/curl \
     --binary /usr/bin/wget \
     --binary /usr/local/bin/openclaw \
-    --add-endpoint 'catalog.openclaw.ai:443::tcp' \
+    --add-endpoint 'catalog.openclaw.ai:443' \
     --wait
 
   openshell policy update "$sandbox_name" \
@@ -120,7 +127,7 @@ apply_openrouter_policy() {
     --binary /usr/bin/curl \
     --binary /usr/bin/wget \
     --binary /usr/local/bin/openclaw \
-    --add-endpoint 'clawhub.ai:443::tcp' \
+    --add-endpoint 'clawhub.ai:443' \
     --wait
 
   openshell policy update "$sandbox_name" \
@@ -130,7 +137,7 @@ apply_openrouter_policy() {
     --binary /usr/bin/curl \
     --binary /usr/bin/wget \
     --binary /usr/local/bin/openclaw \
-    --add-endpoint 'api.github.com:443::tcp' \
+    --add-endpoint 'api.github.com:443' \
     --wait
 }
 
@@ -147,24 +154,29 @@ fi
 
 mkdir -p "$OPENSSH_CONFIG_DIR"
 
+GW_TOML="$OPENSSH_CONFIG_DIR/gateway.toml"
+
 if [ "$CHECK_ONLY" -eq 1 ]; then
   info "--check: reporting current state only (no writes)"
-  if [ -f "$OPENSSH_CONFIG_DIR/gateway.toml" ]; then
-    grep -E "^(version|https_proxy|proxy_auth_file|proxy_connect_by_hostname|proxy_auth_allow_insecure) ?=" "$OPENSSH_CONFIG_DIR/gateway.toml" || true
-    grep -q '^https_proxy.*=.*8088' "$OPENSSH_CONFIG_DIR/gateway.toml" \
-      && echo "  ✓ upstream proxy stanza present" \
-      || echo "  ✗ upstream proxy stanza missing"
-  else
-    echo "  ✗ $OPENSSH_CONFIG_DIR/gateway.toml missing"
+  if [ ! -f "$GW_TOML" ]; then
+    echo "  ✗ $GW_TOML missing"
+    exit 0
   fi
-  exit 0
+  DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  rc=0
+  python3 "$DEMO_DIR/patch-driver-config.py" --check "$GW_TOML" || rc=$?
+  exit "$rc"
 fi
 
 # ---------------------------------------------------------------------------
 # Patch the OpenShell gateway config with the upstream-proxy stanza WITHOUT
 # clobbering the rest (TLS, mTLS, JWT, credential config stay as they are).
+# The patcher (demo/patch-driver-config.py) is idempotent, backs out duplicated
+# driver tables it finds (TOML rejects those — the gateway refuses to boot
+# with "duplicate key" errors), pins the schema-v2 compute driver to Docker,
+# validates the result with tomllib before writing, and is a no-op when the
+# config already says the right thing (it is byte-identical on our Linux box).
 # ---------------------------------------------------------------------------
-GW_TOML="$OPENSSH_CONFIG_DIR/gateway.toml"
 if [ ! -f "$GW_TOML" ]; then
   cat >&2 <<EOF
 $GW_TOML does not exist. An OpenShell gateway config already includes TLS,
@@ -188,62 +200,58 @@ EOF
 fi
 
 mkdir -p "$OPENSSH_CONFIG_DIR"
-UPSTREAM_BLOCK='[openshell.drivers.docker]'
 
-# Upsert the upstream-proxy keys into the ACTIVE driver section of the
-# schema-v2 gateway config (or append the docker driver section when absent).
-python3 - "$GW_TOML" "$PROXY_URL" "$OPENSSH_CONFIG_DIR/upstream-proxy-auth" <<'PYEOF'
-import re, sys
+DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+patch_out=$(python3 "$DEMO_DIR/patch-driver-config.py" \
+  "$GW_TOML" \
+  "$PROXY_URL" \
+  "$OPENSSH_CONFIG_DIR/upstream-proxy-auth" \
+  docker)
+printf '%s\n' "$patch_out"
+# A patched config is inert until the gateway reads it; the 2026-10 Mac loop
+# (patch, then keep using the old process) manifests as the exact same
+# "podman API error" over and over. Restart the brew service right here on
+# macOS — Linux/NemoClaw boxes are restarted per their own instructions.
+config_changed=0
+case "$patch_out" in *"already up to date"*) ;; *) config_changed=1 ;; esac
+if [ "$config_changed" -eq 1 ] && [ "$(uname -s)" = Darwin ] \
+   && command -v brew >/dev/null 2>&1 \
+   && brew services list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qxF openshell; then
+  info "Restarting the brew-managed gateway to activate the patched config"
+  brew services restart nvidia/openshell/openshell 2>/dev/null || brew services restart openshell
+  gw_up=0
+  for _ in $(seq 1 30); do
+    if curl -sk -m 2 -o /dev/null "$GATEWAY_URL" 2>/dev/null; then gw_up=1; break; fi
+    sleep 1
+  done
+  if [ "$gw_up" -ne 1 ]; then
+    echo "✗ gateway did not come back after the service restart" >&2
+    tail -n 40 /opt/homebrew/var/log/openshell/openshell-gateway.err.log 2>/dev/null || true
+    exit 1
+  fi
+  echo "✓ gateway back up"
+fi
 
-path, proxy, authfile = sys.argv[1], sys.argv[2], sys.argv[3]
-src = open(path).read()
-keys = {
-    'https_proxy':                proxy,
-    'proxy_auth_file':            authfile,
-    'proxy_auth_allow_insecure':  'true',
-    'proxy_connect_by_hostname':  'true',
-}
-for name, tbl in (('docker', '[openshell.drivers.docker]'), ('podman', '[openshell.drivers.podman]')):
-    mt = re.search(rf'^\[{re.escape(tbl)}\]\s*$', src, re.M)
-    if mt:
-        break
-else:
-    name, tbl, mt = 'docker', '[openshell.drivers.docker]', None
-
-if mt is None:
-    src = src.rstrip('\n') + f'\n\n{tbl}\n' + '\n'.join(f'{k} = "{v if name == "https_proxy" or k != "proxy_auth_allow_insecure" else v}"' if k != 'proxy_auth_allow_insecure' else f'{k} = true' for k, v in keys.items()) + '\n'
-else:
-    section = re.compile(rf'(?ms)^\[{re.escape(tbl)}\]\s*$.*?(?=^\[|\Z)')
-    def section_body(c):
-        body = c.group(0)
-        for k, v in keys.items():
-            lit = f'{k} = true' if v in ('true', 'false') else f'{k} = "{v}"'
-            pat = rf'^{k} ?=.*$'
-            if re.search(pat, body, re.M):
-                body = re.sub(pat, lit, body, flags=re.M)
-            else:
-                body = body.rstrip('\n') + '\n' + lit + '\n'
-        return body
-    src = section.sub(section_body, src, count=1)
-
-open(path, 'w').write(src)
-print(f'patched [{tbl}] in {path}')
-PYEOF
-
-# Preserve restrictive perms on the TOML (it names the credential file).
-chmod 600 "$GW_TOML" 2>/dev/null || true
-
-info "Gateway config patched — RESTART the OpenShell gateway to activate it"
+info "Gateway config updated — RESTART the OpenShell gateway to activate it"
 cat <<EOF
-  NemoClaw/system-managed box:  systemctl --user restart openshell-gateway
-  manually-run gateway:         stop the exact 'openshell-gateway' process and
-                                relaunch it with the same flags/env
-  macOS:                        brew services restart openshell-gateway
+  macOS gateway from NVIDIA's install.sh (brew tap nvidia/openshell):
+                                 done automatically above when the config changed
+  manually-run gateway:          stop the exact 'openshell-gateway' process and
+                                 relaunch it with the same flags/env
+  NemoClaw/system-managed box:   systemctl --user restart openshell-gateway
+  (or simply: demo/start-openshell-gateway.sh handles both modes on the Mac)
 EOF
 
-# Register the local OpenShell gateway if needed.
+# Register the local OpenShell gateway if needed. A stale registration under
+# the same name (earlier setup run, or a different endpoint) is re-registered
+# rather than hard-erroring: remove + add keeps the endpoint current. A
+# different name can be chosen with --name on the add line.
 if ! openshell gateway list 2>/dev/null | grep -q '^\*\s*openshell\s'; then
-  openshell gateway add --local "$GATEWAY_URL" --name openshell
+  if ! openshell gateway add --local "$GATEWAY_URL" --name openshell 2>&1; then
+    info "gateway 'openshell' exists (or add failed) — replacing the registration"
+    openshell gateway remove openshell 2>/dev/null || true
+    openshell gateway add --local "$GATEWAY_URL" --name openshell
+  fi
 else
   echo "OpenShell gateway already registered as 'openshell'"
 fi
@@ -303,7 +311,14 @@ fi
 # and GitHub release-check endpoints that OpenClaw probes during normal startup.
 # The gateway continues to decide on approval/high-risk actions.
 if ! openshell sandbox list 2>/dev/null | awk '{print $1}' | grep -qx "$SANDBOX_NAME"; then
-  openshell sandbox create --from openclaw --name "$SANDBOX_NAME"
+  # Provision via demo/openclaw-sandbox.sh, not a bare `openshell sandbox
+  # create`: this script has no image name of its own and the sandbox needs
+  # what openclaw-sandbox.sh provides — the agent-gateway-demo/openclaw image,
+  # the `openclaw gateway run` command, SQLITE_TMPDIR, and the env SecretRef.
+  # (A bare create with a made-up image ref 404s on docker.io and would boot
+  # nothing; this fallback line only ever runs when the sandbox is missing.)
+  info "No sandbox '$SANDBOX_NAME' — creating it via demo/openclaw-sandbox.sh"
+  SANDBOX_NAME="$SANDBOX_NAME" bash "$DEMO_DIR/openclaw-sandbox.sh" up
 fi
 
 apply_openrouter_policy "$SANDBOX_NAME"

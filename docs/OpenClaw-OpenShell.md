@@ -24,12 +24,23 @@ The key is read from `demo/.env` (gitignored). You can also export
 
 ### Installing OpenShell
 
-**macOS (Homebrew):**
+**macOS (official installer — recommended):**
 ```bash
-brew install openshell
+curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
 ```
+This installs openshell + openshell-gateway (0.1.4 at the time of writing) from
+NVIDIA's Homebrew tap (`nvidia/openshell`) and registers a **brew service**
+(label `sh.brew.openshell`) that runs the gateway for you, with its PKI in
+`/opt/homebrew/var/openshell/tls`.
 
-**Linux (official installer):**
+Do not stack the two macOS variants: plain `brew install openshell` installs
+the homebrew-core formula — a *different packaging* (no brew-service support,
+PKI under `~/.config/openshell/tls`). Installing it before/over the official
+installer leaves two PKIs and two gateway layouts behind; uninstall the other
+one first (`brew uninstall openshell`) and re-register the gateway after
+(`./demo/start-openshell-gateway.sh` does this).
+
+**Linux (same official installer):**
 ```bash
 curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
 ```
@@ -42,15 +53,22 @@ openshell --version
 
 ### Starting the OpenShell gateway (macOS)
 
-On macOS you must run the gateway locally with the **Docker driver** (Podman isn't available on macOS). The gateway handles sandbox creation and policy enforcement.
+The gateway runs locally with the **Docker driver** and handles sandbox
+creation and policy enforcement. With the official installer, the brew service
+is the supported way to run it — `demo/start-openshell-gateway.sh` manages that
+service (and only falls back to a manual spawn when no brew service exists).
 
 **Two Docker Desktop quirks to know about:**
 
-- The gateway must bind `0.0.0.0` so it is reachable from outside localhost.
+- Sandbox runners inside the Docker VM must be able to reach the gateway, so
+  it must not be bound to loopback only (`--bind-address 0.0.0.0` when run
+  manually). `demo/start-openshell-gateway.sh` checks the listener after
+  start-up and warns when it finds a loopback-only bind.
 - The Docker driver starts a *supervisor* container with host networking that
   calls back to `https://127.0.0.1:17670`. On Docker Desktop, "host" is the
   Linux VM, not your Mac, so that address is empty. You need a small port
-  forwarder inside the VM (step 4). Without it, `sandbox create` fails with
+  forwarder inside the VM — the script's `gw-fwd` container. Without it,
+  `sandbox create` fails with
   `ControlSupervisorStartFailed ... failed to connect to OpenShell server`.
 
 **Use the provided script (`demo/start-openshell-gateway.sh`):**
@@ -62,25 +80,29 @@ chmod +x start-openshell-gateway.sh
 ```
 
 The script:
-1. Generates TLS certificates
-2. Starts the gateway bound to `0.0.0.0:17670`
-3. Creates a `gw-fwd` container that forwards `127.0.0.1:17670` inside the Docker VM to your Mac's LAN IP
-4. Registers the gateway as `mac-gateway`
-5. Verifies connectivity (expects HTTP 404 on healthz)
+1. Restarts the brew service (`sh.brew.openshell`) when it exists; otherwise it falls back to starting the gateway manually, bound to `0.0.0.0:17670` (waiting for any previous instance to fully exit first).
+2. Waits until `https://127.0.0.1:17670` answers (instead of a blind sleep that crowded the registration).
+3. Creates a `gw-fwd` container that forwards `127.0.0.1:17670` inside the Docker VM to your Mac's LAN IP.
+4. Re-registers the CLI gateway as `openshell`, provisioning the registration's mTLS material from the *live* PKI dir (`OPENSHELL_LOCAL_TLS_DIR`) — this is what keeps a reinstall from leaving the CLI with a stale CA (`invalid peer certificate: BadSignature`).
+5. Verifies connectivity (`openshell status` + expects HTTP 404 through the VM forwarder).
 
-**If your LAN IP changes**, recreate the forwarder:
+**How the forwarder target is chosen** (and how to recreate it by hand):
 ```bash
 docker rm -f gw-fwd
 docker run -d --name gw-fwd --restart unless-stopped --network host \
-  alpine/socat TCP-LISTEN:17670,bind=127.0.0.1,fork,reuseaddr TCP:$(ipconfig getifaddr en0):17670
+  alpine/socat TCP-LISTEN:17670,bind=127.0.0.1,fork,reuseaddr TCP:host.docker.internal:17670
 ```
+The script does not hardcode an IP: from inside the Docker VM, `host.docker.internal` reaches the gateway across vpnkit **even when the gateway is bound to the Mac's loopback only** (a brew-managed gateway is), and it survives LAN-IP changes — so it is the preferred target. The script probes it from the VM first and only falls back to the Mac's LAN IP when `host.docker.internal` is unreachable; if neither works it fails loudly, because sandbox supervisors have no other path to the gateway.
 
-The gateway runs on `https://127.0.0.1:17670` by default (the CLI connects to localhost). The `--bind-address 0.0.0.0` makes it reachable from the Docker Desktop VM. The `gw-fwd` container forwards `127.0.0.1:17670` inside the Docker VM to your Mac's LAN IP. Keep the gateway process running while you use the sandbox. The `gw-fwd` container restarts with Docker, but the gateway does not survive a reboot, so rerun the script after reboot.
+The gateway runs on `https://127.0.0.1:17670` by default (the CLI connects to localhost). The `gw-fwd` container forwards `127.0.0.1:17670` inside the Docker VM to your Mac's LAN IP. Keep the service running while you use the sandbox: the brew-managed gateway starts at login, but on the manual-fallback path the gateway does not survive a reboot, so rerun the script after reboot.
 
-**Tip:** Add `export OPENSHELL_COMPUTE_DRIVER=docker` to your shell profile (`~/.zshrc` or `~/.bash_profile`) so it's always set.
-
-**Tip:** Add `export OPENSHELL_COMPUTE_DRIVER=docker` to your shell profile
-(`~/.zshrc` or `~/.bash_profile`) so it's always set.
+**Tip:** The compute driver no longer needs to come from an environment
+variable. `demo/openshell-gateway-setup.sh` pins it in the schema-v2 config
+(`[openshell.gateway] compute_driver = "docker"` in `gateway.toml`); without
+that pin, a service-managed gateway without the env var defaults to the podman
+driver and `sandbox create` fails with a podman image-pull error such as
+`"podman API error (500): image pull failed ... requested access to the
+resource is denied"` (the image exists only in Docker Desktop, not on docker.io).
 
 ### Starting the OpenShell gateway (Linux)
 
@@ -105,8 +127,9 @@ The script:
 4. Verifies connectivity (expects HTTP 404 on healthz)
 
 **Difference from macOS:** On Linux you can use `OPENSHELL_COMPUTE_DRIVER=podman`
-(default) or `docker`. On macOS you **must** use `docker` since Podman isn't
-available.
+(default) or `docker`. On macOS use `docker` (Podman Desktop isn't part of
+this demo's supported pairing); there the driver is pinned in `gateway.toml`
+rather than passed through the environment.
 
 **If using Docker Desktop on Linux**, the same port forwarder (macOS step 4)
 is probably needed there; I haven't tested it.
@@ -334,8 +357,12 @@ The steps are:
    ```
 
    Then restart the OpenShell gateway so the new config takes effect
-   (on a NemoClaw-managed box: restart the `openshell-gateway` process; the active config path
-   is shown in its `OPENSHELL_GATEWAY_CONFIG` environment).
+   — on a NemoClaw-managed box: restart the `openshell-gateway` process (the
+   active config path is shown in its `OPENSHELL_GATEWAY_CONFIG` environment);
+   on macOS with the official tap: `brew services restart
+   nvidia/openshell/openshell`; or rerun `./demo/start-openshell-gateway.sh`,
+   which handles both. (`demo/openshell-gateway-setup.sh` shows the right
+   command for the current install whenever it patches `gateway.toml`.)
 
 3. **Create a delegation for the NVIDIA model host** (via mock SSO):
 
@@ -423,8 +450,35 @@ On Apple Silicon the same flow works with three Mac deltas:
   compose network lands there. If the Basic request still answers `not permitted from <ip>`,
   the IP in that message is exactly the address to allow.)
 - **Credentials live on the Mac's home**, so `proxy_auth_file` points at the macOS
-  `~/.config/openshell/upstream-proxy-auth`, and the OpenShell gateway itself runs through
-  `brew services start openshell-gateway` (no systemd), with the driver pinned to `docker`.
+  `~/.config/openshell/upstream-proxy-auth`, the Docker driver is pinned to via
+  `[openshell.gateway] compute_driver = "docker"` in `gateway.toml`, and the
+  gateway runs through the brew service (`brew services restart
+  nvidia/openshell/openshell` — or just `./demo/start-openshell-gateway.sh`).
+
+**Package variants, PKI, and config hygiene (macOS).** A 2026-10 incident on
+one machine combined all three, so the specifics are worth writing down:
+
+- There are two macOS package variants: the homebrew-core formula (no brew
+  service, PKI in `~/.config/openshell/tls`) and the official `install.sh` tap
+  `nvidia/openshell` (brew service, PKI in `/opt/homebrew/var/openshell/tls`).
+  Version numbers can be identical while the layouts are not. If you switch,
+  uninstall the other variant first and you will not inherit a mixed PKI.
+- The CLI caches each registration's CA + client certs under
+  `~/.config/openshell/gateways/<name>/mtls/` at `gateway add` time,
+  provisioning from `OPENSHELL_LOCAL_TLS_DIR` (default `~/.config/openshell/tls`).
+  After a gateway reinstall/PKI regeneration, `openshell status` reports
+  `invalid peer certificate: BadSignature` — and re-adding with the *old local
+  TLS dir* keeps it broken. Fix: point `OPENSHELL_LOCAL_TLS_DIR` at the live
+  PKI and remove + re-add (`./demo/start-openshell-gateway.sh` does exactly
+  this), or refresh the `mtls/` dir from the live PKI by hand.
+- A duplicate `[openshell.drivers.<driver>]` table in `gateway.toml` is fatal
+  for boot (TOML: `duplicate key '<driver>' in table 'openshell.drivers'`), and
+  the gateway then looks dead (`Connection refused` on 17670) with no runtime
+  symptom other than the service's `.err.log`. The gateway brew logs live in
+  `/opt/homebrew/var/log/openshell/openshell-gateway.{out,err}.log`.
+  `demo/openshell-gateway-setup.sh` now runs its config patch through
+  `demo/patch-driver-config.py`, which repairs duplicates, is idempotent, and
+  refuses to write anything that does not parse.
 
 ### Approval holds and draining them
 
@@ -463,6 +517,16 @@ curl -X DELETE http://localhost:8081/v1/delegations/<delegation_id> \
 
 A proper fix would add an `expires_at` filter to the web console's
 approval listing or a TTL-based cleanup job in the gateway/authz.
+
+**`/proc/self/oom_score_adj: Permission denied` in agent exec output** —
+when OpenClaw narrates an exec tool call, it sometimes surfaces lines like
+`/bin/bash: 1: cannot create /proc/self/oom_score_adj: Permission denied`.
+This is OpenShell's sandbox design working as intended: the sandbox user is
+unprivileged and the kernel only lets a process lower its OOM vulnerability
+with privileges, so an OOM-tuning attempt by in-sandbox startup tooling fails
+harmlessly. The command itself still runs and exits normally (reproduced on
+Linux and macOS with openshell 0.1.4; `openclaw-egress-test.sh` parses the
+real HTTP output around it and checks pass). Cosmetic — no action needed.
 
 ## Next: govern the sandbox's egress
 

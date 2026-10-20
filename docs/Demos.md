@@ -20,6 +20,23 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 | http://localhost:8088 | gateway egress proxy (needs the egress overlay — Demos 5–7) |
 | http://localhost:8081, :8082, :5556 | authz · tokensvc · SSO (Dex) |
 
+## `demo/.env` — every variable at a glance
+
+Compose (and every script) reads this file; it is **gitignored** — your
+credentials stay local. Create it by copying the example and filling in the
+values; a demo without Telegram/model keys still runs, it just skips those
+notifications/model turns.
+
+| Variable | Used by | What it is / when you need it |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | compose → gateway's `APPROVAL_TELEGRAM_BOT_TOKEN` | the bot token from @BotFather; **approval cards are pushed here** (Demos 4/5/7 approvals) — without it, decide in the console instead |
+| `TELEGRAM_CHAT_ID` | compose → gateway's `APPROVAL_TELEGRAM_CHAT_ID` | the chat (user id or group id) that receives the cards — get it from the bot's `/start` + getUpdates |
+| `APPROVAL_CONSOLE_URL` | compose → gateway | the console URL stamped on approval cards/webhooks; must be **routable from the approver's device** — Telegram refuses `localhost` in buttons, so a LAN address (e.g. `http://192.168.1.53:8083`) |
+| `DEMO_CONSOLE_URL` | the egress overlay (`docker-compose.egress.yml`) for `APPROVAL_CONSOLE_URL` | same sentence, but used when the stack is brought up **with the egress overlay** (Demos 5–7); keep it the same value |
+| `NVIDIA_API_KEY` | `openclaw-sandbox.sh` (`configure`, `chat*`) and `openclaw-egress-test.sh` | your NVIDIA API key (nvapi-…); wired to the in-sandbox provider as an env SecretRef for model calls (Demo 6/7) |
+| `GATEWAY_HOST_PORT` | compose `ports` and every script | the PEP's **published host port** (default 8080); use e.g. `9000` when a local OpenShell gateway already owns 8080 — scripts fall back to 8080 unless told |
+| `PROXY_BASIC_AUTH_CIDRS` | the egress overlay → gateway's source gate for **Basic** proxy auth | allow-list of client CIDRs that may use the token-as-username Basic credential (initial: `127.0.0.0/8,::1/128,172.16.0.0/12`); **leave it alone** — `openclaw-sandbox.sh` measures and rewrites it per machine (`refresh-dex-redirects.sh`'s sibling) |
+
 ## Demo 1 — scripted (`demo/demo.sh`)
 
 A terminal walkthrough of the complete story, with an explanation at every

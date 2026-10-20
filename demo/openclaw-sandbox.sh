@@ -96,10 +96,8 @@ sandbox_exists() {
 sandbox_ready() {
   openshell sandbox list 2>/dev/null | awk -v n="$SANDBOX_NAME" '
     $1==n {
-      if ($0 ~ /Error/) { print 1; found=1; exit 1 }
-      if ($0 ~ /Ready/) { print 0; found=1; exit 0 }
-      if ($0 ~ /Completed/) { print 1; found=1; exit 1 }
-      print 1; found=1; exit 1
+      if ($0 ~ /Ready/) { found=1; exit 0 }
+      found=1; exit 1
     }
     END { if(!found) exit 1 }
   '
@@ -117,33 +115,15 @@ ensure_sandbox() {
   fi
   if sandbox_exists; then
     local phase
-    phase=$(openshell sandbox list 2>/dev/null | awk -v n="$SANDBOX_NAME" '$1==n {print $2}')
-    if [ "$phase" = "Error" ]; then
-      warn "sandbox '$SANDBOX_NAME' is in Error state — recreating"
-      openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1 || true
-    elif [ "$phase" = "Completed" ]; then
-      warn "sandbox '$SANDBOX_NAME' is in Completed state — waiting for Ready"
-      local retries=30
-      while [ $retries -gt 0 ]; do
-        sleep 2
-        phase=$(openshell sandbox list 2>/dev/null | awk -v n="$SANDBOX_NAME" '$1==n {print $2}')
-        if [ "$phase" = "Ready" ]; then
-          return 0
-        elif [ "$phase" = "Error" ]; then
-          warn "sandbox transitioned to Error — recreating"
-          openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1 || true
-          break
-        fi
-        retries=$((retries - 1))
-      done
-      if [ $retries -eq 0 ]; then
-        bad "sandbox '$SANDBOX_NAME' did not become Ready in time"
-        exit 1
-      fi
-    else
-      warn "sandbox '$SANDBOX_NAME' exists but is not Ready (phase: $phase) — recreating"
-      openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1 || true
-    fi
+    # Phase is the LAST column of `sandbox list` (the row is NAME CREATED TIME
+    # PHASE — column 2 is the created date, not the phase).
+    phase=$(openshell sandbox list 2>/dev/null | awk -v n="$SANDBOX_NAME" '$1==n {print $NF}')
+    # Completed = the canonical main process exited (e.g. the in-sandbox
+    # OpenClaw gateway received Ctrl-C), and with the default restart policy
+    # it will never become Ready again. Error and any other non-Ready phase
+    # get the same treatment: delete, then recreate below.
+    warn "sandbox '$SANDBOX_NAME' exists but is not Ready (phase: $phase) — recreating"
+    openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1 || true
   fi
   step "Create the OpenShell sandbox (OpenClaw gateway in the foreground)"
   # OpenShell replaces the image entrypoint with its supervisor, then runs the
@@ -160,6 +140,12 @@ ensure_sandbox() {
   #   3. PROVIDER_API_KEY in the *gateway's* env: the gateway process is the
   #      one that makes the model call, so it must be able to resolve the
   #      env SecretRef in the provider config.
+  #   4. --detach: without it, `sandbox create` ATTACHES to the canonical main
+  #      process (the in-sandbox OpenClaw gateway) whenever the caller has a
+  #      terminal — verified on openshell 0.1.4 under a pty — so `up` streams
+  #      the gateway banner forever, and Ctrl-C SIGINTs the gateway, leaving
+  #      the sandbox Phase=Completed. --detach keeps create returning on any
+  #      terminal; wait_for_gateway below already handles the readiness race.
   #
   # We deliberately do NOT pass --forward: that flag keeps the foreground
   # `sandbox create` attached to hold an SSH tunnel, so the command never
@@ -169,6 +155,7 @@ ensure_sandbox() {
     create_env+=(--env "PROVIDER_API_KEY=${PROVIDER_API_KEY}")
   fi
   openshell sandbox create \
+    --detach \
     --name "$SANDBOX_NAME" \
     --from "$IMAGE" \
     "${create_env[@]}" \
@@ -229,6 +216,7 @@ configure() {
   #    TCP substrate, which must be enabled at sandbox creation.
   local provider_host
   provider_host=$(printf '%s' "$PROVIDER_BASE_URL" | sed -E 's#^https?://##; s#/.*##; s#:.*##')
+  line "applying the egress allowlist (4 endpoints, each confirmed by a policy wait — can take up to a minute)"
   apply_egress_rule "$provider_host"
   apply_egress_rule "catalog.openclaw.ai"
   apply_egress_rule "clawhub.ai"
@@ -321,11 +309,15 @@ ensure_proxy_basic_auth() {
         esac
         case ",$current," in
           *",$cidr,"*)
-            # Already allowed and still denied — nothing more to learn here.
-            bad "gateway sees this host as $peer but $cidr is already in the allowlist"
-            line "set PROXY_BASIC_AUTH_CIDRS in demo/.env by hand and rerun."
-            return 1
+            # The measured peer CIDR is already allowlisted but the gateway
+            # still denies it — the running container is almost certainly
+            # carrying a stale env (started before the list was correct).
+            # Recreating with the current list is cheap and bounded by the
+            # loop below; only after the rounds are exhausted do we give up.
+            line "gateway still denies $peer although $cidr is already allowlisted —"
+            line "recreating the gateway container (stale allowlist in its env)"
             ;;
+
           *)
             line "gateway sees this host as $peer — allowing $cidr"
             current="$current,$cidr"
@@ -502,6 +494,7 @@ wait_for_gateway() {
 run_agent() {
   local msg="$1"
   step "Chat with OpenClaw"
+  line "a cold first turn (reasoning model, provider warm-up) can take minutes — up to ${AGENT_TIMEOUT:-300}s; silence here is waiting, not hanging"
   if ! wait_for_gateway; then
     bad "OpenClaw gateway is not reachable inside the sandbox"
     exit 1

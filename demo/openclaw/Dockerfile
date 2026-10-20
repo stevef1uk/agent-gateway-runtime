@@ -21,9 +21,28 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Node 22 (OpenClaw needs a modern Node; Ubuntu 24.04 ships 18).
 # iproute2 is required by OpenShell for network-namespace isolation.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        ca-certificates curl git jq \
+# Node 22 (OpenClaw needs a modern Node; Ubuntu 24.04 ships 18).
+# iproute2 is required by OpenShell for network-namespace isolation.
+#
+# Two-layer apt bootstrap:
+#   1. Docker Desktop's built-in proxy (http.docker.internal:3128) caches
+#      plain-HTTP fetches; a cache that hiccups mid-mirror-sync re-serves
+#      stale pool copies -> "Hash Sum mismatch" aborts the whole build
+#      (expected on new arm64 clones). So the bootstrap installs only the
+#      CA bundle over HTTP, forcing each fetch fresh in the proxy
+#      (Acquire::http::No-Cache) and retrying hard (Acquire::Retries).
+#   2. With certs present, flip the Ubuntu mirrors to HTTPS — end-to-end TLS
+#      cannot be cached/rewritten by any deli-plate middlebox — and fetch
+#      everything else over https.
+RUN rm -rf /var/lib/apt/lists/* \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends -o Acquire::Retries=5 -o Acquire::http::No-Cache=true ca-certificates \
+    && sed -i -e 's|^URIs: http://|URIs: https://|' /etc/apt/sources.list.d/*.sources \
+              -e '/^deb /s|^deb http://|deb https://|' /etc/apt/sources.list 2>/dev/null || true \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends -o Acquire::Retries=5 \
+        curl git jq \
         iproute2 \
         openssh-client \
         python3 \
