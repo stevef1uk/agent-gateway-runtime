@@ -1,2 +1,5 @@
 # Local runtime credentials (demo only) — gitignored
 .env
+
+# Human-delegation demo — generated fake invoices (one pair per run)
+invoices/

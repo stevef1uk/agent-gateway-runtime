@@ -24,13 +24,33 @@ Two important facts about this folder:
   evidence: after the demo, the sensitive path's counter shows the API ran
   **exactly once** (and only after the approval).
 
+## The Payments-API surface (1.0.5+)
+
+The human-delegation demo (`demo/human-delegation-demo.sh`) needs the API to
+*behave* like a payments back end, so 1.0.5 adds a small one on top of the
+counting echo (which every other path still gets — Demos 1–4 are unchanged):
+
+| Endpoint | Who calls it | What it does |
+|---|---|---|
+| `GET /suppliers/{id}` | the agent, via the gateway | supplier master record — the **verified IBAN on file** |
+| `GET /invoices/{id}` | the agent, via the gateway | the invoice, enriched with `beneficiary_matches_supplier` (data, not a decision) |
+| `POST /invoices` | the demo script, **out of band** | the AP inbox receiving an invoice (agents never have this path; re-registering resets it, so reruns start clean) |
+| `POST /payments` | the agent, via the gateway | **executes** a payment — only ever reached after the human's approval |
+| `GET /payments` | the demo script, out of band | executed payments + the per-path counter (the exactly-once evidence) |
+
+`POST /payments` keeps controls of its own — the backstop behind the
+gateway's human approval: unknown invoice → 404, amount ≠ invoice → 409,
+already paid → 409, and a **beneficiary IBAN that does not match the
+supplier record → 409 `beneficiary_mismatch`** even if a human approved it.
+
 ## Run it (one command)
 
 From this repository's root:
 
 ```bash
-demo/protected-api-demo.sh                       # local docker compose stack
-demo/protected-api-demo.sh --node 192.168.1.74   # the k3s cluster
+demo/human-delegation-demo.sh                     # local docker compose stack
+demo/human-delegation-demo.sh --no-human          # unattended: fraud denied, legit approved
+demo/protected-api-demo.sh --node 192.168.1.74    # the k3s cluster
 ```
 
 (the cluster needs the namespace deployed first — `k3s/README.md`)
@@ -40,13 +60,13 @@ demo/protected-api-demo.sh --node 192.168.1.74   # the k3s cluster
 | # | What happens | Why it matters |
 |---|---|---|
 | 1 | Sign in at the IdP → a **verified subject** | the human is real, not a claimed name |
-| 2 | Create a delegation for agent `demoapi-agent` with an **approval rule** (below) | the human decides, the policy is written with the grant |
-| 3 | Agent mints a 5-minute token using the one-time secret | short-lived, scoped — not a reusable key |
-| 4 | `/orders` calls **run immediately** and are forwarded to demoapi | low-risk work is never blocked |
-| 5 | First `POST /api/sensitive/payment` → **202, HELD, not executed** | the `executed_count` did not move: the API never ran |
-| 6 | A different human ("mallory") tries to approve → **403 refused** | only the delegating user may authorize their agent |
-| 7 | The delegating user approves → **200** | single-use, bound to this exact action |
-| 8 | The agent retries → **200, `executed_count` + 1** | the API ran exactly once, after the human said yes |
+| 2 | Create a delegation for agent `openclaw-ap-agent` with an **approval rule** (below) | the human decides, the policy is written with the grant |
+| 3 | Agent mints a short-lived token using the one-time secret | short-lived, scoped — not a reusable key |
+| 4 | Invoice + supplier reads **run immediately** | low-risk work is never blocked |
+| 5 | First `POST /payments` → **202, HELD, not executed** | the `executed_count` did not move: the API never ran |
+| 6 | The human sees supplier record vs proposed beneficiary → **deny** (fraud round) | the injected "change of bank details" is visible where the decision is made |
+| 7 | The agent retries → **403** | the agent cannot override the human's decision |
+| 8 | Legitimate invoice under a fresh delegation → held → **approve** → **200** | single-use, bound to this exact action |
 | 9 | Revoke the delegation → next call **403** | instant enforcement, even with the token still valid |
 
 ## How "require approval" is switched on

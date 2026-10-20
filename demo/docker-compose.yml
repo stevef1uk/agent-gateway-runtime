@@ -108,7 +108,7 @@ services:
       retries: 5
 
   demoapi:
-    image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.4}  # source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
+    image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.5}  # 1.0.5 adds the Payments-API surface (invoices/suppliers/payments) for the human-delegation demo; source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
     container_name: agent-gateway-demoapi
     restart: unless-stopped
     ports: ["8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire
