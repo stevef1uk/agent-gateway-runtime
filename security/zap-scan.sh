@@ -47,6 +47,9 @@ FAIL_ON_ALERTS="${FAIL_ON_ALERTS:-0}"
 # The core containers of the demo stack and their published host ports
 # (demo/docker-compose.yml). Dex :5556, redis and postgres are third-party
 # supporting services with no published host ports — excluded by default.
+# The Demo 9 MCP services (mcpsrv=8091, the gateway-mcp PEP=8085) are in the
+# default list too — scan only a subset with e.g.
+#   TARGETS="mcpsrv=8091 gateway-mcp=8085" ./security/zap-scan.sh
 if [ -z "${TARGETS:-}" ]; then
   # The gateway's published PEP port may differ from 8080 (an OpenShell
   # gateway often owns :8080; demo/.env carries the override used by compose
@@ -55,7 +58,7 @@ if [ -z "${TARGETS:-}" ]; then
   if [ -z "$GW_PORT" ] && [ -f demo/.env ]; then
     GW_PORT="$(sed -n 's/^GATEWAY_HOST_PORT=//p' demo/.env | tail -1)"
   fi
-  TARGETS=(gateway="${GW_PORT:-8080}" authz=8081 tokensvc=8082 web=8083 demoapi=8090)
+  TARGETS=(gateway="${GW_PORT:-8080}" gateway-mcp=8085 authz=8081 tokensvc=8082 web=8083 demoapi=8090 mcpsrv=8091)
 else
   read -ra TARGETS <<< "$TARGETS"
 fi

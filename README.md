@@ -107,6 +107,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | Path | What it is |
 |---|---|
 | [`demo/`](demo/) | One-command demo stack: `docker-compose.yml`, Dex config, demo keys, scripted walkthrough (`demo.sh`), the default OPA policy (`policies/`) with a policy-engine override (`docker-compose.opa.yml`), and the performance benchmark (`bench/`, `bench-engines.sh`) |
+| [`demo/api/`](demo/api/) · [`demo/mcp/`](demo/mcp/) | The demo protected API (Demos 4/8) and, new in Demo 9, the demo MCP server (mcpsrv) — both buildable from this repo |
 | [`docs/Deployment-Guide.md`](docs/Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
 | [`docs/Agent-Identity.md`](docs/Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
 | [`docs/Integration-Patterns.md`](docs/Integration-Patterns.md) | Inserting the gateway between existing agents and back ends/MCP servers with zero or one-line changes |
@@ -114,6 +115,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
 | [`docs/Protecting-Your-API.md`](docs/Protecting-Your-API.md) | Hands-on guide for new users: every constraint you can configure on a delegation, what the built-in engine enforces directly, what needs OPA, and the limitations to design around |
+| [`docs/Protecting-Your-MCP.md`](docs/Protecting-Your-MCP.md) | The MCP twin: put the gateway in front of agents' MCP servers with zero server/agent code — dedicated gateway instance, delegation JSON, approval-gated risky operations (Demo 9 Part D's delete pattern), revocation + audit, and today's granularity limits |
 | [`docs/Benchmarking.md`](docs/Benchmarking.md) | Measuring gateway performance — allowed vs denied passthroughs, built-in vs OPA engine, how to run and read it |
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
 | [`demo/protected-api-demo.sh`](demo/protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
@@ -121,6 +123,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`demo/openclaw-sandbox.sh`](demo/openclaw-sandbox.sh) | Demo 6 — the full agent (OpenClaw) inside an OpenShell sandbox: `make openclaw-demo` builds → sandbox → configure → one chat turn |
 | [`demo/openclaw-egress-test.sh`](demo/openclaw-egress-test.sh) | Demo 7 — proves the sandbox's egress rules from inside the sandbox (`--gateway` adds the Agent-Gateway checks: allow/deny/CONNECT-hold/approved-retry; `--no-human` auto-approves holds for unattended runs) |
 | [`demo/human-delegation-demo.sh`](demo/human-delegation-demo.sh) | Demo 8 — **Human Delegation under prompt injection**: OpenClaw reviews and pays a supplier invoice through the gateway (one invoice carries injected "change the beneficiary" instructions); reads auto-allowed, every payment held, the human sees supplier record vs proposed beneficiary and decides — denial sticks (403), approval executes exactly once |
+| [`demo/mcp-demo.sh`](demo/mcp-demo.sh) | Demo 9 — **MCP under the gateway**: a CRM MCP server (`demo/mcp/`, mcpsrv) shown unprotected (anonymous writes, no audit), then behind a dedicated gateway instance (`gateway-mcp`, :8085) — 401 unauthenticated, delegated + audited MCP calls, instant revocation — then **OpenClaw itself** adding a customer through vanilla MCP with zero agent-side code, and a **customer deletion held for a human decision** (202 → approve ⇒ gone once / deny ⇒ 403, customer stays) |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
 | [`docs/Commercial-Licence.md`](docs/Commercial-Licence.md) | Licence terms: what you get, what is not warranted, liability limits, indemnity |
 | [`docs/Pricing.md`](docs/Pricing.md) | Licensing tiers and buying path |
@@ -347,7 +350,10 @@ at k3s or read the JSON output: [docs/Benchmarking.md](docs/Benchmarking.md).
 
 Pointing it at **your** API? [docs/Protecting-Your-API.md](docs/Protecting-Your-API.md)
 walks through the delegation fields and the constraints you can set — directly
-or via OPA — with a worked example.
+or via OPA — with a worked example. Protecting **your MCP servers**?
+[docs/Protecting-Your-MCP.md](docs/Protecting-Your-MCP.md) is the same
+hands-on recipe in MCP terms (one config edit in the agent, the delegation
+as the control surface).
 
 When you are done playing: [docs/Deployment-Guide.md](docs/Deployment-Guide.md)
 covers production operation of the same images — Postgres/Redis HA, Kubernetes,

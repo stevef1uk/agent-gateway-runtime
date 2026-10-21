@@ -107,6 +107,42 @@ services:
       timeout: 3s
       retries: 5
 
+  # Demo 9 — a second gateway instance fronting the MCP server. UPSTREAM_URL
+  # is per-instance (the primary gateway forwards /orders and /api/* to
+  # demoapi), so MCP traffic gets its own PEP here: /mcp/* in, mcpsrv out.
+  # Same decision pipeline: delegation scope, caps, approvals, audit.
+  gateway-mcp:
+    image: stevef1uk/agent-gateway-gateway:1.0.24
+    container_name: agent-gateway-gateway-mcp
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    # GATEWAY_MCP_HOST_PORT overrides the published host port (default 8085).
+    ports: ["${GATEWAY_MCP_HOST_PORT:-8085}:8080"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # same operator token as the primary gateway
+      # Real downstream: the demo MCP server (mcpsrv). /mcp streams through.
+      - UPSTREAM_URL=http://mcpsrv:8091
+      # No egress proxy on this instance — the MCP demo drives the PEP path.
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro  # the image looks up the licence at this fixed name
+    depends_on:
+      authz: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      mcpsrv: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   demoapi:
     image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.6}  # 1.0.6 adds security response headers (nosniff, CORP/COOP/COEP — ZAP findings) alongside the 1.0.5 Payments-API surface; source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
     container_name: agent-gateway-demoapi
@@ -114,6 +150,23 @@ services:
     ports: ["8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8090/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Demo 9 — the protected MCP server (source: demo/mcp, built from this
+  # repo the way demoapi is). Streamable-HTTP MCP at /mcp + a read-only
+  # REST view of its in-memory CRM at /customers (out-of-band proof that an
+  # add_customer tool call really executed, like demoapi's executed_count).
+  mcpsrv:
+    build: ./mcp
+    image: ${MCPSRV_IMAGE:-stevef1uk/agent-gateway-mcpsrv:1.0.0}
+    container_name: agent-gateway-mcpsrv
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ports: ["8091:8091"]   # MCP server visible from the host: curl :8091/customers
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8091/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5

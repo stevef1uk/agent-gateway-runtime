@@ -71,6 +71,13 @@ server with the gateway agent middleware (a thin server that requires the
 delegation JWT before forwarding) if you prefer enforcement to live next to
 the server rather than in front of it.
 
+> **Hands-on recipe for protecting YOUR MCP server** — dedicated gateway
+> instance, delegation JSON, OpenClaw client config, the delete-approval
+> pattern and the honest granularity limits — lives in
+> [Protecting-Your-MCP.md](Protecting-Your-MCP.md); Demo 9
+> ([Demos.md](Demos.md)) runs the whole recipe against a live CRM MCP
+> server with OpenClaw as the agent.
+
 ### Pattern D — egress control so nobody can bypass
 
 In enterprise topology the gateway is inserted only if agents *cannot* shadow

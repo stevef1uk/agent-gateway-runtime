@@ -344,6 +344,163 @@ Notes:
   `beneficiary_matches_supplier` as **data** for any consumer (and for the
   human verifying via `curl`); deciding stays with the human at the gateway.
 
+## Demo 9 — MCP under the gateway (`demo/mcp-demo.sh`, OpenClaw edition)
+
+The MCP story: a CRM-flavoured **MCP server** (`demo/mcp/` — `mcpsrv`) with
+business tools (`add_customer`, `lookup_customer`, `list_customers`), shown
+in three states plus a human-gated delete, every step live wire traffic:
+
+| Part | What you see | What it proves |
+|---|---|---|
+| **A — unprotected** | the MCP server reached directly (`:8091/mcp`): `initialize`, `tools/list`, `tools/call add_customer` all answer **HTTP 200 with no credentials**; a customer named *Mallory Anonymous* is written | every MCP server in your estate today: whoever reaches the port, writes — and the gateway audit trail gains **zero rows** during Part A |
+| **B — protected** | the same server behind a dedicated gateway instance (`gateway-mcp`, `:8085`): unauthenticated call → **401**; SSO sign-in → delegation (`/mcp*`, `read`+`create`) → token → the same MCP calls now **200, attributed and audited**; revoke → next call **403** while the token is still valid | one URL change (integration Pattern C) puts identity, delegation, audit and instant revocation around the whole MCP surface — the wire protocol does not change |
+| **C — OpenClaw** | the real agent (OpenShell sandbox, `make openclaw-demo` first) registers `demo-crm → http://<host>:8085/mcp` as a vanilla remote streamable-http MCP server with a static Bearer header; `openclaw mcp probe` lists the tools through the gateway; then one agent turn — *“add a customer named Jane Doe, then look her up”* — runs as the model chooses, and every tool call lands in the audit trail under the agent's identity | an MCP-native agent works with **zero agent-side gateway code**; the gateway governs MCP calls exactly like REST calls |
+| **D — delete approval** | the agent is asked to offboard a customer and attempts `DELETE /customers/{id}` through the gateway; the delegation's `approval_rules` (`resource_pattern:/customers*`, `action_pattern:delete`, `require:true`) **holds the delete (202) — upstream never called, the CRM proves it** — and the human decides in the console (or Telegram) within `APPROVAL_WAIT`s (default 300). **Approve** → the retry executes exactly once, the customer is gone (CRM count ↓ 1). **Deny** → the retry is refused (**403**), the customer remains, the refusal is on the audit record — and the binding outlives the delegation: the same action by the same agent is refused on sight under a fresh delegation too. `--no-human` approves immediately for unattended runs; no decision in time defaults to **deny** | deletion is not a tool the agent may use casually: the human grants the capability at the delegation and stays the only one who can say yes |
+
+Run it:
+
+```bash
+cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+cd ..
+./demo/mcp-demo.sh                        # A + B, then C and D if the sandbox is Ready
+./demo/mcp-demo.sh --no-openclaw          # skip C and D's sandbox legs (CI-safe)
+./demo/mcp-demo.sh --no-human             # D: the scripted human approves the delete
+./demo/mcp-demo.sh --keep-crm             # keep the server's customer store across runs
+DELETE_TARGET=CUST-0001 ./demo/mcp-demo.sh   # pick the record Part D offboards
+```
+
+### How it is wired — and specifically, how DELETE is made human-gated
+
+Three layers, only the third needs configuring:
+
+**1. The CRM (nothing special).** `demo/mcp/` is an ordinary MCP server
+(streamable-HTTP at `/mcp`) which also exposes its store as plain REST:
+`GET /customers` (proof-of-state) and `DELETE /customers/{id}` (the
+deletion). Deleting a customer therefore arrives at the gateway as a
+normal, unremarkable HTTP request — that is deliberate: the customer's
+real CRM would look the same.
+
+**2. The gateway (no configuration needed).** The PEP is a pass-through
+reverse proxy; it derives what each call *is* from the wire itself:
+
+| Wire call | resource | action | governed by |
+|---|---|---|---|
+| `POST /mcp` (any MCP tool call) | `/mcp` | `create` | the delegation's `/mcp*` grant |
+| `DELETE /customers/CUST-0005` | `/customers/CUST-0005` | `delete` | the delegation's `/customers*` grant |
+
+Because the HTTP verb makes delete its own action — unlike MCP tool
+calls, which are all `POST /mcp` — the gateway can match a rule to
+deletions *alone*.
+
+**3. The delegation (the actual control).** Part D rotates the rights and
+mints exactly this grant (via `POST` to the authz service — the same JSON
+can be created in the admin console):
+
+```json
+{
+  "agent_id": "openclaw-crm-agent",
+  "resources": ["/mcp*", "/customers*"],
+  "actions": ["read", "create", "delete"],
+  "expires_in_seconds": 1800,
+  "approval_rules": [{
+    "when":   { "resource_pattern": "/customers*", "action_pattern": "delete" },
+    "require": true,
+    "rationale": "Deleting customer data: verify this is the right record before approving"
+  }]
+}
+```
+
+What every field does at decision time:
+
+* `resources` + `actions` — scope: the agent *may* read (`/mcp*` reads,
+  `GET /customers`), create (MCP `add_customer`) and delete. Remove
+  `delete` from `actions` and every delete is outright **403**; remove
+  `/customers*` and the deletion is invisible to the agent entirely.
+* `approval_rules[].when` — pattern match: any decision whose resource
+  starts with `/customers` **and** whose action is `delete` matches. Reads
+  and creates in the same grant keep flowing automatically — the rule only
+  fires for deletions.
+* `require: true` — what to do on a match: **hold**. The caller receives
+  `202` plus an approval record bound to the exact action hash, and the
+  CRM (upstream) is never contacted — part D proves that from
+  `curl :8091/customers` before and after the attempt.
+* `rationale` — the sentence printed on the approval card (console and
+  Telegram), telling the human what they are being asked to decide.
+
+At runtime that produces the Part D dance:
+
+```
+attempt  → 202 approval_required  (upstream not called; audit: approval_required)
+decision → the delegating user approves or denies (console / Telegram card)
+  approve → the exact same DELETE is re-sent → executed once → audit: allow
+  deny    → the same DELETE is re-sent → 403 (audit: deny), customer remains
+```
+
+Three properties make that safe rather than theatrical:
+
+* **approver binding** — only the human who *created* the delegation may
+  decide: the decision call must carry that verified subject
+  (`approver_id`), and anything else is refused (a call without
+  `approver_id` answers `400`; the wrong subject is refused too).
+* **single-use, exact-action** — the approval (or the refusal) binds the
+  precise action hash, not a blanket permission: approving delete CUST-0005
+  does not authorize deleting CUST-0006, and every *new* distinct delete
+  raises a fresh hold.
+* **sticky denial** — a deny outlives the delegation: the same
+  agent asking to delete the same record afterwards is refused on sight
+  (`403 action denied by approver`), under a fresh delegation too. Rotating
+  the grant does not launder a refused action.
+
+Every path of that dance is on the audit trail:
+
+```bash
+docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway \
+  -c "SELECT ts, agent_id, resource, action, outcome, reason FROM audit_events
+      WHERE resource LIKE '/customers%' ORDER BY ts DESC LIMIT 10;"
+```
+
+Richer rules (per-tenant, time-of-day, amount-shaped) live in the OPA
+policy layer instead of the delegation — see
+[Policy-and-OPA.md](Policy-and-OPA.md).
+
+Extra machinery Part C uses (same as Demo 8): an **egress delegation** for the
+supervisor's CONNECT path (model provider + the PEP host, `read`+`connect`,
+tunnels run plainly — the PEP governs what rides inside) with the credential
+rotation stop/start dance, and the sandbox policy endpoint for the PEP port,
+probed from inside the sandbox until one address answers.
+
+Verification points after the run:
+
+```bash
+# out-of-band proof that the agent's customer landed (in-memory CRM):
+curl -s http://localhost:8091/customers | python3 -m json.tool
+# the MCP decisions on the audit trail (resource /mcp, action create):
+docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway \
+  -c "SELECT ts, agent_id, resource, action, outcome, reason FROM audit_events WHERE resource LIKE '/mcp%' ORDER BY ts DESC LIMIT 20;"
+# the delete decisions (Part D):
+docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway \
+  -c "SELECT ts, agent_id, resource, action, outcome, reason FROM audit_events WHERE resource LIKE '/customers%' ORDER BY ts DESC LIMIT 10;"
+# ZAP baseline for the two new services:
+make security-scan-mcp
+```
+
+**Turning this into your deployment:** the reusable recipe for protecting
+your own MCP servers (dedicated gateway instance, delegation JSON, agent
+client config, the approval-gated risky-operation pattern and today's
+limits) is [Protecting-Your-MCP.md](Protecting-Your-MCP.md).
+
+Honest limits (documented so nobody over-promises): at the `/mcp`
+endpoint the gateway derives `resource=/mcp`, `action=create` for every MCP
+tool call, so **per-server** governance is what you get today (the
+`per-tool` MCP adapter that parses `params.name` is on the gateway product's
+roadmap — see [Integration-Patterns.md](Integration-Patterns.md) Pattern C);
+that is why Part D's delete rides the CRM's REST surface
+(`DELETE /customers/{id}`), where the gateway can tell delete apart and hold
+it — when the per-tool MCP adapter ships, the same approval rule can move
+onto the MCP tool call itself; the agent's MCP token is a static header in
+the sandbox's `openclaw.json` with a TTL matching its delegation (30 min),
+the same trade-off any static-header MCP credential carries.
+
 ## Troubleshooting
 
 | Symptom | Fix |

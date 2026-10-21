@@ -16,6 +16,8 @@ REGISTRY         ?= docker.io/stevef1uk
 IMAGE_NS         ?= agent-gateway
 API_VERSION      ?= 1.0.6
 API_IMAGE        := $(REGISTRY)/$(IMAGE_NS)-demoapi
+MCPSRV_VERSION   ?= 1.0.0
+MCPSRV_IMAGE     := $(REGISTRY)/$(IMAGE_NS)-mcpsrv
 BUILDER          ?= agent-gateway-builder
 PLATFORMS        ?= linux/amd64,linux/arm64
 NODE             ?= 192.168.1.74
@@ -28,19 +30,30 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: test
-test: ## Vet + test the demo API, and vet the benchmark tool
+test: ## Vet + test the demo API and MCP server, and vet the benchmark tool
 	cd demo/api && go vet ./... && go test ./...
+	cd demo/mcp && go vet ./... && go test ./...
 	cd demo/bench && go vet ./...
 
 .PHONY: image
 image: ## Build the demo API image (host arch)
 	docker build -f demo/api/Dockerfile -t $(API_IMAGE):$(API_VERSION) demo/api
 
+.PHONY: image-mcp
+image-mcp: ## Build the demo MCP server image (host arch)
+	docker build -f demo/mcp/Dockerfile -t $(MCPSRV_IMAGE):$(MCPSRV_VERSION) demo/mcp
+
 .PHONY: push
 push: ## Build + push the demo API (multi-arch) — the buildx builder must exist
 	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) --pull \
 		-f demo/api/Dockerfile \
 		-t $(API_IMAGE):$(API_VERSION) -t $(API_IMAGE):latest --push demo/api
+
+.PHONY: push-mcp
+push-mcp: ## Build + push the demo MCP server (multi-arch) — the buildx builder must exist
+	docker buildx build --builder $(BUILDER) --platform $(PLATFORMS) --pull \
+		-f demo/mcp/Dockerfile \
+		-t $(MCPSRV_IMAGE):$(MCPSRV_VERSION) -t $(MCPSRV_IMAGE):latest --push demo/mcp
 
 .PHONY: verify-arch
 verify-arch: ## Assert the published image's arm64 variant runs arm64 code
@@ -62,6 +75,10 @@ verify-arch: ## Assert the published image's arm64 variant runs arm64 code
 .PHONY: protected-api
 protected-api: ## Run the protected-API demo (compose)
 	./demo/protected-api-demo.sh
+
+.PHONY: mcp-demo
+mcp-demo: ## Run Demo 9 — MCP under the gateway (add ARGS="--no-openclaw" to skip the agent leg)
+	./demo/mcp-demo.sh $(ARGS)
 
 # ---------------------------------------------------------------------------
 # OpenClaw in an NVIDIA OpenShell sandbox (demo/openclaw-sandbox.sh).
@@ -124,6 +141,10 @@ human-delegation-demo: ## Demo 8 — OpenClaw pays an invoice (one fraudulent) t
 .PHONY: security-scan
 security-scan: ## OWASP ZAP baseline scan of the core containers → security/results/
 	./security/zap-scan.sh
+
+.PHONY: security-scan-mcp
+security-scan-mcp: ## OWASP ZAP scan of just the new MCP services (Demo 9)
+	./security/zap-scan.sh TARGETS="mcpsrv=8091 gateway-mcp=8085"
 
 .PHONY: bench
 bench: ## Benchmark the gateway: both engines (built-in + OPA)

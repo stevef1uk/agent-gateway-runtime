@@ -1,13 +1,7 @@
-ZAP scan — 2026-10-21 05:06:42 UTC
+ZAP scan — 2026-10-21 05:47:41 UTC
 image: zaproxy/zap-stable  mode: baseline
 
-gateway    :9000  no alerts
-  reports: security/results/gateway.md (readable)
-authz      :8081  no alerts
-  reports: security/results/authz.md (readable)
-tokensvc   :8082  no alerts
-  reports: security/results/tokensvc.md (readable)
-web        :8083  no alerts
-  reports: security/results/web.md (readable)
-demoapi    :8090  no alerts
-  reports: security/results/demoapi.md (readable)
+mcpsrv     :8091  no alerts
+  reports: security/results/mcpsrv.md (readable)
+gateway-mcp :8085  no alerts
+  reports: security/results/gateway-mcp.md (readable)
