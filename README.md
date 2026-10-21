@@ -316,6 +316,42 @@ ARGS=--no-human make human-delegation-demo   # unattended: fraud denied, legit a
 
 Walkthrough and what each step proves: [docs/Demos.md](docs/Demos.md §Demo-8).
 
+## Demo 9 — MCP under the gateway (OpenClaw edition)
+
+The MCP story: your agents' tool calls increasingly ride **MCP** — this demo
+shows the gateway protecting those calls and a real agent doing real work
+through them. A CRM MCP server (`demo/mcp/`, `mcpsrv`) is shown in four
+states, every step live wire traffic:
+
+1. **Unprotected** — the MCP server reached directly: anyone can call
+   `add_customer` with no identity, no delegation, and nothing on the audit
+   trail. Every MCP server in your estate today.
+2. **Protected** — the same server behind its own gateway instance
+   (`gateway-mcp`, :8085) after a one-line config change in the agent
+   (Integration Pattern C): unauthenticated calls get **401**, the agent's
+   MCP calls are **delegated, attributed and audited**, and revocation ends
+   the session instantly (403) with the token still valid on the wire.
+3. **OpenClaw** — the real agent registers the *gateway URL* as an ordinary
+   remote MCP server, probes it, and adds a customer through vanilla MCP
+   with **zero agent-side code**; every tool call lands on the audit trail.
+4. **Delete approval** — the agent attempts to delete a customer; the
+   delegation **holds every delete (202, upstream never called)** for a
+   human decision: approve ⇒ executes exactly once; deny ⇒ 403 and the
+   customer stays (the refusal is sticky even under a fresh delegation).
+
+```bash
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d
+./demo/mcp-demo.sh                 # A + B, then C and D if the sandbox is Ready
+./demo/mcp-demo.sh --no-openclaw   # skip the sandbox legs (CI-safe)
+./demo/mcp-demo.sh --no-human      # D: the scripted human approves the delete
+```
+
+Walkthrough, the delegation/approval-rule configuration behind every part
+and verification: [docs/Demos.md](docs/Demos.md §Demo-9); the component
+itself — a plain, un-licenced image, like demoapi — lives in
+[`demo/mcp/`](demo/mcp/README.md). Protecting your **own** MCP servers the
+same way: [docs/Protecting-Your-MCP.md](docs/Protecting-Your-MCP.md).
+
 ## Performance
 
 The gateway is a policy enforcement point in front of every agent call, so its
