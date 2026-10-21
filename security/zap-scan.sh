@@ -3,9 +3,10 @@
 #
 # For each core service (gateway, authz, tokensvc, web, demoapi) it runs the
 # official ZAP baseline scan (`zap-baseline.py` inside the zaproxy/zap-stable
-# image) against the service's published port, and writes the HTML + JSON
-# report for every target into security/results/ — one file per service,
-# overwritten on every run so the folder always holds the latest reports.
+# image) against the service's published port, and writes the Markdown report
+# for every target into security/results/ — one file per service, overwritten
+# on every run so the folder always holds the latest reports (Markdown because
+# the git UI renders it; HTML/JSON are opt-in extras, see below).
 #
 # The demo stack is brought up automatically (cd demo && docker compose up -d)
 # before scanning — each ZAP container reaches its target over the host
@@ -23,11 +24,13 @@
 #
 # Overridable via env:
 #   ZAP_IMAGE   ZAP docker image        (default zaproxy/zap-stable)
-#   COMPOSE     compose command         (default: `docker compose`, else `docker-compose`)
+#   COMPOSE     compose command         (default `docker compose`, else `docker-compose`)
 #   TARGETS     "name=port ..."         (default: the five core services)
 #   GATEWAY_HOST_PORT  host port of the gateway PEP (default: demo/.env
 #                      value, else 8080)
 #   WAIT        seconds to wait for a target's /healthz (default 120)
+#   HTML=1      also write .html reports next to the .md ones
+#   JSON=1      also write .json reports next to the .md ones
 #
 # Exit code: 0 if every scan ran and no target was unreachable; 1 if any
 # target was unreachable or a scan errored. (Alert findings alone do not
@@ -112,8 +115,13 @@ for entry in "${TARGETS[@]}"; do
 
   # zap-baseline.py exit codes: 0 = no alerts, 1 = alerts found,
   # 2 = scan failure, 3 = target not reachable.
-  zap=(zap-baseline.py -t "$url" -r "$report.html" -J "$report.json" -I)
-  [ "${FULL:-0}" = 1 ] && zap=(zap-full-scan.py -t "$url" -r "$report.html" -J "$report.json" -I)
+  # Markdown is the always-written report (the git UI renders .md); the
+  # HTML and JSON variants are opt-in extras (HTML=1 / JSON=1).
+  cmd=zap-baseline.py
+  [ "${FULL:-0}" = 1 ] && cmd=zap-full-scan.py
+  zap=("$cmd" -t "$url" -w "$report.md" -I)
+  if [ "${HTML:-0}" = 1 ]; then zap+=(-r "$report.html"); fi
+  if [ "${JSON:-0}" = 1 ]; then zap+=(-J "$report.json"); fi
 
   # Reports are written inside the container at /zap/wrk (the directory this
   # ZAP image requires to be mounted for any file-based report option).
@@ -131,7 +139,9 @@ for entry in "${TARGETS[@]}"; do
     *) verdict="unknown (rc=$rc)"; FAILED=1;;
   esac
   printf '%-10s :%s  %s\n' "$name" "$port" "$verdict" | tee -a "$SUMMARY"
-  printf '  reports: %s/%s.html, %s/%s.json\n' "$RUN_DIR" "$name" "$RUN_DIR" "$name" >> "$SUMMARY"
+  printf '  reports: %s/%s.md (readable)%s%s\n' "$RUN_DIR" "$name" \
+    "$([ "${HTML:-0}" = 1 ] && printf ' + %s/%s.html' "$RUN_DIR" "$name")" \
+    "$([ "${JSON:-0}" = 1 ] && printf ' + %s/%s.json' "$RUN_DIR" "$name")" >> "$SUMMARY"
 
   if [ "$FAIL_ON_ALERTS" = 1 ] && [ "$rc" -eq 1 ]; then
     echo "$name reported alerts (FAIL_ON_ALERTS=1)" >> "$SUMMARY"
