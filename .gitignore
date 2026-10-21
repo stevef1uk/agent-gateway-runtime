@@ -1,12 +1,12 @@
 # Local runtime credentials — never commit, at any depth.
-# (Public PEMs in demo/keys/ are fine to commit; private keys and signed
-#  license tokens are credentials and must stay out of git.)
+# demo/keys/ ships the public demo fixtures at HEAD so fresh clones can run:
+#   customer_private.pem — decrypts the encrypted demo images at runtime
+#   license.token        — pre-issued demo licence (run-only, cannot mint)
+# The vendor private key is the ONLY file that could mint new tokens and it
+# is never committed anywhere.
 .env
 **/.env
 !**/.env.example
 
-# Licensing key material — private keys and signed tokens never belong in git.
-demo/keys/customer_private.pem
+# Never commit the vendor signing key (token-minting capability).
 demo/keys/vendor_private.pem
-demo/keys/*.token
-demo/keys/*.token.orig
