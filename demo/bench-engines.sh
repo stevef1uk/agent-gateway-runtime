@@ -14,23 +14,16 @@
 #   ./bench-engines.sh [-c CONC] [-d DUR] [-w WARMUP]
 #
 # Locations (override via env):
-#   COMPOSE  compose command (default: auto-detected — `docker compose`, else `docker-compose`)
+#   CONTAINER_ENGINE  docker|podman (default: auto-detected)
 set -euo pipefail
 
 cd "$(dirname "$0")"
 BENCH_DIR="$(cd bench && pwd)"
 
-# Prefer the compose plugin; fall back to the standalone docker-compose binary.
-# COMPOSE may be a multi-word command ("docker compose"), so split it into an
-# array — a quoted "$COMPOSE" would look for a binary literally named
-# "docker compose" and fail on hosts that only have the plugin.
-if [ -z "${COMPOSE:-}" ]; then
-  COMPOSE="docker compose"
-  if ! docker compose version >/dev/null 2>&1; then
-    COMPOSE="docker-compose"
-  fi
-fi
-read -ra COMPOSE <<< "$COMPOSE"
+# compose() from lib/engine.sh picks the compose plugin, the standalone
+# docker-compose binary, or `podman compose` per the chosen engine.
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
 
 # The PEP's published host port may differ from 8080 (a local OpenShell
 # gateway often owns :8080). Compose reads demo/.env; the bench must too, so
@@ -62,16 +55,16 @@ run_bench() {
 # overlay's GATEWAY_PROXY_ADDR). The bench switches policy engines, not the
 # running topology.
 echo "### engine: built-in (Go authorizer)"
-"${COMPOSE[@]}" -f docker-compose.yml up -d --no-deps authz web >/dev/null
+compose -f docker-compose.yml up -d --no-deps authz web >/dev/null
 sleep 3
 run_bench
 
 echo
 echo "### engine: OPA (Rego via opa eval)"
-"${COMPOSE[@]}" -f docker-compose.yml -f docker-compose.opa.yml up -d --no-deps authz web >/dev/null
+compose -f docker-compose.yml -f docker-compose.opa.yml up -d --no-deps authz web >/dev/null
 sleep 3
 run_bench
 
 echo
 echo "restoring the built-in engine"
-"${COMPOSE[@]}" -f docker-compose.yml up -d --no-deps authz web >/dev/null
+compose -f docker-compose.yml up -d --no-deps authz web >/dev/null

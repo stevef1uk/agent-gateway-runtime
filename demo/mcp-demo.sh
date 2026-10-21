@@ -24,9 +24,9 @@
 #      APPROVAL_WAIT seconds (default 300) for your console/Telegram decision,
 #      defaulting to DENY if nobody answers.
 #
-# Prereqs:  cd demo && docker compose -f docker-compose.yml \
+# Prereqs:  docker compose -f docker-compose.yml \
 #                  -f docker-compose.egress.yml up -d
-#           mcpsrv + gateway-mcp come up with the stack (docker compose
+#           mcpsrv + gateway-mcp come up with the stack (compose
 #           builds demo/mcp locally on first use).
 #
 # Usage:    ./mcp-demo.sh                 # A + B, then C and D if the sandbox exists
@@ -56,8 +56,8 @@ warn()  { printf "  ${YLW}• %s${RST}\n" "$*"; }
 info()  { printf "  ${YLW}• %s${RST}\n" "$*"; }
 line()  { printf "  %s\n" "$*"; }
 
-COMPOSE="docker compose"
-if ! docker compose version >/dev/null 2>&1; then COMPOSE="docker-compose"; fi
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
 
 # Ports: GATEWAY_MCP_HOST_PORT mirrors GATEWAY_HOST_PORT's override story.
 GW_MCP=${GW_MCP:-http://localhost:${GATEWAY_MCP_HOST_PORT:-8085}}
@@ -98,7 +98,7 @@ mcp_call() {
   [ -n "$token" ] && auth=(-H "Authorization: Bearer $token")
   local code
   code=$(curl -s -o /tmp/mcpdemo_last.json -w "%{http_code}" --max-time 15 \
-    -X POST "$url/mcp" "${auth[@]}" \
+    -X POST "$url/mcp" ${auth[@]+"${auth[@]}"} \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json, text/event-stream' \
     -d "$body") || return 1
@@ -113,13 +113,13 @@ gw_mcp_ready() { curl -fsS -o /dev/null "$GW_MCP/healthz"; }
 crm_json() { curl -s "http://localhost:$MCP_PORT/customers"; }
 
 audit_rows() {
-  docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+  eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
     -c "SELECT ts, agent_id, resource, action, outcome FROM audit_events
         WHERE resource LIKE '/mcp%' ORDER BY ts DESC LIMIT $1;" 2>/dev/null
 }
 
 count_by_agent() { # $1=agent_id substring
-  docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+  eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
     -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/mcp%'
         AND agent_id LIKE '%$1%';" 2>/dev/null | tr -d ' \n'
 }
@@ -169,7 +169,7 @@ line "client in the world speaks; there is nothing gateway-specific here)"
 
 if [ "${KEEP_CRM:-0}" != 1 ]; then
   line "resetting the CRM (fresh in-memory store)…"
-  $COMPOSE restart mcpsrv >/dev/null 2>&1
+  compose restart mcpsrv >/dev/null 2>&1
   until mcpsrv_ready; do sleep 1; done
 fi
 
@@ -183,7 +183,7 @@ grep -q 'add_customer' /tmp/mcpdemo_last.json \
   && okk "tools/list (no credentials):             HTTP 200 — the full CRM toolkit is exposed to anyone" \
   || { bad "unexpected: $OUT"; return 1; }
 
-BEFORE=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+BEFORE=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/mcp%';" 2>/dev/null | tr -d ' \n')
 
 OUT=$(mcp_call "$MCP" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"add_customer","arguments":{"first_name":"Mallory","last_name":"Anonymous","email":"mallory@example.com","company":"No-org"}}}')
@@ -194,7 +194,7 @@ OUT=$(mcp_call "$MCP" '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"
 OK=$(crm_json | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d['customers']))" 2>/dev/null || true)
 okk "out-of-band proof: CRM now holds $OK customers (curl :$MCP_PORT/customers)"
 
-AFTER=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+AFTER=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/mcp%';" 2>/dev/null | tr -d ' \n')
 [ "$BEFORE" = "$AFTER" ] 2>/dev/null \
   && okk "audit trail: ZERO new records during Part A — the gateway never saw any of it" \
@@ -271,7 +271,7 @@ case "$C" in
   403) okk "next tools/call after revoke:            HTTP 403 — delegation revoked (token valid, authorization gone)" ;;
   *)   bad "expected refusal, got HTTP $C: $OUT" ;;
 esac
-DENIED=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+DENIED=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE outcome='deny' AND resource LIKE '/mcp%';" 2>/dev/null | tr -d ' \n')
 [ "${DENIED:-0}" -gt 0 ] 2>/dev/null && okk "audit: the refused attempt is on the record (deny)" || warn "no deny row found"
 
@@ -302,7 +302,7 @@ if ! openshell sandbox list 2>/dev/null | awk '$1=="'"$SANDBOX_NAME"'"' | grep -
 fi
 okk "OpenClaw sandbox '$SANDBOX_NAME' is Ready"
 
-AUDIT_C0=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+AUDIT_C0=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/mcp%';" 2>/dev/null | tr -d ' \n')
 
 # --- 1. the route out of the sandbox (Demo 8's egress machinery) -------------
@@ -325,7 +325,7 @@ else
   CANDS=($(hostname -I | tr ' ' '\n' | grep -E '^(192\.168|172\.[12][0-9]\.|10\.)' | sort -u))
 fi
 GW_MCP_PORT=${GATEWAY_MCP_HOST_PORT:-8085}
-RES=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "${CANDS[@]}" "$PROVIDER_HOST")
+RES=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' ${CANDS[@]+"${CANDS[@]}"} "$PROVIDER_HOST")
 D=$(curl -s -X POST "$AUTHZ/v1/delegations/" -H 'Content-Type: application/json' \
   -d "{\"id_token\":\"$ID_TOKEN\",\"agent_id\":\"openclaw-crm-agent\",\"resources\":$RES,\"actions\":[\"read\",\"connect\"],\"expires_in_seconds\":1800}")
 EDELEG=$(printf '%s' "$D" | python3 -c "import sys,json;print(json.load(sys.stdin)['delegation']['id'])" 2>/dev/null)
@@ -350,7 +350,7 @@ else
 fi
 
 step "sandbox egress — allow the gateway-mcp PEP, find the route that works"
-for h in "${CANDS[@]}"; do
+for h in ${CANDS[@]+"${CANDS[@]}"}; do
   openshell policy update "$SANDBOX_NAME" --rule-name openclaw_egress \
     --binary /usr/bin/bash --binary /usr/bin/node --binary /usr/bin/curl \
     --binary /usr/local/bin/node --binary /usr/local/bin/openclaw \
@@ -398,7 +398,7 @@ if grep -q "demo-crm" /tmp/mcpdemo_probe.txt && grep -vq "failed to start" /tmp/
 else
   warn "probe failed — the calls above show the client-side failure verbatim"
 fi
-AUDIT_C1=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+AUDIT_C1=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/mcp%';" 2>/dev/null | tr -d ' \n')
 if [ "${AUDIT_C1:-0}" -gt "${AUDIT_C0:-0}" ] 2>/dev/null; then
   okk "audit trail: the probe's MCP calls are on the record (rows $AUDIT_C0 → $AUDIT_C1)"
@@ -430,15 +430,15 @@ printf '  └─\n'
 
 printf '%s' "$(crm_json)" | python3 -c "import sys,json; d=json.load(sys.stdin); js=[c for c in d['customers'] if c['email']=='jane.doe@example.com']; print('Jane Doe is in the CRM:', js[0]['id'] if js else 'NOT FOUND')" 2>/dev/null \
   | while IFS= read -r r; do line "  $r"; done
-AUDIT_C2=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+AUDIT_C2=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/mcp%';" 2>/dev/null | tr -d ' \n')
 if [ "${AUDIT_C2:-0}" -gt "${AUDIT_C1:-0}" ] 2>/dev/null; then
   okk "audit trail: the agent's MCP tool calls are attributed to openclaw-crm-agent (rows $AUDIT_C1 → $AUDIT_C2)"
-  docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+  eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
     -c "SELECT ts, agent_id, action, outcome, reason FROM audit_events WHERE resource LIKE '/mcp%' AND ts > now() - interval '10 minutes' ORDER BY ts DESC LIMIT 5;" 2>/dev/null \
     | grep . | while IFS= read -r r; do line "  $r"; done
 else
-  warn "no audit rows for the agent turn (inspect: docker compose logs gateway-mcp)"
+  warn "no audit rows for the agent turn (inspect: $ENGINE compose logs gateway-mcp)"
 fi
 }
 
@@ -515,7 +515,7 @@ find_sandbox_route() {
   [ -n "${AGW_URL:-}" ] && return 0
   local round h c
   for round in 1 2 3 4 5 6 7 8; do
-    for h in "${CANDS[@]}"; do
+    for h in ${CANDS[@]+"${CANDS[@]}"}; do
       [ -n "${AGW_URL:-}" ] && break 2
       c=$(osx 45 -n "$SANDBOX_NAME" --no-tty --timeout 25 -- \
         curl -sS --max-time 8 -o /dev/null -w '%{http_code}' "http://${h}:${GW_MCP_PORT}/healthz" 2>&1 | tail -1)
@@ -565,7 +565,7 @@ else
   okk "sandbox '$SANDBOX_NAME' is Ready — the agent itself will attempt the delete"
 fi
 
-AUDIT_D0=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+AUDIT_D0=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/customers%';" 2>/dev/null | tr -d ' \n')
 
 # Fresh rights for this phase (rotation, like Demo 8 round B): reads and
@@ -720,7 +720,7 @@ curl -s -X DELETE -H "Authorization: Bearer $(cat /tmp/agw-token)" '"$AGW_URL"'/
 fi
 fi   # SKIP_WAIT — the sticky-denial case has no hold to decide; jump to the proofs
 DAFTER=$(crm_count)
-AUDIT_D1=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+AUDIT_D1=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/customers%';" 2>/dev/null | tr -d ' \n')
 if [ "$WANTED" = "approved" ]; then
   if [ "$DAFTER" = "$((BEFORE_COUNT - 1))" ]; then
@@ -740,11 +740,11 @@ else
   printf '  • %s remains: %s customers (curl :%s/customers)\n' "$VICTIM_ID" "$DAFTER" "$MCP_PORT"
   printf '  • the refused attempt is on the audit record (deny)\n'
 fi
-AUDIT_D2=$(docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+AUDIT_D2=$(eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
   -c "SELECT count(*) FROM audit_events WHERE resource LIKE '/customers%';" 2>/dev/null | tr -d ' \n')
 if [ "${AUDIT_D2:-0}" -gt "${AUDIT_D0:-0}" ] 2>/dev/null; then
   okk "audit trail: the delete attempts are attributed to openclaw-crm-agent (rows $AUDIT_D0 → $AUDIT_D2):"
-  docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+  eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
     -c "SELECT ts, agent_id, resource, action, outcome, reason FROM audit_events WHERE resource LIKE '/customers%' ORDER BY ts DESC LIMIT ${AUDIT_D2:-4};" 2>/dev/null \
     | grep . | head -4 | while IFS= read -r r; do line "  $r"; done
 fi
@@ -761,11 +761,11 @@ warn "the delete was the agent's call to attempt — and your call to make."
 # -----------------------------------------------------------------------------
 step "Demo 9 — MCP under the gateway"
 bash "$DEMO_DIR/refresh-dex-redirects.sh" >/dev/null 2>&1 || true
-$COMPOSE up -d --no-recreate >/dev/null 2>&1 || true
+compose up -d --no-recreate >/dev/null 2>&1 || true
 
 UNREACHABLE=0
 mcpsrv_ready && gw_mcp_ready || UNREACHABLE=1
-[ "$UNREACHABLE" = 0 ] || { bad "stack not healthy — run: cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d"; docker compose ps; exit 1; }
+[ "$UNREACHABLE" = 0 ] || { bad "stack not healthy — run: cd demo && $ENGINE compose -f docker-compose.yml -f docker-compose.egress.yml up -d"; compose ps; exit 1; }
 
 PartA || true
 PartB || true
@@ -781,6 +781,6 @@ line "D: a delete — approval_rules hold every one: approve ⇒ gone once,"
 line "   deny ⇒ 403 and the customer stays; both on the audit record"
 line
 line "reports:    security/results/{mcpsrv,gateway-mcp}.md   (ZAP baseline)"
-line "audit:      docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway \\"
+line "audit:      $ENGINE exec agent-gateway-postgres psql -U agentgw -d agent_gateway \\"
 line "              -c \"SELECT ts, agent_id, resource, action, outcome FROM audit_events ORDER BY ts DESC LIMIT 20;\""
 line "console:    http://localhost:8083   (delegations / approvals / audit)"

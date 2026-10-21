@@ -2,12 +2,12 @@
 # ============================================================================
 # Agent Gateway — live end-to-end scripted demo (public demo stack)
 #
-# Runs the complete authorization story against the running docker compose
+# Runs the complete authorization story against the running compose
 # stack: SSO sign-in (Dex), delegation creation, agent token minting,
 # auto-allow for low-risk actions, approval hold for high-risk actions,
 # human approval, and instant revocation before the agent's eyes.
 #
-# Prereqs:   cd "$(dirname "$0")" && docker compose up -d
+# Prereqs:   cd "$(dirname "$0")" && $CONTAINER_ENGINE compose up -d
 # Usage:     ./demo.sh
 # ============================================================================
 
@@ -15,6 +15,9 @@ set -euo pipefail
 
 DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DEMO_DIR"
+
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$DEMO_DIR/lib/engine.sh"
 
 RED=''; GRN=''; YLW=''; BLU=''; BLD=''; RST=''
 if [ -t 1 ]; then
@@ -27,11 +30,8 @@ bad()   { printf "  ${RED}✗ %s${RST}\n" "$*"; }
 warn()  { printf "  ${YLW}• %s${RST}\n" "$*"; }
 line()  { printf "  %s\n" "$*"; }
 
-# Prefer the compose plugin; fall back to the standalone docker-compose binary.
-COMPOSE="docker compose"
-if ! docker compose version >/dev/null 2>&1; then
-  COMPOSE="docker-compose"
-fi
+# compose() from lib/engine.sh picks the compose plugin, the standalone
+# docker-compose binary, or `podman compose` per the chosen engine.
 
 # Published PEP port: GATEWAY_HOST_PORT (env or .env) overrides 8080, e.g. when
 # a local OpenShell gateway already owns :8080. Compose reads the same .env.
@@ -52,7 +52,7 @@ bash "$DEMO_DIR/refresh-dex-redirects.sh" || true
 # already running — so a stack brought up with an override (e.g.
 # docker-compose.opa.yml, which switches authz to the Rego policy engine) is
 # not silently reverted to the base config by the demo.
-$COMPOSE up -d --no-recreate 2>/dev/null | grep -c "Started\|Running" >/dev/null 2>&1 || true
+compose up -d --no-recreate 2>/dev/null | grep -c "Started\|Running" >/dev/null 2>&1 || true
 sleep 2
 HEALTHY=1
 for port in 8081 8082 "$GW_PORT" 8083; do
@@ -67,7 +67,7 @@ if ! curl -sf http://localhost:5556/dex/.well-known/openid-configuration >/dev/n
 else
   okk "SSO (Dex) on :5556 responding"
 fi
-[ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: docker compose up -d"; exit 1; }
+[ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
 
 # --- 1. sign in via SSO (Dex mock connector, one click) ----------------------
 step "Step 2 — sign in at the identity provider (SSO)"
@@ -215,4 +215,4 @@ line "Graphical guided demo (same stack, visual):  http://localhost:8083/demo.ht
 if curl -sf http://localhost:8083/api/policy 2>/dev/null | grep -q '"available":true'; then
   line "OPA policy playground (edit the live policy):  http://localhost:8083/policy.html"
 fi
-line "Stop everything when finished:  docker compose down"
+line "Stop everything when finished:  $ENGINE compose down"

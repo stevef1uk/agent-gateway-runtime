@@ -46,6 +46,13 @@ revocation, and an immutable audit trail.
 
 ## The problem, in one paragraph
 
+**New here?** Suggested reading order:
+
+1. This section (the problem) → [the credential story](#the-credential-story-in-one-paragraph) (how agents authenticate)
+2. [Quickstart](#quickstart) — two commands to a live stack
+3. Demo 1 — the scripted walkthrough of the whole story
+4. When you want to write your own agent against it: [`docs/Agent-Auth-Basics.md`](docs/Agent-Auth-Basics.md)
+
 AI agents call tools that do real things — payments, deployments, data
 exports. "Trust me, the agent knows what it's doing" is not a control you can
 put in front of an auditor. Agent Gateway puts a **policy enforcement point**
@@ -69,6 +76,20 @@ in front of every tool call:
    validity ≠ authorization.
 5. **Everything is audited** — allow, hold, deny, approval, approver — one
    immutable record per decision, ready for your SIEM.
+
+## The credential story in one paragraph
+
+A human grants a **delegation**; that grants the agent its two
+credentials (`delegation_id` + `agent_secret`). The agent trades them at
+**tokensvc** for a short-lived **JWT**. It uses that JWT to call the
+**tool gateway** (`Authorization: Bearer ...`) or to authenticate at the
+**egress proxy** (Basic username = token, for OpenShell supervisors).
+Every single call is independently re-authorized against the
+delegation: allowed, held for human approval, or denied.
+
+Want the step-by-step version — the exact HTTP calls, worked curl
+examples and a troubleshooting table? It's all in
+[docs/Agent-Auth-Basics.md](docs/Agent-Auth-Basics.md).
 
 ## Architecture
 
@@ -110,6 +131,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`demo/api/`](demo/api/) · [`demo/mcp/`](demo/mcp/) | The demo protected API (Demos 4/8) and, new in Demo 9, the demo MCP server (mcpsrv) — both buildable from this repo |
 | [`docs/Deployment-Guide.md`](docs/Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
 | [`docs/Agent-Identity.md`](docs/Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
+| [`docs/Agent-Auth-Basics.md`](docs/Agent-Auth-Basics.md) | How agents actually get a credential — a beginners' guide to the delegation → mint → JWT dance, with copy-paste curl examples and a troubleshooting table |
 | [`docs/Integration-Patterns.md`](docs/Integration-Patterns.md) | Inserting the gateway between existing agents and back ends/MCP servers with zero or one-line changes |
 | [`docs/Local-Agents.md`](docs/Local-Agents.md) | Personal/local agent runtimes (OpenClaw, Hermes, your own) — per-skill delegations, MCP adapter, spend caps, phone-side revoke |
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
@@ -131,9 +153,64 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 
 ## Quickstart
 
-Requirements: Docker Engine 24+, `docker compose`, `curl`, `jq` optional.
+Requirements: Docker Engine 24+ **or** Podman 4.7+ (`podman compose`), `docker compose` provider, `curl`; `jq` optional.
 
-**Opening the console from another device (or via `127.0.0.1`/a LAN IP)?**
+```bash
+cd demo
+docker compose up -d          # 7 containers, first pull takes a minute
+./demo.sh                     # scripted end-to-end walkthrough
+```
+
+Then open:
+
+| URL | What |
+|---|---|
+| http://localhost:8083/demo.html | **Graphical guided demo** (animated, interactive — great to show people) |
+| http://localhost:8083 | Admin console: create/revoke delegations, decide approvals, full audit trail |
+| http://localhost:8083/policy.html | **OPA policy playground** — edit the live Rego policy and watch hot reload (needs `demo/docker-compose.opa.yml`) |
+| http://localhost:8080/v1/* | The gateway itself — this is the endpoint your agents call |
+
+<details>
+<summary><strong>Using Podman instead of Docker</strong> (click if that's your engine)</summary>
+
+Every demo script auto-detects the engine (Docker first, then Podman), or you
+choose explicitly:
+
+```bash
+CONTAINER_ENGINE=podman ./demo/demo.sh        # any demo script honours this
+ENGINE=podman make image                      # demo-api / MCP image builds (host arch)
+make pull-images ENGINE=podman                # compose pull via Podman
+```
+
+Rootless Podman notes:
+
+* `podman compose` delegates to a compose provider (docker-compose or
+  podman-compose) over the rootless Podman socket — start it once per boot:
+  `systemctl --user start podman.socket`
+  (on hosts without the unit: `podman system service --time=0 &`)
+* On Fedora/RHEL with SELinux enforcing, bind-mounted demo dirs may need a
+  relabel — add `:z` via a compose override if mounts appear empty.
+* Demo image builds (`make image`, `make image-mcp`) are host-arch only under
+  Podman; the multi-arch `push` targets remain Docker/buildx (publishing).
+
+Rootless Podman troubleshooting (facts hit on a real Debian 13 box):
+
+* `runc: string is not a valid action for seccomp` on every `podman run`,
+  even bare: the Docker-bundled `runc` (containerd.io) cannot parse podman's
+  default seccomp profile — install Debian's `crun` and pin it:
+  `run: sudo apt install -y crun && echo 'runtime = "crun"' › ~/.config/containers/containers.conf`
+  under `[engine]`.
+* `crun: invalid seccomp action ''` on everything: a machine-wide
+  seccomp overwrite broke the default profile — if you need a LandLock-style
+  deny-all profile for one workload, pass it explicitly
+  (`--security-opt seccomp=<file>`), never as `/usr/share/containers/seccomp.json`.
+* Running both stacks at once is fine (separate stores), but they publish the
+  same host ports — bring one down before bringing the other up
+  (`CONTAINER_ENGINE=podman compose down` vs `docker compose down`).
+
+</details>
+
+### Opening the console from another device (or via `127.0.0.1`/a LAN IP)?
 SSO sign-in fails with `Bad Request — Unregistered redirect_uri` unless the
 exact browser URI is registered in `demo/dex/config.yaml`
 (`staticClients[].redirectURIs`). `localhost`/`127.0.0.1` are in the list
@@ -171,21 +248,6 @@ To publish to your own registry:
 > k3s/`kubectl` cluster (own namespace `agentgw`, NodePorts, the live-policy
 > shared volume) — see [`k3s/README.md`](k3s/README.md). The console, guided
 > demo and policy playground all run untouched at `http://<node>:30083`.
-
-```bash
-cd demo
-docker compose up -d          # 7 containers, first pull takes a minute
-./demo.sh                     # scripted end-to-end walkthrough
-```
-
-Then open:
-
-| URL | What |
-|---|---|
-| http://localhost:8083/demo.html | **Graphical guided demo** (animated, interactive — great to show people) |
-| http://localhost:8083 | Admin console: create/revoke delegations, decide approvals, full audit trail |
-| http://localhost:8083/policy.html | **OPA policy playground** — edit the live Rego policy and watch hot reload (needs `demo/docker-compose.opa.yml`) |
-| http://localhost:8080/v1/* | The gateway itself — this is the endpoint your agents call |
 
 The bundled development SSO has two fixture human accounts (`alice@example.com`,
 `bob@example.com`) — they exist only in the demo IdP so logins work with no

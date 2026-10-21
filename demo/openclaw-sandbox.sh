@@ -74,21 +74,13 @@ if ! have openshell; then
   bad "openshell CLI is not on PATH. Install OpenShell first: https://docs.nvidia.com/openshell/latest"
   exit 1
 fi
-if ! have docker; then
-  bad "docker is not on PATH (needed to build the image for the local gateway)."
+if ! have docker && ! have podman; then
+  bad "neither docker nor podman is on PATH (needed to build the image for the local gateway)."
   exit 1
 fi
 
-# Compose ships as a docker plugin (`docker compose`) or as a standalone
-# binary (`docker-compose`). Use whichever is installed.
-if docker compose version >/dev/null 2>&1; then
-  COMPOSE=(docker compose)
-elif have docker-compose; then
-  COMPOSE=(docker-compose)
-else
-  bad "Docker Compose is not installed (need 'docker compose' or 'docker-compose')."
-  exit 1
-fi
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
 
 sandbox_exists() {
   openshell sandbox list 2>/dev/null | awk '{print $1}' | grep -qx "$SANDBOX_NAME"
@@ -105,7 +97,7 @@ sandbox_ready() {
 
 build() {
   step "Build the OpenClaw image"
-  docker build -t "$IMAGE" demo/openclaw
+  eng build -t "$IMAGE" demo/openclaw
   okk "image built: $IMAGE"
 }
 
@@ -258,7 +250,7 @@ stack_up() {
   # Register this machine's console URIs in the dex client first (no-op when
   # already listed) so browser sign-in works on a fresh clone/Mac.
   bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/refresh-dex-redirects.sh" || true
-  "${COMPOSE[@]}" -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d
+  compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d
   okk "stack up (egress proxy on :8088)"
 }
 
@@ -326,7 +318,7 @@ ensure_proxy_basic_auth() {
         ;;
       *"is disabled"*)
         bad "Basic proxy auth is disabled on the gateway — the egress overlay sets PROXY_BASIC_AUTH=1"
-        line "rerun: ${COMPOSE[*]} -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d"
+        line "rerun: $ENGINE compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d"
         return 1
         ;;
       *)
@@ -349,7 +341,7 @@ ensure_proxy_basic_auth() {
 
     # Recreate the gateway with the wider source list, then probe again.
     PROXY_BASIC_AUTH_CIDRS="$current" \
-      "${COMPOSE[@]}" -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d gateway >/dev/null
+      compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d gateway >/dev/null
     sleep 2
   done
   bad "could not confirm the Basic-auth source allowlist"
@@ -381,7 +373,7 @@ ensure_gateway_token() {
   fi
   if ! curl -sf -o /dev/null --max-time 3 http://localhost:8081/healthz; then
     bad "Agent Gateway authz is not reachable on :8081"
-    line "start the demo stack first: ${COMPOSE[*]} -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d"
+    line "start the demo stack first: $ENGINE compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d"
     exit 1
   fi
 
@@ -538,7 +530,7 @@ chat() {
   fi
   ensure_sandbox
   # Docker re-picks the compose subnet whenever the network is recreated
-  # (fresh install, docker restart, down/up), and the gateway's Basic-auth
+  # (fresh install, eng restart, down/up), and the gateway's Basic-auth
   # source allowlist is expressed as a CIDR of the subnet's gateway IP — a
   # stale .env then silently 407s every proxied CONNECT and the chat's model
   # call hangs. Measure the allowlist per machine on every chat path, not

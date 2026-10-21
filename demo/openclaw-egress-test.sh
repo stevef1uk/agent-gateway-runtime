@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+
 # ============================================================================
 # Prove the egress rules: HTTP outward calls from OpenClaw's sandbox.
 #
@@ -165,7 +169,7 @@ if [ "$RUN_GW" = 1 ]; then
   [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:8088/ 2>/dev/null)" = "407" ] || ok_stack=0
   if [ "$ok_stack" != 1 ]; then
     bad "Agent Gateway stack not reachable (authz:8081, tokensvc:8082, proxy:8088)"
-    line "start it:  cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d"
+    line "start it:  docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d"
     FAIL=$((FAIL+1)); RUN_GW=0
   fi
 fi
@@ -322,7 +326,7 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
   # or the hold did not trigger. The gateway's own log decides which: holds are
   # logged with a `proxy:` prefix, so silence over the window implicates routing.
   route_evidence() {
-    docker logs agent-gateway-gateway --since 3m 2>/dev/null | grep -c 'proxy: ' || true
+    eng logs agent-gateway-gateway --since 3m 2>/dev/null | grep -c 'proxy: ' || true
   }
   teach_routing() {
     if [ "$(route_evidence)" = "0" ]; then

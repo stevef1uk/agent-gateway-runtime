@@ -20,6 +20,9 @@
 # Nothing is removed: entries already present (other hosts' LAN URIs, etc.)
 # are kept.
 set -euo pipefail
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+
 
 PORT="${DEX_CONSOLE_PORT:-8083}"
 DO_RESTART=0
@@ -100,11 +103,11 @@ PY
 changed=$?
 if [ "$changed" = "2" ] || [ "$DO_RESTART" = "1" ]; then
   if command -v docker >/dev/null; then
-    if docker compose version >/dev/null 2>&1; then COMPOSE=(docker compose); else COMPOSE=(docker-compose); fi
+    if compose version >/dev/null 2>&1; then COMPOSE=(compose); else COMPOSE=(docker-compose); fi
   else
     COMPOSE=(docker-compose)
   fi
   echo "recreating dex to re-read $CFG …"
-  "${COMPOSE[@]}" -f docker-compose.yml up -d --force-recreate dex >/dev/null
+  compose -f docker-compose.yml up -d --force-recreate dex >/dev/null
 fi
 exit 0

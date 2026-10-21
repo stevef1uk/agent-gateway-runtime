@@ -42,6 +42,9 @@
 #     checks. This is still a narrow allowlist, not a blanket outbound permit.
 
 set -euo pipefail
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+
 
 CHECK_ONLY=0
 if [ "${1:-}" = "--check" ]; then
@@ -148,7 +151,7 @@ fi
 
 if ! curl -fsS "$AUTHZ_URL/healthz" >/dev/null 2>&1; then
   echo "Agent Gateway authz service is not reachable at $AUTHZ_URL" >&2
-  echo "Start the demo stack first: cd demo && docker compose up -d" >&2
+  echo "Start the demo stack first: cd demo && $ENGINE compose up -d" >&2
   exit 1
 fi
 

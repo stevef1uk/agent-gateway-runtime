@@ -21,7 +21,12 @@ MCPSRV_IMAGE     := $(REGISTRY)/$(IMAGE_NS)-mcpsrv
 BUILDER          ?= agent-gateway-builder
 PLATFORMS        ?= linux/amd64,linux/arm64
 NODE             ?= 192.168.1.74
-COMPOSE          ?= docker compose
+
+# Container engine: docker (default) or podman. Auto-detected when unset.
+# Podman note: rootless compose needs its API socket up
+# (systemctl --user start podman.socket); image builds here are host-arch only.
+ENGINE ?= $(shell command -v docker >/dev/null 2>&1 && echo docker || echo podman)
+COMPOSE          ?= $(ENGINE) compose
 
 # Arguments passed through to the benchmark by `make bench` (see docs/Benchmarking.md).
 BENCH_ARGS       ?=
@@ -36,12 +41,12 @@ test: ## Vet + test the demo API and MCP server, and vet the benchmark tool
 	cd demo/bench && go vet ./...
 
 .PHONY: image
-image: ## Build the demo API image (host arch)
-	docker build -f demo/api/Dockerfile -t $(API_IMAGE):$(API_VERSION) demo/api
+image: ## Build the demo API image (host arch — docker or podman per ENGINE)
+	$(ENGINE) build -f demo/api/Dockerfile -t $(API_IMAGE):$(API_VERSION) demo/api
 
 .PHONY: image-mcp
-image-mcp: ## Build the demo MCP server image (host arch)
-	docker build -f demo/mcp/Dockerfile -t $(MCPSRV_IMAGE):$(MCPSRV_VERSION) demo/mcp
+image-mcp: ## Build the demo MCP server image (host arch — docker or podman per ENGINE)
+	$(ENGINE) build -f demo/mcp/Dockerfile -t $(MCPSRV_IMAGE):$(MCPSRV_VERSION) demo/mcp
 
 .PHONY: push
 push: ## Build + push the demo API (multi-arch) — the buildx builder must exist

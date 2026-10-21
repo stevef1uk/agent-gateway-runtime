@@ -16,6 +16,9 @@
 #
 # Linux: use demo/start-openshell-gateway-linux.sh instead.
 set -euo pipefail
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+
 
 ENDPOINT="${GATEWAY_ENDPOINT:-https://127.0.0.1:17670}"
 GW_NAME="${GATEWAY_NAME:-openshell}"
@@ -50,7 +53,9 @@ if [ "$MANAGED" -eq 0 ]; then
     sleep 1
   done
 
-  export OPENSHELL_COMPUTE_DRIVER=docker
+  # Choose the compute driver at start time (docker | podman).
+  # Precedence: OPENSHELL_COMPUTE_DRIVER env if already set — no file pin needed.
+  export OPENSHELL_COMPUTE_DRIVER="${OPENSHELL_COMPUTE_DRIVER:-docker}"
   mkdir -p "$TLS_DIR" "$(dirname "$GATEWAY_LOG")"
   if [ ! -f "${TLS_DIR}/server/tls.crt" ]; then
     openshell-gateway generate-certs --output-dir "$TLS_DIR" --server-san host.openshell.internal
@@ -101,20 +106,20 @@ fi
 # Mac's loopback only, and it survives LAN-IP changes; the LAN IP is only the
 # fallback when the VM cannot resolve/reach host.docker.internal.
 if have docker; then
-  docker rm -f gw-fwd >/dev/null 2>&1 || true
+  eng rm -f gw-fwd >/dev/null 2>&1 || true
   socat_target=""
-  if docker run --rm --network host curlimages/curl -sk -m 5 -o /dev/null \
+  if eng run --rm --network host curlimages/curl -sk -m 5 -o /dev/null \
       "https://host.docker.internal:${GW_PORT}" 2>/dev/null; then
     socat_target="host.docker.internal:${GW_PORT}"
   else
     IP=$(ipconfig getifaddr "$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')" 2>/dev/null || true)
-    if [ -n "$IP" ] && docker run --rm --network host curlimages/curl -sk -m 5 -o /dev/null \
+    if [ -n "$IP" ] && eng run --rm --network host curlimages/curl -sk -m 5 -o /dev/null \
         "https://${IP}:${GW_PORT}" 2>/dev/null; then
       socat_target="${IP}:${GW_PORT}"
     fi
   fi
   if [ -n "$socat_target" ]; then
-    docker run -d --name gw-fwd --restart unless-stopped --network host \
+    eng run -d --name gw-fwd --restart unless-stopped --network host \
       alpine/socat TCP-LISTEN:"$GW_PORT",bind=127.0.0.1,fork,reuseaddr TCP:"${socat_target}" >/dev/null
     echo "✓ gw-fwd forwards Docker-VM 127.0.0.1:${GW_PORT} → ${socat_target}"
   else
@@ -137,11 +142,11 @@ openshell gateway select "$GW_NAME"
 
 # --- 5. verify: control plane from the Mac, data path through the VM -----------
 openshell status
-probe=$(docker run --rm --network host curlimages/curl -sk -m 5 -o /dev/null \
+probe=$(eng run --rm --network host curlimages/curl -sk -m 5 -o /dev/null \
   -w "%{http_code}" "$ENDPOINT" 2>/dev/null || true)
 if [ -z "$probe" ] || [ "$probe" = "000" ]; then
   echo "✗ gateway NOT reachable through the Docker VM forwarder (got: ${probe:-none})" >&2
-  echo "  check gw-fwd: docker logs gw-fwd; a restart loop usually means the target above was dead" >&2
+  echo "  check gw-fwd: $ENGINE logs gw-fwd; a restart loop usually means the target above was dead" >&2
   exit 1
 fi
 echo "✓ VM→Mac data path verified (HTTP ${probe} through gw-fwd; 404 is expected)"

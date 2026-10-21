@@ -6,7 +6,7 @@
 # Requires the gateway egress proxy listener (images >= gateway 1.0.22):
 #     GATEWAY_PROXY_ADDR=:8088   (+ published port 8088)
 # Enable it with the committed overlay:
-#     docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+#     compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 # ============================================================================
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "this script must run under BASH — the way it was invoked bypassed the" >&2
@@ -44,8 +44,8 @@ bad()   { printf "  ${RED}✗ %s${RST}\n" "$*"; }
 warn()  { printf "  ${YLW}• %s${RST}\n" "$*"; }
 line()  { printf "  %s\n" "$*"; }
 
-COMPOSE="docker compose"
-if ! docker compose version >/dev/null 2>&1; then COMPOSE="docker-compose"; fi
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
 
 PROXY_URL="http://localhost:8088"
 PROXY_HOST="${PROXY_URL#*//}"; PROXY_HOST="${PROXY_HOST%%:*}"
@@ -63,7 +63,7 @@ HOST_DENY="nuiance.example.net"
 
 # --- 0. stack & health -------------------------------------------------------
 step "Step 1 — services & health (incl. the egress proxy)"
-$COMPOSE up -d --no-recreate >/dev/null 2>&1 || true
+compose up -d --no-recreate >/dev/null 2>&1 || true
 sleep 2
 HEALTHY=1
 for port in 8081 8082 "$GW_PORT" 8083; do
@@ -86,7 +86,7 @@ if ! curl -sf http://localhost:5556/dex/.well-known/openid-configuration >/dev/n
 else
   okk "SSO (Dex) on :5556 responding"
 fi
-[ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: docker compose up -d"; exit 1; }
+[ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
 
 # --- 1. sign in via SSO ------------------------------------------------------
 step "Step 2 — sign in at the identity provider (SSO)"
@@ -308,6 +308,6 @@ line "  · undelegated hosts are denied by policy without bothering a human"
 line "  · CONNECT tunnels are host:port-allowlisted; TLS stays end to end"
 line "  · revocation beats valid tokens immediately"
 echo ""
-line "Audit:  docker compose logs gateway | grep egress   (alice / agent / host / why permitted)"
+line "Audit:  $ENGINE compose logs gateway | grep egress   (alice / agent / host / why permitted)"
 line "Explore: Web console http://localhost:8083  ·  docs/OpenShell-Integration.md (main repo)"
 echo ""

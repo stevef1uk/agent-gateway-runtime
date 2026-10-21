@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+
 # ============================================================================
 # Demo 8 — Human Delegation under prompt injection (OpenClaw → Payments API).
 #
@@ -185,7 +189,7 @@ if [ "$(uname -s)" = "Darwin" ] && [ -f demo/.env ] \
    && ! grep -q "192.168.65.0/24" demo/.env; then
   info "Docker Desktop on macOS detected — adding 192.168.65.0/24 to PROXY_BASIC_AUTH_CIDRS in demo/.env"
   printf '\nPROXY_BASIC_AUTH_CIDRS=127.0.0.0/8,::1/128,192.168.65.0/24,172.16.0.0/12\n' >> demo/.env
-  docker compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d --force-recreate gateway >/dev/null 2>&1
+  compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d --force-recreate gateway >/dev/null 2>&1
   for _ in 1 2 3 4 5 6; do
     curl -sf --max-time 3 "$GW/healthz" >/dev/null && break
     sleep 3
@@ -194,7 +198,7 @@ if [ "$(uname -s)" = "Darwin" ] && [ -f demo/.env ] \
 fi
 for u in "$GW" "$AUTHZ" "$TS" "$WEB" "$DEMOAPI_URL"; do
   curl -sf --max-time 5 "$u/healthz" >/dev/null \
-    || fail "service unhealthy: $u — start the stack: cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d"
+    || fail "service unhealthy: $u — start the stack: docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d"
 done
 okk "gateway · authz · tokensvc · console · demoapi all healthy"
 
@@ -203,7 +207,7 @@ if ! curl -s --max-time 3 "$DEMOAPI_URL/healthz" | grep -q payments_api; then
   bad "demoapi is an older build — this demo needs the Payments-API surface (≥ 1.0.5)"
   line "rebuild and restart the stack:"
   line "  make image"
-  line "  cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d --force-recreate demoapi"
+  line "  docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d --force-recreate demoapi"
   exit 1
 fi
 okk "demoapi carries the Payments-API surface"
@@ -699,7 +703,7 @@ okk "after revoke: HTTP 403 — instant enforcement with the token still valid o
 
 if [ -z "${NODE_ARG:-}" ]; then
   step "audit trail (last 12 decisions)"
-  docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway \
+  eng exec agent-gateway-postgres psql -U agentgw -d agent_gateway \
     -c "SELECT ts, agent_id, action, outcome, reason FROM audit_events ORDER BY ts DESC LIMIT 12;" 2>/dev/null \
     || info "audit query skipped (docker not available?)"
 fi
@@ -707,7 +711,7 @@ fi
 step "11. the Payments API's own evidence — did it do what the human decided?"
 line "the API's execution log — one line per EXECUTED call; held and denied attempts never reach it:"
 if [ -z "${NODE_ARG:-}" ]; then
-  docker logs agent-gateway-demoapi 2>&1 | grep "path=/payments" | tail -4 | sed 's/^/  │ /' || true
+  eng logs agent-gateway-demoapi 2>&1 | grep "path=/payments" | tail -4 | sed 's/^/  │ /' || true
 fi
 line "every executed payment on record:"
 api "$DEMOAPI_URL/payments" | python3 -c "

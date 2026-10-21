@@ -24,10 +24,8 @@ bad() { printf "  ${RED}✗ %s${RST}\n" "$*"; }
 warn() { printf "  ${YLW}• %s${RST}\n" "$*"; }
 line() { printf "  %s\n" "$*"; }
 
-COMPOSE="docker compose"
-if ! docker compose version >/dev/null 2>&1; then
-  COMPOSE="docker-compose"
-fi
+# Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
 
 PROXY_URL="http://localhost:8088"
 ADMIN_TOKEN="${ADMIN_TOKEN:-agent-gateway-demo-admin}"
@@ -41,7 +39,7 @@ GW_PORT=${GW##*:}
 
 # --- 0. health ---------------------------------------------------------------
 step "Step 1 — services & proxy health"
-$COMPOSE up -d --no-recreate >/dev/null 2>&1 || true
+compose up -d --no-recreate >/dev/null 2>&1 || true
 sleep 2
 HEALTHY=1
 for port in 8081 8082 "$GW_PORT" 8083; do
@@ -58,7 +56,7 @@ else
   bad "egress proxy posture unexpected: ${POSTURE} (want 407)"
   exit 1
 fi
-[ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: docker compose up -d"; exit 1; }
+[ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
 
 # --- 1. SSO sign-in ----------------------------------------------------------
 step "Step 2 — sign in at the identity provider"
