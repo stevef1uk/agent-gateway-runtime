@@ -11,6 +11,16 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 ./demo.sh
 ```
 
+> **Using Podman instead of Docker?** Everywhere below, read `docker compose`
+> as **`podman compose`** — Podman's native compose subcommand (e.g.
+> `podman compose -f docker-compose.yml -f docker-compose.egress.yml up -d`).
+> The demo scripts themselves need nothing from you: they auto-detect the
+> engine (Docker first, then Podman), or you force one with
+> `CONTAINER_ENGINE=podman`. Do **not** keep using the `docker` CLI — with
+> Docker Desktop stopped there is no Docker socket, and `docker compose`
+> fails with `dial unix /var/run/docker.sock: no such file or directory`
+> even though your Podman machine is perfectly healthy.
+
 | Endpoint | Status |
 |---|---|
 | http://localhost:8083 | admin console |

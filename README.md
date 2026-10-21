@@ -177,10 +177,17 @@ Every demo script auto-detects the engine (Docker first, then Podman), or you
 choose explicitly:
 
 ```bash
+podman compose up -d                          # native Podman compose — not "docker compose"
 CONTAINER_ENGINE=podman ./demo/demo.sh        # any demo script honours this
 ENGINE=podman make image                      # demo-api / MCP image builds (host arch)
 make pull-images ENGINE=podman                # compose pull via Podman
 ```
+
+Note: `podman compose` is Podman's own subcommand — with Docker Desktop
+stopped there is no Docker socket, so `docker compose` (the `docker` CLI)
+fails with `dial unix /var/run/docker.sock: no such file or directory` even
+though the Podman machine is healthy. The demo docs' `docker compose`
+examples read as `podman compose` under Podman.
 
 Rootless Podman notes:
 
