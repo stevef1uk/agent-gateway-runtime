@@ -25,7 +25,10 @@ NODE             ?= 192.168.1.74
 # Container engine: docker (default) or podman. Auto-detected when unset.
 # Podman note: rootless compose needs its API socket up
 # (systemctl --user start podman.socket); image builds here are host-arch only.
-ENGINE ?= $(shell command -v docker >/dev/null 2>&1 && echo docker || echo podman)
+# Detect a *working* engine, not just a client binary: on a machine with
+# Docker Desktop stopped but its CLI installed, `command -v docker` still
+# succeeds while the socket is dead — so probe the daemon too.
+ENGINE ?= $(shell command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && echo docker || echo podman)
 COMPOSE          ?= $(ENGINE) compose
 
 # Arguments passed through to the benchmark by `make bench` (see docs/Benchmarking.md).

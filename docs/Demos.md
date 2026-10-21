@@ -14,12 +14,18 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 > **Using Podman instead of Docker?** Everywhere below, read `docker compose`
 > as **`podman compose`** — Podman's native compose subcommand (e.g.
 > `podman compose -f docker-compose.yml -f docker-compose.egress.yml up -d`).
-> The demo scripts themselves need nothing from you: they auto-detect the
-> engine (Docker first, then Podman), or you force one with
-> `CONTAINER_ENGINE=podman`. Do **not** keep using the `docker` CLI — with
-> Docker Desktop stopped there is no Docker socket, and `docker compose`
-> fails with `dial unix /var/run/docker.sock: no such file or directory`
-> even though your Podman machine is perfectly healthy.
+> Do **not** keep using the `docker` CLI — with Docker Desktop stopped there
+> is no Docker socket, and `docker compose` fails with
+> `dial unix /var/run/docker.sock: no such file or directory` even though
+> your Podman machine is perfectly healthy.
+>
+> The demo scripts and the repo's `make` targets (image builds,
+> `openclaw-demo`, …) auto-detect the engine and need nothing from you —
+> detection probes for a *reachable* engine, so a quit-but-installed Docker
+> Desktop client is skipped, not chosen (scripts: `CONTAINER_ENGINE=podman`
+> to force; make: `ENGINE=podman`). On older commits, if `docker compose` or
+> plain `make` still try a dead Docker socket, `git pull`, or force with the
+> overrides above.
 
 | Endpoint | Status |
 |---|---|

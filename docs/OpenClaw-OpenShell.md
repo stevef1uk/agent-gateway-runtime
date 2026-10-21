@@ -161,6 +161,12 @@ secret itself stays on your machine and in your environment.
 
 ## Quick start
 
+> Podman machine? The `make openclaw-*` targets build/pull images through
+> `ENGINE=` which auto-detects a *reachable* engine (a quit-but-installed
+> Docker Desktop is skipped); force with `ENGINE=podman make openclaw-demo`
+> if detection ever hits a dead Docker socket. Compose boilerplate:
+> `docker compose` below reads as `podman compose`.
+
 ```bash
 # everything: build the image, create the sandbox, configure the provider, chat
 make openclaw-demo

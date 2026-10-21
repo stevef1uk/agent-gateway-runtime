@@ -189,6 +189,12 @@ fails with `dial unix /var/run/docker.sock: no such file or directory` even
 though the Podman machine is healthy. The demo docs' `docker compose`
 examples read as `podman compose` under Podman.
 
+The same applies to the repo's `make` targets (image builds, `openclaw-demo`, …):
+detection probes for a *reachable* engine — a quit-but-installed Docker
+Desktop client is skipped, not chosen. On older commits, if plain `make`
+runs `docker build` into a dead socket, `git pull` or force
+`ENGINE=podman make image`.
+
 Rootless Podman notes:
 
 * `podman compose` delegates to a compose provider (docker-compose or
