@@ -1,5 +1,12 @@
 # Local runtime credentials — never commit, at any depth.
-# (demo/keys/* are intentional public development fixtures; only .env is secret.)
+# (Public PEMs in demo/keys/ are fine to commit; private keys and signed
+#  license tokens are credentials and must stay out of git.)
 .env
 **/.env
 !**/.env.example
+
+# Licensing key material — private keys and signed tokens never belong in git.
+demo/keys/customer_private.pem
+demo/keys/vendor_private.pem
+demo/keys/*.token
+demo/keys/*.token.orig
