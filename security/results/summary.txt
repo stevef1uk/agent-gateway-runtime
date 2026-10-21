@@ -1,0 +1,13 @@
+ZAP scan — 2026-10-21 04:38:18 UTC
+image: zaproxy/zap-stable  mode: baseline
+
+gateway    :9000  no alerts
+  reports: security/results/gateway.html, security/results/gateway.json
+authz      :8081  no alerts
+  reports: security/results/authz.html, security/results/authz.json
+tokensvc   :8082  no alerts
+  reports: security/results/tokensvc.html, security/results/tokensvc.json
+web        :8083  no alerts
+  reports: security/results/web.html, security/results/web.json
+demoapi    :8090  no alerts
+  reports: security/results/demoapi.html, security/results/demoapi.json

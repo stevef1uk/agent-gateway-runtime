@@ -32,9 +32,22 @@
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# One instance at a time: every run rotates the sandbox supervisor's upstream
+# credential (stop + start) — two concurrent runs kick each other's tunnels
+# out from under them and both fail at the egress probe. mkdir-lock is
+# portable (flock is not on macOS).
+LOCK_DIR="/tmp/agent-gateway-human-delegation.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  fail "another human-delegation run is in progress (lock: $LOCK_DIR) — wait for it or: rm -rf $LOCK_DIR"
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
 RED=''; GRN=''; YLW=''; CYN=''; RST=''
 if [ -t 1 ]; then
-  RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'; CYN='\033[0;36m'; RST='\033[0m'
+  # Real escape BYTES (not backslash strings): printf only interprets \033 in
+  # the format string, and several printfs pass the colors as %s arguments —
+  # with literal '\033' those print as text on a TTY (macOS).
+  RED=$(printf '\033[0;31m'); GRN=$(printf '\033[0;32m'); YLW=$(printf '\033[0;33m'); CYN=$(printf '\033[0;36m'); RST=$(printf '\033[0m')
 fi
 step()  { printf '\n%s== %s%s\n' "$CYN" "$*" "$RST"; }
 okk()   { printf "  ${GRN}✓ %s${RST}\n" "$*"; }
@@ -135,10 +148,17 @@ pep() { curl -s --max-time 20 "$@"; }
 # Every sandbox exec gets a HOST-side hard timeout: openshell's own --timeout
 # has not always fired, and a wedged turn must never hang the demo. The
 # fallbacks (staged payloads, direct attempts) keep the run meaningful when a
-# turn comes up silent.
+# turn comes up silent. macOS has no GNU timeout — gtimeout (coreutils) or a
+# bare call as last resort.
 osx() { # <max-secs> <openshell sandbox exec args…>
   local t="$1"; shift
-  timeout -k 10 "$t" openshell sandbox exec "$@"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 10 "$t" openshell sandbox exec "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout -k 10 "$t" openshell sandbox exec "$@"
+  else
+    openshell sandbox exec "$@"
+  fi
 }
 
 payment_record_count() {
@@ -156,6 +176,22 @@ tg_send() { # text
 
 # ---------------------------------------------------------------------------
 step "0. services"
+# macOS + Docker Desktop: the sandbox supervisor reaches the egress proxy from
+# the Docker VM's host-gateway block (192.168.65.0/24) — without that CIDR in
+# the gateway's PROXY_BASIC_AUTH_CIDRS every chained CONNECT answers 407 and
+# the agent's model calls hang. Add it and recreate the gateway (same remedy
+# openclaw-sandbox.sh applies), then carry on.
+if [ "$(uname -s)" = "Darwin" ] && [ -f demo/.env ] \
+   && ! grep -q "192.168.65.0/24" demo/.env; then
+  info "Docker Desktop on macOS detected — adding 192.168.65.0/24 to PROXY_BASIC_AUTH_CIDRS in demo/.env"
+  printf '\nPROXY_BASIC_AUTH_CIDRS=127.0.0.0/8,::1/128,192.168.65.0/24,172.16.0.0/12\n' >> demo/.env
+  docker compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml up -d --force-recreate gateway >/dev/null 2>&1
+  for _ in 1 2 3 4 5 6; do
+    curl -sf --max-time 3 "$GW/healthz" >/dev/null && break
+    sleep 3
+  done
+  okk "gateway recreated with the Docker Desktop source CIDR"
+fi
 for u in "$GW" "$AUTHZ" "$TS" "$WEB" "$DEMOAPI_URL"; do
   curl -sf --max-time 5 "$u/healthz" >/dev/null \
     || fail "service unhealthy: $u — start the stack: cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d"
@@ -241,7 +277,20 @@ if [ "$NO_DIALOGUE" != 1 ]; then
   # path). No approval rule here — the tunnel is not the sensitive action; the
   # PEP governs what rides inside it.
   step "3. egress delegation — model host + gateway host, tunnels run plainly"
-  mapfile -t CANDS < <(hostname -I | tr ' ' '\n' | grep -E '^(192\.168|172\.[12][0-9]\.|10\.)' | sort -u)
+  # Candidate addresses for the host-running-the-PEP, per platform:
+  #   Linux (docker engine)  — the host's RFC1918 addresses, probed from inside
+  #   macOS (Docker Desktop) — host.docker.internal is THE documented path
+  if [ "$(uname -s)" = "Darwin" ]; then
+    CANDS=()
+    for h in host.docker.internal "$(ipconfig getifaddr en0 2>/dev/null)" "$(ipconfig getifaddr en1 2>/dev/null)"; do
+      [ -n "$h" ] || continue
+      dup=0
+      for c in ${CANDS[@]:-}; do [ "$c" = "$h" ] && dup=1; done
+      [ "$dup" = 0 ] && CANDS+=("$h")
+    done
+  else
+    CANDS=($(hostname -I | tr ' ' '\n' | grep -E '^(192\.168|172\.[12][0-9]\.|10\.)' | sort -u))
+  fi
   RES=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "${CANDS[@]}" "$PROVIDER_HOST")
   D=$(curl -s -X POST "$AUTHZ/v1/delegations/" -H 'Content-Type: application/json' \
     -d "{\"id_token\":\"$IT\",\"agent_id\":\"$AGENT_ID\",\"resources\":$RES,\"actions\":[\"read\",\"connect\"],\"expires_in_seconds\":$TTL}")
@@ -258,6 +307,8 @@ if [ "$NO_DIALOGUE" != 1 ]; then
   if openshell sandbox stop "$SANDBOX_NAME" >/dev/null 2>&1 && \
      openshell sandbox start "$SANDBOX_NAME" >/dev/null 2>&1; then
     okk "delegation $EDELEG ($PROVIDER_HOST + gateway host) · supervisor credential refreshed"
+    info "letting the supervisor's proxy and the in-sandbox OpenClaw gateway settle (15 s)…"
+    sleep 15
   else
     fail "sandbox stop/start failed — the fresh egress credential never reaches the supervisor"
   fi
@@ -270,12 +321,16 @@ if [ "$NO_DIALOGUE" != 1 ]; then
       --add-endpoint "${h}:${PEP_PORT}" --wait >/dev/null 2>&1 || true
   done
   AGW_URL=""
-  for round in 1 2 3; do
+  for round in 1 2 3 4 5 6 7 8; do
     for h in "${CANDS[@]}"; do
       [ -n "$AGW_URL" ] && break 2
       c=$(osx 45 -n "$SANDBOX_NAME" --no-tty --timeout 25 -- \
-        curl -s --max-time 8 -o /dev/null -w '%{http_code}' "http://${h}:${PEP_PORT}/healthz" 2>/dev/null | tail -1)
-      [ "$c" = "200" ] && AGW_URL="http://${h}:${PEP_PORT}"
+        curl -sS --max-time 8 -o /dev/null -w '%{http_code}' "http://${h}:${PEP_PORT}/healthz" 2>&1 | tail -1)
+      if [ "$c" = "200" ]; then
+        AGW_URL="http://${h}:${PEP_PORT}"
+      else
+        info "  probe ${h}:${PEP_PORT} → ${c:-no-answer}"
+      fi
     done
     [ -n "$AGW_URL" ] && break
     info "no route yet (sandbox restarting) — retrying in 10 s"
@@ -497,7 +552,7 @@ ask_agent() { # prompt [retries] — the REAL agent turn, shown in full
 }
 
 # --- ROUND A ----------------------------------------------------------------
-step "6. ROUND A — “review and pay $FRAUD_ID” (the invoice with injected instructions)"
+step "6. ROUND A — 'review and pay $FRAUD_ID' (the invoice with injected instructions)"
 line "the invoice's remittance note carries the injection:"
 printf '  %s“%s”%s\n' "$RED" \
   "$(printf '%s' "$FRAUD_JSON" | python3 -c 'import sys,json; print(json.load(sys.stdin)["remittance_note"])')" "$RST"
@@ -563,7 +618,7 @@ RECORDS_A2=$(payment_record_count)
 okk "demoapi evidence: payments executed so far = $RECORDS_A2 (the held + denied attempts never reached it)"
 
 # --- ROUND B ----------------------------------------------------------------
-step "8. ROUND B — “review and pay $LEGIT_ID” (the legitimate invoice)"
+step "8. ROUND B — 'review and pay $LEGIT_ID' (the legitimate invoice)"
 line "same supplier, same €8,400 — but the remit-to account matches the supplier record"
 info "round A's denial binds that delegation's payment action — so the legitimate invoice"
 info "runs under a FRESH delegation: rotating the agent's rights after a fraud attempt is exactly what you would do"

@@ -14,7 +14,7 @@ SHELL := /bin/bash
 # k3s/agentgw.yaml (k3s). See README "Building and publishing the demo API".
 REGISTRY         ?= docker.io/stevef1uk
 IMAGE_NS         ?= agent-gateway
-API_VERSION      ?= 1.0.5
+API_VERSION      ?= 1.0.6
 API_IMAGE        := $(REGISTRY)/$(IMAGE_NS)-demoapi
 BUILDER          ?= agent-gateway-builder
 PLATFORMS        ?= linux/amd64,linux/arm64
@@ -120,6 +120,10 @@ openclaw-demo: openclaw-image openclaw-up openclaw-configure ## Full path: image
 .PHONY: human-delegation-demo
 human-delegation-demo: ## Demo 8 — OpenClaw pays an invoice (one fraudulent) through the gateway; add ARGS="--no-human" for unattended
 	./demo/human-delegation-demo.sh $(ARGS)
+
+.PHONY: security-scan
+security-scan: ## OWASP ZAP baseline scan of the core containers → security/results/
+	./security/zap-scan.sh
 
 .PHONY: bench
 bench: ## Benchmark the gateway: both engines (built-in + OPA)

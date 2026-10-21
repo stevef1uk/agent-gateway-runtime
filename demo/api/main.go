@@ -126,7 +126,10 @@ func seedSuppliers() map[string]*supplier {
 }
 
 // handler builds the demo API: the health endpoint plus the payments API and
-// the counting echo.
+// the counting echo. A minimal security-header wrapper resolves what the
+// scanner flagged on this service (nosniff missing, Cross-Origin-*-Policy
+// missing); the demo API never embeds cross-origin resources, so the strict
+// defaults are safe.
 func handler() http.Handler {
 	a := &api{
 		started:   time.Now(),
@@ -140,7 +143,21 @@ func handler() http.Handler {
 		_, _ = rw.Write([]byte(`{"status":"ok","service":"demoapi","payments_api":true}`))
 	})
 	mux.HandleFunc("/", a.handle)
-	return mux
+	return secureHeaders(mux)
+}
+
+// secureHeaders sets the defensive response headers ZAP's scan looks for on
+// every response (mirrors the values used by the gateway stack's shared
+// httpx.SecureHeaders middleware).
+func secureHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		h := rw.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
+		h.Set("Cross-Origin-Embedder-Policy", "require-corp")
+		next.ServeHTTP(rw, r)
+	})
 }
 
 func main() {

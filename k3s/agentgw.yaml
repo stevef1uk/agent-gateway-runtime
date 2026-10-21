@@ -240,7 +240,7 @@ spec:
     spec:
       containers:
         - name: demoapi
-          image: stevef1uk/agent-gateway-demoapi:1.0.5   # plain image: the customer's own API; kubectl logs shows a line per EXECUTED call; source at demo/api; change the ref to your own registry if you build it yourself
+          image: stevef1uk/agent-gateway-demoapi:1.0.6   # plain image: the customer's own API; kubectl logs shows a line per EXECUTED call; source at demo/api; change the ref to your own registry if you build it yourself
           ports: [{ containerPort: 8090 }]
           readinessProbe:
             httpGet: { path: /healthz, port: 8090 }
@@ -448,7 +448,7 @@ spec:
     spec:
       initContainers:
         - name: seed-policy
-          image: stevef1uk/agent-gateway-web:1.0.42
+          image: stevef1uk/agent-gateway-web:1.0.44
           # The shared Gluster file system root-squashes, and pods may run as an
           # unprivileged uid, so the console runs as root (squashed to `nobody`
           # by the share — the same owner the first seed created files with).
@@ -458,7 +458,7 @@ spec:
           volumeMounts: [{ name: policies, mountPath: /policies }]
       containers:
         - name: web
-          image: stevef1uk/agent-gateway-web:1.0.42
+          image: stevef1uk/agent-gateway-web:1.0.44
           securityContext: { runAsUser: 0 }
           ports: [{ containerPort: 8083 }]
           env:

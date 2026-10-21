@@ -64,7 +64,7 @@ as:
 docker pull stevef1uk/agent-gateway-authz:1.0.12
 docker pull stevef1uk/agent-gateway-gateway:1.0.24
 docker pull stevef1uk/agent-gateway-tokensvc:1.0.5
-docker pull stevef1uk/agent-gateway-web:1.0.42
+docker pull stevef1uk/agent-gateway-web:1.0.44
 ```
 
 Each tag is a **multi-arch** manifest (`linux/amd64` + `linux/arm64`), so the
@@ -163,7 +163,7 @@ services:
       - ./keys/license.token:/licences/gateway.token:ro
 
   web:
-    image: stevef1uk/agent-gateway-web:1.0.42
+    image: stevef1uk/agent-gateway-web:1.0.44
     restart: unless-stopped
     ports: ["8083:8083"]
     environment:

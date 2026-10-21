@@ -7,7 +7,7 @@ Redis) into the `agentgw` namespace.
 
 | Service | Image | Exposure |
 |---|---|---|
-| web (console + playground) | `agent-gateway-web:1.0.42` | NodePort **30083** |
+| web (console + playground) | `agent-gateway-web:1.0.44` | NodePort **30083** |
 | gateway (enforcement) | `agent-gateway-gateway:1.0.24` | NodePort **30080** + **30088** (egress proxy) |
 | authz (decision point) | `agent-gateway-authz:1.0.12` | NodePort **30081** |
 | tokensvc (minting) | `agent-gateway-tokensvc:1.0.5` | NodePort **30082** |

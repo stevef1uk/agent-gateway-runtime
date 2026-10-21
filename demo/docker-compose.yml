@@ -108,7 +108,7 @@ services:
       retries: 5
 
   demoapi:
-    image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.5}  # 1.0.5 adds the Payments-API surface (invoices/suppliers/payments) for the human-delegation demo; source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
+    image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.6}  # 1.0.6 adds security response headers (nosniff, CORP/COOP/COEP — ZAP findings) alongside the 1.0.5 Payments-API surface; source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
     container_name: agent-gateway-demoapi
     restart: unless-stopped
     ports: ["8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire
@@ -119,7 +119,7 @@ services:
       retries: 5
 
   web:
-    image:  stevef1uk/agent-gateway-web:1.0.42  # 1.0.40 (latest; multi-arch amd64+arm64 — the registry's 1.0.41 tag is an amd64-only retag of this same image); 1.0.31 #approvals deep-link (notification cards land on the pending-approvals view); 1.0.30 IdP-proxy chooser/link fix (provider links stay under /oidc/idp even without a pinned connector); 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
+    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.44}  # 1.0.44 (latest): strict CSP (pages' script/CSS are static assets, no 'unsafe-inline'), COOP/COOEP hardening, IdP-relay CSP escape hatch, current authorizer.rego as the shipped initial policy; 1.0.31 #approvals deep-link (notification cards land on the pending-approvals view); 1.0.30 IdP-proxy chooser/link fix (provider links stay under /oidc/idp even without a pinned connector); 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
