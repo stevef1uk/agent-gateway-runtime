@@ -74,6 +74,18 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 info() { printf '\n== %s ==\n' "$*"; }
 
+# openshell >= 0.1.5: hostname-based network policy binds to supervisor
+# DNS, and sandbox host aliases (host.docker.internal et al.) need explicit
+# IP validation or a trusted gateway pin — an alias-based upstream proxy URL
+# can silently fail staging (#4602). Resolve the alias to its IP literal
+# whenever resolution succeeds; keep the alias as a 0.1.4-tolerant fallback.
+PROXY_HOST="${PROXY_URL#http://}"; PROXY_HOST="${PROXY_HOST%%:*}"
+if PROXY_IP=$(getent hosts "$PROXY_HOST" 2>/dev/null | awk '{print $1; exit}') \
+   || PROXY_IP=$(python3 -c "import socket; print(socket.gethostbyname('$PROXY_HOST'))" 2>/dev/null); then
+  case "$PROXY_IP" in ''|*[!0-9.]*) ;; *) PROXY_URL="http://${PROXY_IP}:${PROXY_URL##*:}" ;; esac
+fi
+info "upstream-proxy URL seen by the sandbox supervisor: $PROXY_URL"
+
 apply_openrouter_policy() {
   local sandbox_name="$1"
 
@@ -205,11 +217,34 @@ fi
 mkdir -p "$OPENSSH_CONFIG_DIR"
 
 DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Compute driver chosen by runtime reality, not hardcoded: a Mac whose only
+# reachable container API is a podman machine (Docker Desktop stopped, or the
+# docker CLI serving the podman socket) cannot run the docker driver at
+# `sandbox create` — it fails with `ContainerCreateFailed: unknown mount
+# option "uid=..."`. Override with PATCH_DRIVER=docker|podman if needed.
+DRIVER="${PATCH_DRIVER:-}"
+if [ -z "$DRIVER" ]; then
+  podman_sock="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/podman/podman.sock"
+  if have podman && podman info >/dev/null 2>&1 && [ -S "$podman_sock" ]; then
+    DRIVER=podman
+  elif have docker && docker info >/dev/null 2>&1; then
+    DRIVER=docker
+  elif have podman; then
+    # CLI works but the API socket is down — openshell's podman driver needs
+    # it at sandbox create; flag it loudly instead of failing later.
+    DRIVER=podman
+    info "podman API socket not running — start it: systemctl --user start podman.socket (or: podman system service --time=0 &)"
+  else
+    echo "error: neither a podman machine nor a Docker daemon is reachable — start one first" >&2
+    exit 1
+  fi
+fi
+info "OpenShell compute driver in use: $DRIVER"
 patch_out=$(python3 "$DEMO_DIR/patch-driver-config.py" \
   "$GW_TOML" \
   "$PROXY_URL" \
   "$OPENSSH_CONFIG_DIR/upstream-proxy-auth" \
-  docker)
+  "$DRIVER")
 printf '%s\n' "$patch_out"
 # A patched config is inert until the gateway reads it; the 2026-10 Mac loop
 # (patch, then keep using the old process) manifests as the exact same
@@ -282,9 +317,15 @@ fi
 # actions. The resource patterns are exposed to the agent, while OpenShell's
 # sandbox policy adds the default-deny egress boundary.
 info "Creating the Agent Gateway delegation"
+# The model provider host must be in the supervisor's own scope: its CONNECT
+# to the provider otherwise 403s at the proxy ("resource not allowed") and
+# every chat turn hangs unanswered (2026-10-22 Linux podman-driver case).
+# Its connect is deliberately NOT approval-gated (the human already granted
+# model access by creating the setup); dangerous hosts (GitHub etc.) keep
+# their per-connect approval rule.
 DELEGATION=$(curl -sS -X POST "$AUTHZ_URL/v1/delegations/" \
   -H 'Content-Type: application/json' \
-  -d "{\"agent_id\":\"openshell-agent-1\",\"resources\":[\"api.openrouter.ai\",\"openrouter.ai\",\"*.openrouter.ai\",\"api.github.com\",\"catalog.openclaw.ai\",\"clawhub.ai\"],\"actions\":[\"read\",\"create\",\"connect\",\"delete\"],\"expires_in_seconds\":1800,\"ttl_seconds\":1800,\"id_token\":\"$ID_TOKEN\",\"approval_rules\":[{\"when\":{\"resource_pattern\":\"*\",\"action_pattern\":\"connect\"},\"require\":true,\"rationale\":\"dangerous outbound connects require human approval\"},{\"when\":{\"resource_pattern\":\"*\",\"action_pattern\":\"delete\"},\"require\":true,\"rationale\":\"destructive outbound deletes require human approval\"}]}" )
+  -d "{\"agent_id\":\"openshell-agent-1\",\"resources\":[\"integrate.api.nvidia.com\",\"api.openrouter.ai\",\"openrouter.ai\",\"*.openrouter.ai\",\"api.github.com\",\"catalog.openclaw.ai\",\"clawhub.ai\"],\"actions\":[\"read\",\"create\",\"connect\",\"delete\"],\"expires_in_seconds\":1800,\"ttl_seconds\":1800,\"id_token\":\"$ID_TOKEN\",\"approval_rules\":[{\"when\":{\"resource_pattern\":\"api.github.com\",\"action_pattern\":\"connect\"},\"require\":true,\"rationale\":\"GitHub API tunnels require a human decision\"},{\"when\":{\"resource_pattern\":\"*\",\"action_pattern\":\"delete\"},\"require\":true,\"rationale\":\"destructive outbound deletes require human approval\"}]}" )
 
 DELEGATION_ID=$(printf '%s' "$DELEGATION" | python3 -c "import sys,json; print(json.load(sys.stdin)['delegation']['id'])" 2>/dev/null || true)
 AGENT_SECRET=$(printf '%s' "$DELEGATION" | python3 -c "import sys,json; print(json.load(sys.stdin).get('agent_secret',''))" 2>/dev/null || true)

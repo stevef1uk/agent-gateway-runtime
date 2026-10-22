@@ -28,7 +28,9 @@ The key is read from `demo/.env` (gitignored). You can also export
 ```bash
 curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
 ```
-This installs openshell + openshell-gateway (0.1.4 at the time of writing) from
+This installs openshell + openshell-gateway (0.1.4 in early testing, 0.1.5
+in the October 2026 proxy-delivery verification — both affected, see the
+podman-driver note below) from
 NVIDIA's Homebrew tap (`nvidia/openshell`) and registers a **brew service**
 (label `sh.brew.openshell`) that runs the gateway for you, with its PKI in
 `/opt/homebrew/var/openshell/tls`.
@@ -98,11 +100,14 @@ The gateway runs on `https://127.0.0.1:17670` by default (the CLI connects to lo
 
 **Tip:** The compute driver no longer needs to come from an environment
 variable. `demo/openshell-gateway-setup.sh` pins it in the schema-v2 config
-(`[openshell.gateway] compute_driver = "docker"` in `gateway.toml`); without
-that pin, a service-managed gateway without the env var defaults to the podman
-driver and `sandbox create` fails with a podman image-pull error such as
-`"podman API error (500): image pull failed ... requested access to the
-resource is denied"` (the image exists only in Docker Desktop, not on docker.io).
+(`[openshell.gateway] compute_driver = "<docker|podman>"` in `gateway.toml`),
+selecting by what actually runs on the machine (podman machine reachable →
+`podman`, else `docker`; `PATCH_DRIVER=` overrides). A driver mismatch
+announces itself at `sandbox create`
+(`ImagePullFailed … 403 denied` = the sandbox image is not in the *driver's*
+engine store — the 2026-10 case was "the image exists only in Docker
+Desktop, not on docker.io"; see the podman-machine section below for the
+companion `unknown mount option "uid=…"` signature).
 
 ### Starting the OpenShell gateway (Linux)
 
@@ -127,9 +132,81 @@ The script:
 4. Verifies connectivity (expects HTTP 404 on healthz)
 
 **Difference from macOS:** On Linux you can use `OPENSHELL_COMPUTE_DRIVER=podman`
-(default) or `docker`. On macOS use `docker` (Podman Desktop isn't part of
-this demo's supported pairing); there the driver is pinned in `gateway.toml`
-rather than passed through the environment.
+(default) or `docker`. On macOS the driver should match what is actually
+running — `demo/openshell-gateway-setup.sh` now picks it by runtime reality
+(podman machine reachable → `podman`, else `docker`; override with
+`PATCH_DRIVER=docker|podman`) and re-registers it in `gateway.toml`.
+
+**openshell version compatibility (October 2026).** Both releases were
+verified end-to-end on this repo's docker-driver path:
+
+| | openshell 0.1.4 | openshell 0.1.5 |
+|---|---|---|
+| docker driver, demos + chat | verified green | verified green |
+| podman driver | supervisor gets no proxy config at all (`proxy=none`) | proxy URL + podman secret staged, but the credential presented is not the JWT — 407s persist |
+| alias hostname (`host.docker.internal`) in `https_proxy` | accepted | policy rejects unverifiable alias dials (#4602) — use an **IP literal** |
+| gateway/supervisor pairing | self-consistent unless a `supervisor_image`/`supervisor_bin` pins an older version — mixed pairings are unsupported ("Docker sandbox exited before supervisor became ready") | same; the patcher now strips stale `supervisor_*` pins so an upgrade cannot strand a per-version pin |
+
+The scripts keep version tolerance: `patch-driver-config.py` strips
+`supervisor_image`/`supervisor_bin` (the gateway then picks its own version's
+supervisor), resolves alias URLs to IP literals where DNS allows, and
+`openclaw-sandbox.sh` waits for a delete to actually clear before recreating
+(a stuck `Deleting` row carries an explicit restart-the-gateway hint).
+
+**Running the whole path on a Podman machine (macOS, all-Podman).** The
+docker driver and the Docker-compat socket of a podman machine do **not**
+mix: container create fails with
+`ContainerCreateFailed: … unknown mount option "uid=…"`. Pin the podman
+driver instead — `openshell-gateway-setup.sh` does this now, but the rule
+it encodes is worth knowing on its own:
+
+```bash
+python3 demo/patch-driver-config.py "$HOME/.config/openshell/gateway.toml" \
+        "http://host.docker.internal:8088" \
+        "$HOME/.config/openshell/upstream-proxy-auth" podman
+./demo/start-openshell-gateway.sh      # RESTART: gateway.toml is read at process start only
+./demo/openclaw-sandbox.sh up
+```
+
+Gateway-wise, the gotchas we actually hit (October 2026, podman 5.0.3 +
+openshell 0.1.4, podman-machine-default):
+
+| Symptom | Cause and fix |
+|---|---|
+| `sandbox` wedged in phase `Deleting`/`Error` and won't recreate | The gateway *service* (launchd-managed, not your shell) did the failing work; the CLI's `DOCKER_HOST` export never reaches it. Fix on the service's env: `launchctl setenv DOCKER_HOST unix://$(podman machine inspect podman-machine-default \| python3 -c 'import json,sys;print(json.load(sys.stdin)[0]["ConnectionInfo"]["PodmanSocket"]["Path"])')` then restart the service and re-issue `openshell sandbox delete` |
+| `ImagePullFailed … 403 denied` right after "✓ image built" | buildx's `docker-container` driver is cache-only without `--load` — the "✓ image built" line was a lie; the name was never materialised. The script now asserts the store after the build; or rebuild via `podman build` (loads by default) |
+| `unknown mount option "uid=…"` on container create | openshell's docker driver × podman machine URL — pin the podman driver (above), and remember *patch → restart → up*, never patch → up |
+| `ghcr.io` pulls die with `keychain cannot be accessed` | macOS osxkeychain helper consulted (docker-compose provider) — pre-pull public images with bare `podman pull` or unlock the login keychain; all demo images *are* on Docker Hub (mcpsrv included — an earlier note claiming otherwise was wrong) |
+
+**Podman-driver proxy delivery is broken upstream (openshell ≤ 0.1.5).**
+Verified exhaustively on Linux (openshell 0.1.4 *and* the 0.1.5 upgrade,
+podman 5 rootless, netavark/pasta):
+
+- **0.1.4:** the supervisor never receives the proxy path at all — its
+  model-fetch logs read `proxy=none`, its container mounts carry no proxy
+  secret, and every CONNECT either never reaches the proxy or is denied
+  (`network connection error`).
+- **0.1.5:** delivery *improves* — the podman driver stages the proxy URL
+  (`--upstream-proxy http://<ip>:8088` on the supervisor's command line; an
+  **IP literal** worked, an alias hostname did not, consistent with 0.1.5's
+  policy changes #4494/#4602 alias-hostname validation) and attaches the
+  `openshell-proxy-auth` podman secret to the supervisor container with the
+  correct `token:pass` bytes. But the supervisor's actual CONNECT still
+  presents a **non-JWT credential**: every turn-time attempt 407s at the
+  proxy with pre-identity `invalid token: malformed` — regardless of
+  `enable_bind_mounts`, fresh re-mints, field order, or a short test
+  credential. End result unchanged: agent model call dies with
+  `network connection error`.
+
+Until upstream fixes the podman-driver credential presentation, the
+**sandbox leg runs under the docker driver** (verified end-to-end on the
+same box) while everything else — compose stack, `make` image builds,
+Demo 1 and Demo 9 — runs fine under Podman natively. The two halves do not
+need to share an engine.
+
+**Fallback if the podman path fights you:** start Docker Desktop for the
+sandbox legs and use `podman compose` for the stack legs — the two halves
+do not have to run on the same engine.
 
 **If using Docker Desktop on Linux**, the same port forwarder (macOS step 4)
 is probably needed there; I haven't tested it.

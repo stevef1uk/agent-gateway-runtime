@@ -25,7 +25,9 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 > Desktop client is skipped, not chosen (scripts: `CONTAINER_ENGINE=podman`
 > to force; make: `ENGINE=podman`). On older commits, if `docker compose` or
 > plain `make` still try a dead Docker socket, `git pull`, or force with the
-> overrides above.
+> overrides above. Running the OpenClaw/OpenShell sandbox on a Podman-only
+> Mac has its own driver-pin and socket rules — see the podman-machine
+> section + gotcha table in [docs/OpenClaw-OpenShell.md](OpenClaw-OpenShell.md).
 
 | Endpoint | Status |
 |---|---|

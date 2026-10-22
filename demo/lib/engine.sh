@@ -11,8 +11,9 @@
 #
 # Selection order:
 #   1. $CONTAINER_ENGINE env override (docker|podman)
-#   2. docker, if installed
-#   3. podman, if installed
+#   2. $ENGINE env override (Makefile convention) — accepted as a fallback
+#   3. docker, if its daemon is actually reachable
+#   4. podman, if installed
 #
 # Podman notes (rootless):
 #   * `podman compose` delegates to a provider (docker-compose or
@@ -24,7 +25,11 @@
 # ============================================================================
 
 engine_detect() {
-  local e="${CONTAINER_ENGINE:-}"
+  # CONTAINER_ENGINE is the documented override; ENGINE is accepted as a
+  # fallback so the Makefile's ENGINE=podman/docker convention (and the docs
+  # that claim `ENGINE=podman make openclaw-demo` works) is honoured by the
+  # script-driven targets too. Precedence: CONTAINER_ENGINE > ENGINE > probe.
+  local e="${CONTAINER_ENGINE:-${ENGINE:-}}"
   if [ -n "$e" ]; then
     case "$e" in
       docker|podman) printf '%s\n' "$e"; return 0 ;;

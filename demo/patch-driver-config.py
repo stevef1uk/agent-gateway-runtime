@@ -5,9 +5,13 @@ What it does (all-or-nothing, writes nothing unless the result parses as TOML):
   - repairs duplicate `[openshell.drivers.*]` table headings (TOML rejects any
     duplicate within a namespace, so the gateway refuses to boot until fixed)
   - upserts the upstream-proxy stanza into the FIRST `[openshell.drivers.<DRIVER>]`
-    block (or appends one when absent); other keys already in that block —
-    e.g. `grpc_endpoint`, `supervisor_image`, `supervisor_bin` — are preserved
+    block (or appends one when absent)
   - removes any duplicated driver table headings it finds, keeping the first
+  - strips `supervisor_image` / `supervisor_bin` pins from driver blocks — a
+    version pin or a stale local supervisor binary forbids the gateway/
+    supervisor pairing an upgraded gateway needs (mixed pairings are
+    unsupported: sandbox create fails with `ControlSupervisorStartFailed`);
+    unpinned, each gateway composes with its own matching supervisor
   - pins `[openshell.gateway] compute_driver` (schema v2) so the gateway does
     not silently fall back to the podman driver
   - validates the result with tomllib before writing, and chmod 600s the file
@@ -120,12 +124,35 @@ def upsert_stanza(text: str, driver: str, proxy: str, auth_file: str) -> str:
     return text[: m.start()] + body + text[m.end() :]
 
 
+def strip_supervisor_pins(text: str) -> tuple[str, int]:
+    """Remove `supervisor_image` / `supervisor_bin` pins from driver tables.
+
+    Rationale (2026-10): a supervisor pinned by version (or a stale local
+    binary) forbids the binary pairing the gateway needs — an openshell
+    gateway upgrade then fails at sandbox create with
+    `ControlSupervisorStartFailed: Docker sandbox exited before supervisor
+    became ready` (mixed gateway/supervisor pairings are explicitly
+    unsupported). Unpinned, every gateway version composes with its own
+    matching supervisor by default.
+    """
+    removed = 0
+    out_lines = []
+    for line in text.splitlines(keepends=True):
+        if re.match(r"^\s*supervisor_(image|bin)\s*=", line):
+            removed += 1
+            continue
+        out_lines.append(line)
+    return "".join(out_lines), removed
+
+
 def load_prepared(path: pathlib.Path) -> tuple[str, list[str]]:
     """Read and auto-repair duplicate driver table headings when that is what broke it."""
     text = path.read_text()
+    text, removed = strip_supervisor_pins(text)
+    notes = [f"supervisor pins removed: {removed}"] if removed else []
     try:
         tomllib.loads(text)
-        return text, []
+        return text, notes
     except tomllib.TOMLDecodeError as e:
         # TOML phrasings vary ("duplicate key", "Cannot declare ... twice");
         # trigger the repair whenever a driver heading appears more than once.
@@ -294,8 +321,6 @@ allow_unauthenticated_users = false
 
 [openshell.drivers.docker]
 grpc_endpoint = "https://127.0.0.1:17670"
-supervisor_image = "ghcr.io/nvidia/openshell/supervisor:0.1.4"
-supervisor_bin = "/home/u/.local/bin/openshell-sandbox"
 
 # Upstream corporate proxy = the Agent Gateway egress proxy (demo stack).
 # OpenShell chains policy-approved TLS CONNECT tunnels through it; the

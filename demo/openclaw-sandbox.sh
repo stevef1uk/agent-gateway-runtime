@@ -97,7 +97,22 @@ sandbox_ready() {
 
 build() {
   step "Build the OpenClaw image"
-  eng build -t "$IMAGE" demo/openclaw
+  if [ "$ENGINE" = docker ]; then
+    # --load: with buildx's docker-container driver a plain `docker build`
+    # leaves the image in the build cache only; the sandbox create then
+    # 403s trying to pull a name that was never materialised. Legacy
+    # docker builds (no buildx) reject --load, hence the fallback.
+    eng build --load -t "$IMAGE" demo/openclaw 2>/dev/null \
+      || eng build -t "$IMAGE" demo/openclaw
+  else
+    eng build -t "$IMAGE" demo/openclaw   # podman builds load by default
+  fi
+  # Never claim success from a cache-only build: assert the image landed in
+  # the engine store before anything downstream (sandbox create) needs it.
+  if ! "$ENGINE" images -q "$IMAGE" 2>/dev/null | grep -q .; then
+    bad "image '$IMAGE' is not present in the $ENGINE store after the build — the build output only reached the build cache. Rerun with the engine's --load form."
+    exit 1
+  fi
   okk "image built: $IMAGE"
 }
 
@@ -116,6 +131,21 @@ ensure_sandbox() {
     # get the same treatment: delete, then recreate below.
     warn "sandbox '$SANDBOX_NAME' exists but is not Ready (phase: $phase) — recreating"
     openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1 || true
+  fi
+  # The delete is accepted asynchronously ("cleanup is pending"); a wedged
+  # row (the 2026-10 gateway-service sessions we hit across engines) leaves
+  # create refusing with "already exists". Wait bounded for the row to clear;
+  # if it does not, say exactly what fixes it instead of a confusing fail.
+  local wait_i=0
+  while sandbox_exists && [ "$wait_i" -lt 20 ]; do
+    sleep 3; wait_i=$((wait_i + 1))
+  done
+  if sandbox_exists; then
+    bad "sandbox row '$SANDBOX_NAME' did not clear after delete (stuck in Deleting/pending)"
+    line "  fix:  restart the gateway service (its reconcile worker owns the row),"
+    line "        then re-run. e.g.  ./demo/start-openshell-gateway.sh  — the row"
+    line "        should come up clear; openshell sandbox list to confirm."
+    exit 1
   fi
   step "Create the OpenShell sandbox (OpenClaw gateway in the foreground)"
   # OpenShell replaces the image entrypoint with its supervisor, then runs the
@@ -384,11 +414,25 @@ ensure_gateway_token() {
   # Reuse a credential that has not expired: minting forces a supervisor
   # restart, which a second chat in the same session does not need. The
   # recorded checksum stops the reuse if anything else rewrote the credential
-  # file (the egress test mints its own).
+  # file (the egress test mints its own). meta is advisory; the token's own
+  # exp claim is the authority — a 2026-10 Mac wedge (reused token rejected
+  # by the proxy as expired while meta still said alive) is what this guards.
   if [ -s "$auth_file" ] && [ -f "$meta" ]; then
-    local expires want crc
+    local expires want crc jexp
     read -r expires want < "$meta" || expires=0
     case "$expires" in ''|*[!0-9]*) expires=0 ;; esac
+    jexp=$(python3 -c "
+import json, base64, sys
+try:
+    t = open('$auth_file').read().strip().split(':')[0]
+    p = t.split('.')
+    if len(p) != 3: sys.exit(1)
+    d = p[1] + '=' * (-len(p[1]) % 4)
+    print(json.loads(base64.urlsafe_b64decode(d)).get('exp', 0))
+except Exception:
+    sys.exit(1)
+" 2>/dev/null)
+    case "$jexp" in ''|*[!0-9]*) expires=0 ;; *) [ "$jexp" -lt "$expires" ] 2>/dev/null && expires=$jexp ;; esac
     crc=$(cksum < "$auth_file" 2>/dev/null | awk '{print $1}')
     if [ -n "$want" ] && [ "$want" = "$crc" ] \
        && [ "$(date +%s)" -lt "$((expires - 60))" ]; then
@@ -506,7 +550,7 @@ run_agent() {
     openshell sandbox exec -n "$SANDBOX_NAME" --no-tty --timeout "${AGENT_TIMEOUT:-300}" -- \
       openclaw agent -m "$msg" 2>&1 | tee "$turn_out" || rc=${PIPESTATUS[0]}
   fi
-  if [ "$rc" -ne 0 ] && grep -qiE "idle timeout|did not produce a response" "$turn_out"; then
+  if [ "$rc" -ne 0 ] && grep -qiE "idle timeout|did not produce a response|timed out before a response" "$turn_out"; then
     warn "the model turn hit its idle timeout (OpenClaw saw no response in time)"
     line "  why:  the first turn after the sandbox's credential rotation is a cold"
     line "        provider start, and the default model is a reasoning model — slow to answer"
@@ -517,6 +561,15 @@ run_agent() {
     line "          raise it: PROVIDER_TIMEOUT_SECONDS=600 ./demo/openclaw-sandbox.sh configure)"
   elif [ "$rc" -ne 0 ]; then
     warn "the agent turn failed (exit $rc) — output above is the raw provider answer"
+    # The request path's own testimony: deny/407 rows here mean the call never
+    # reached the model (credential/source problem), vs a provider-side stall.
+    local eng_audit
+    for eng_audit in "$ENGINE" podman docker; do
+      command -v "$eng_audit" >/dev/null 2>&1 || continue
+      "$eng_audit" exec agent-gateway-postgres psql -U agentgw -d agent_gateway -t \
+        -c "SELECT ts, outcome, status_code, reason FROM audit_events ORDER BY ts DESC LIMIT 5;" \
+        2>/dev/null && break
+    done
   fi
   rm -f "$turn_out"
   return "$rc"
@@ -559,7 +612,10 @@ chat_gateway() {
 shell() {
   ensure_sandbox
   step "Interactive shell inside the sandbox (exit to leave; sandbox keeps running)"
-  openshell sandbox connect -n "$SANDBOX_NAME"
+  # 0.1.x wants the sandbox name positionally (`unexpected argument '-n'`),
+  # retain the -n form as a fallback for CLI builds that predate that.
+  openshell sandbox connect "$SANDBOX_NAME" 2>/dev/null \
+    || openshell sandbox connect -n "$SANDBOX_NAME"
 }
 
 status() {
