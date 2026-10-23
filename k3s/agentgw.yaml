@@ -29,9 +29,16 @@ metadata:
   name: agentgw-secrets
   namespace: agentgw
 stringData:
+  # OUT-OF-BOX DEMO DEFAULTS ONLY. They are published in this repo on
+  # purpose (so `kubectl apply` just works); a LIVE instance that accepts
+  # outsider traffic (NodePort 30080 admin API, tokensvc 30082) MUST
+  # override them — random JWT_SECRET + GATEWAY_ADMIN_TOKEN:
+  #   kubectl -n agentgw patch secret agentgw-secrets -p \
+  #     '{"stringData":{"JWT_SECRET":"<openssl rand -hex 32>","GATEWAY_ADMIN_TOKEN":"<openssl rand -hex 16>"}}'
+  #   then restart gateway, gateway-mcp, authz, tokensvc, web
   JWT_SECRET: "agent-gateway-demo-secret-change-in-prod"   # demo-grade: rotate
   GATEWAY_ADMIN_TOKEN: "agent-gateway-demo-admin"          # demo-grade: rotate
-  POSTGRES_PASSWORD: "agentgw"
+  POSTGRES_PASSWORD: "agentgw"                             # internal only — postgres is ClusterIP, never published
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -89,6 +96,8 @@ data:
           - http://192.168.1.45:30083/oidc/callback
           - http://192.168.1.63:30083/oidc/callback
           - http://host.docker.internal:30083/oidc/callback
+          # MCP One Ring OAuth connector callback (gateway-mcp via ingress)
+          - https://agw.sjfisher.com/oauth/idpcallback
     enablePasswordDB: true
     staticPasswords:
       - email: "alice@example.com"
@@ -108,6 +117,8 @@ data:
             - http://192.168.1.45:30083/oidc/callback
             - http://192.168.1.63:30083/oidc/callback
             - http://host.docker.internal:30083/oidc/callback
+            # MCP One Ring OAuth connector callback (gateway-mcp via ingress)
+            - https://agw.sjfisher.com/oauth/idpcallback
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -434,6 +445,144 @@ spec:
       port: 8088
       targetPort: 8088
       nodePort: 30088   # egress proxy (gateways OpenShell sandboxes)
+---
+# ============================================================================
+# Demo 9 / MCP One Ring on k3s — the CRM MCP server (ClusterIP ONLY: an MCP
+# server reachable without the gateway is ungoverned) and a DEDICATED gateway
+# instance (1.0.28: OAuth layer + per-tool MCP enforcement) for MCP traffic.
+# Browser/Claude-facing routing goes through the ingress below.
+# ============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcpsrv
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: mcpsrv } }
+  template:
+    metadata: { labels: { app: mcpsrv } }
+    spec:
+      containers:
+        - name: mcpsrv
+          image: stevef1uk/agent-gateway-mcpsrv:1.0.1   # adds find_customer + delete_customer tools
+          env:
+            - { name: MCP_HOST, value: "0.0.0.0" }
+            - { name: MCP_PORT, value: "8091" }
+          ports: [{ containerPort: 8091 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8091 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcpsrv
+  namespace: agentgw
+spec:
+  type: ClusterIP          # deliberately NOT a NodePort/LoadBalancer
+  selector: { app: mcpsrv }
+  ports:
+    - name: mcp
+      port: 8091
+      targetPort: 8091
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway-mcp
+  namespace: agentgw
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: gateway-mcp } }
+  template:
+    metadata: { labels: { app: gateway-mcp } }
+    spec:
+      containers:
+        - name: gateway-mcp
+          image: stevef1uk/agent-gateway-gateway:1.0.28  # OAuth layer (DCR+PKCE+delegation binding) + per-tool MCP enforcement
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: AUTHZ_URL, value: "http://authz:8081" }
+            - { name: PERSISTENCE, value: postgres }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: POSTGRES_PASSWORD } }
+            - name: DATABASE_URL
+              value: "postgres://agentgw:$(POSTGRES_PASSWORD)@postgres:5432/agent_gateway?sslmode=disable"
+            - { name: REDIS_URL, value: "redis://redis:6379/0" }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: JWT_SECRET } }
+            - name: GATEWAY_ADMIN_TOKEN
+              valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
+            # MCP One Ring OAuth layer: the issuer is the PUBLIC HTTPS name —
+            # browsers (and claude.ai) reach the gateway through the ingress.
+            - { name: OAUTH_ENABLED, value: "1" }
+            - { name: OAUTH_ISSUER_URL, value: "https://agw.sjfisher.com" }
+            - { name: OIDC_ISSUER_URL, value: "http://dex:5556/dex" }
+            - { name: OIDC_CLIENT_ID, value: "agent-gateway" }
+            - { name: OIDC_CONNECTOR_ID, value: "mock" }
+            - { name: UPSTREAM_URL, value: "http://mcpsrv:8091" }   # the CRM MCP server — never published
+            - name: APPROVAL_TELEGRAM_BOT_TOKEN
+              valueFrom: { secretKeyRef: { name: agentgw-telegram, key: bot_token, optional: true } }
+            - name: APPROVAL_TELEGRAM_CHAT_ID
+              valueFrom: { secretKeyRef: { name: agentgw-telegram, key: chat_id, optional: true } }
+            - { name: APPROVAL_CONSOLE_URL, value: "https://agw.sjfisher.com" }   # Telegram button deep link (must be externally routable)
+          volumeMounts:
+            - { name: licence, mountPath: /licences/gateway.token, subPath: gateway.token, readOnly: true }
+            - { name: keys, mountPath: /keys, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 8
+            periodSeconds: 5
+      volumes:
+        - name: licence
+          secret: { secretName: agentgw-keys, items: [{ key: license.token, path: gateway.token }] }
+        - name: keys
+          secret: { secretName: agentgw-keys, items: [{ key: customer_private.pem, path: customer_private.pem }] }
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 1
+              preference:
+                matchExpressions:
+                  - { key: kubernetes.io/hostname, operator: In, values: [rpi58] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway-mcp
+  namespace: agentgw
+spec:
+  type: ClusterIP
+  selector: { app: gateway-mcp }
+  ports:
+    - name: pep
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agentgw-ingress
+  namespace: agentgw
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: agw.sjfisher.com
+      http:
+        paths:
+          # Claude's connector + Inspector: the MCP wire + OAuth discovery/flow
+          - { path: /mcp, pathType: Prefix, backend: { service: { name: gateway-mcp, port: { number: 8080 } } } }
+          - { path: /oauth, pathType: Prefix, backend: { service: { name: gateway-mcp, port: { number: 8080 } } } }
+          - { path: /.well-known, pathType: Prefix, backend: { service: { name: gateway-mcp, port: { number: 8080 } } } }
+          # the console under the same externally-routable name (one LE cert):
+          - { path: /, pathType: Prefix, backend: { service: { name: web, port: { number: 8083 } } } }
+  tls:
+    - hosts: [agw.sjfisher.com]
+      secretName: agentgw-tls
 ---
 apiVersion: apps/v1
 kind: Deployment

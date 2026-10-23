@@ -19,10 +19,12 @@ ZAP by [Checkmarx](https://checkmarx.com/).
 
 | Level | Reason | Site | Description | Statistic |
 | --- | --- | --- | --- | --- |
+| Low | Warning |  | ZAP warnings logged - see the zap.log file for details | 4    |
+| Info | Informational |  | Percentage of network failures | 1 % |
 | Info | Informational | http://localhost:8091 | Percentage of responses with status code 4xx | 100 % |
 | Info | Informational | http://localhost:8091 | Percentage of endpoints with content type text/plain | 100 % |
 | Info | Informational | http://localhost:8091 | Percentage of endpoints with method GET | 100 % |
-| Info | Informational | http://localhost:8091 | Count of total endpoints | 2    |
+| Info | Informational | http://localhost:8091 | Count of total endpoints | 3    |
 
 
 
@@ -34,7 +36,7 @@ ZAP by [Checkmarx](https://checkmarx.com/).
 
 | Name | Risk Level | Number of Instances |
 | --- | --- | --- |
-| Storable and Cacheable Content | Informational | 3 |
+| Storable and Cacheable Content | Informational | 4 |
 
 
 
@@ -60,6 +62,13 @@ The response contents are storable by caching components such as proxy servers, 
   * Attack: ``
   * Evidence: ``
   * Other Info: `In the absence of an explicitly specified caching lifetime directive in the response, a liberal lifetime heuristic of 1 year was assumed. This is permitted by rfc7234.`
+* URL: http://localhost:8091/
+  * Node Name: `http://localhost:8091/`
+  * Method: `GET`
+  * Parameter: ``
+  * Attack: ``
+  * Evidence: ``
+  * Other Info: `In the absence of an explicitly specified caching lifetime directive in the response, a liberal lifetime heuristic of 1 year was assumed. This is permitted by rfc7234.`
 * URL: http://localhost:8091/robots.txt
   * Node Name: `http://localhost:8091/robots.txt`
   * Method: `GET`
@@ -76,7 +85,7 @@ The response contents are storable by caching components such as proxy servers, 
   * Other Info: `In the absence of an explicitly specified caching lifetime directive in the response, a liberal lifetime heuristic of 1 year was assumed. This is permitted by rfc7234.`
 
 
-Instances: 3
+Instances: 4
 
 ### Solution
 

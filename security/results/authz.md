@@ -34,7 +34,7 @@ ZAP by [Checkmarx](https://checkmarx.com/).
 
 | Name | Risk Level | Number of Instances |
 | --- | --- | --- |
-| Storable and Cacheable Content | Informational | 3 |
+| Storable and Cacheable Content | Informational | 2 |
 
 
 
@@ -67,16 +67,9 @@ The response contents are storable by caching components such as proxy servers, 
   * Attack: ``
   * Evidence: ``
   * Other Info: `In the absence of an explicitly specified caching lifetime directive in the response, a liberal lifetime heuristic of 1 year was assumed. This is permitted by rfc7234.`
-* URL: http://localhost:8081/sitemap.xml
-  * Node Name: `http://localhost:8081/sitemap.xml`
-  * Method: `GET`
-  * Parameter: ``
-  * Attack: ``
-  * Evidence: ``
-  * Other Info: `In the absence of an explicitly specified caching lifetime directive in the response, a liberal lifetime heuristic of 1 year was assumed. This is permitted by rfc7234.`
 
 
-Instances: 3
+Instances: 2
 
 ### Solution
 

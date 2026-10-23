@@ -19,10 +19,12 @@ ZAP by [Checkmarx](https://checkmarx.com/).
 
 | Level | Reason | Site | Description | Statistic |
 | --- | --- | --- | --- | --- |
+| Low | Warning |  | ZAP warnings logged - see the zap.log file for details | 4    |
+| Info | Informational |  | Percentage of network failures | 1 % |
 | Info | Informational | http://localhost:8085 | Percentage of responses with status code 4xx | 100 % |
 | Info | Informational | http://localhost:8085 | Percentage of endpoints with content type application/json | 100 % |
 | Info | Informational | http://localhost:8085 | Percentage of endpoints with method GET | 100 % |
-| Info | Informational | http://localhost:8085 | Count of total endpoints | 2    |
+| Info | Informational | http://localhost:8085 | Count of total endpoints | 3    |
 
 
 
@@ -34,7 +36,7 @@ ZAP by [Checkmarx](https://checkmarx.com/).
 
 | Name | Risk Level | Number of Instances |
 | --- | --- | --- |
-| Non-Storable Content | Informational | 3 |
+| Non-Storable Content | Informational | 4 |
 
 
 
@@ -60,6 +62,13 @@ The response contents are not storable by caching components such as proxy serve
   * Attack: ``
   * Evidence: `401`
   * Other Info: ``
+* URL: http://localhost:8085/
+  * Node Name: `http://localhost:8085/`
+  * Method: `GET`
+  * Parameter: ``
+  * Attack: ``
+  * Evidence: `401`
+  * Other Info: ``
 * URL: http://localhost:8085/robots.txt
   * Node Name: `http://localhost:8085/robots.txt`
   * Method: `GET`
@@ -76,7 +85,7 @@ The response contents are not storable by caching components such as proxy serve
   * Other Info: ``
 
 
-Instances: 3
+Instances: 4
 
 ### Solution
 

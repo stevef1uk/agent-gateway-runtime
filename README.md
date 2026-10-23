@@ -133,6 +133,8 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Agent-Identity.md`](docs/Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
 | [`docs/Agent-Auth-Basics.md`](docs/Agent-Auth-Basics.md) | How agents actually get a credential — a beginners' guide to the delegation → mint → JWT dance, with copy-paste curl examples and a troubleshooting table |
 | [`docs/Integration-Patterns.md`](docs/Integration-Patterns.md) | Inserting the gateway between existing agents and back ends/MCP servers with zero or one-line changes |
+| [`docs/Claude-Integration.md`](docs/Claude-Integration.md) | **Claude as a custom remote connector**: the MCP One Ring OAuth path (DCR + PKCE against your IdP), per-tool enforcement, human-approved deletes, instant revocation — scripts: `demo/mcp-oauth-demo.sh`, `demo/oauth-tunnel.sh` |
+| [`docs/Claude-CRM-Tutorial.md`](docs/Claude-CRM-Tutorial.md) | **Screenshot tutorial** (end-user): run the CRM demo from claude.ai against the k3s instance — connect, add, delete-held/Telegram/console-approval, retry-executes-once |
 | [`docs/Local-Agents.md`](docs/Local-Agents.md) | Personal/local agent runtimes (OpenClaw, Hermes, your own) — per-skill delegations, MCP adapter, spend caps, phone-side revoke |
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |

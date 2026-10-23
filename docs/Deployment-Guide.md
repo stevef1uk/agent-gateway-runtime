@@ -194,6 +194,12 @@ You should see `{"status":"ok"}` four times. Login to the admin UI on
   authorization story live — SSO sign-in, delegation, token minting,
   auto-allow, approval hold, human approval, instant revocation — with
   explanations at each step.
+* **Claude.ai connector** — the remote-MCP flow (compose + quick tunnel, or
+  the k3s ingress track) lives in
+  [Claude-Integration.md](Claude-Integration.md); note the three
+  delegation-shape requirements there (`initialize`/`list` discovery
+  actions, hours-long TTL, subject binding) before relying on the console
+  form.
 * **Graphical demo** — served by the `web` container from
   `http://localhost:8083/demo.html` (`agent-gateway-web` **1.0.3+**): the same
   nine steps as an interactive, animated walkthrough with a live audit feed,
@@ -520,6 +526,76 @@ cannot happen silently. Plan for a licence-renewal runbook ticket 30 days
 before expiry.
 
 ---
+### 6.6 Reinstalling on a new k3s cluster
+
+If you need to deploy Agent Gateway to a fresh k3s cluster, the core resources
+are portable, but these items must be in place first:
+
+**Ingress controller** — Traefik (or equivalent) with `ingressClassName: traefik`
+configured. Install with:
+```bash
+kubectl apply -f https://traefik.io/traefik.yaml
+```
+
+**cert-manager** with a `ClusterIssuer` named `letsencrypt-prod` (for TLS). Quick
+install:
+```bash
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.0/cert-manager.yaml
+# Then create the ClusterIssuer (HTTP-01 or DNS-01 challenge)
+```
+
+**Required secrets** in the `agentgw` namespace:
+- `agentgw-telegram` (keys: `bot_token`, `chat_id`) — for approval Telegram cards
+- `agentgw-keys` (keys: `license.token`, `customer_private.pem`) — licence + decryption key
+- `agent-gateway-runtime` (key: `jwt_secret`) — shared 32-byte HMAC secret
+- Any other secrets your deployment references (`POSTGRES_PASSWORD`, `JWT_SECRET`, `GATEWAY_ADMIN_TOKEN`)
+
+**Supporting services** — Postgres 14+ and Redis 7+ (if `PERSISTENCE=postgres`).
+The deployment creates the Postgres schema automatically on first start.
+
+**Docker-pulled images** — multi-arch tags under `stevef1uk`:
+- `stevef1uk/agent-gateway-gateway:1.0.28` (OAuth layer + per-tool MCP enforcement)
+- `stevef1uk/agent-gateway-mcpsrv:1.0.1` (CRM MCP server with `find_customer` + `delete_customer`)
+- `stevef1uk/agent-gateway-authz:1.0.12` (authorisation service)
+- `stevef1uk/agent-gateway-tokensvc:1.0.5` (token minting)
+- `stevef1uk/agent-gateway-web:1.0.44` (admin UI)
+
+**DNS** — `agw.sjfisher.com` must resolve to the k3s cluster IP (A record) or a
+CNAME to a reachable hostname. The ingress watches this host for OAuth callbacks
+and Let's Encrypt challenges.
+
+**k3s manifest deployment**:
+```bash
+kubectl apply -f k3s/agentgw.yaml
+# Then verify:
+kubectl -n agentgw get pods -l app=gateway-mcp
+kubectl -n agentgw get ingress agentgw-ingress
+# Test (resolve hostname to cluster IP first):
+curl -k --resolve agw.sjfisher.com:443:<cluster-ip> https://agw.sjfisher.com:443/healthz
+```
+
+**Provision the connector's delegation (before first Claude connect)** — run
+`k3s/create-claude-delegation.sh` (see [Claude-Integration.md](Claude-Integration.md)
+for why the console form is insufficient): it mints a verified ID token,
+creates a delegation with the discovery actions (`initialize`, `list`) plus
+your tool names, an approval rule on destructive tools, a 12-hour TTL
+(agent-configurable), and rebinds it to the subject your browser sign-in
+actually uses. Auto-bind in the OAuth flow requires **exactly one** active
+delegation — `--replace` revokes previous ones for the same agent first.
+
+**Post-deploy verification**:
+- `GET /healthz` on each service returns `{"status":"ok"}`
+- OAuth flow: add `https://agw.sjfisher.com/mcp` as custom connector in claude.ai,
+  complete sign-in, verify `tools/list` and `tools/call add_customer`
+- Approval flow: "delete that customer" → 202 hold → approve via Telegram card or
+  console at `https://agw.sjfisher.com` → executes once
+- Audit: `SELECT ts, agent_id, tool, action, outcome, reason FROM audit_events
+    WHERE resource LIKE '/mcp%' ORDER BY ts DESC LIMIT 20;`
+
+*Tip: the `k3s/agentgw.yaml` manifest in this repo already includes all the
+Deployments, Services, Ingress and Dex config. The only cluster-specific items
+are the ingress controller, cert-manager + issuer, DNS, and the secrets listed
+above.*
 
 ## 7. Integrating with enterprise systems
 

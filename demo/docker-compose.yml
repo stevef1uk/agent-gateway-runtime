@@ -112,7 +112,7 @@ services:
   # demoapi), so MCP traffic gets its own PEP here: /mcp/* in, mcpsrv out.
   # Same decision pipeline: delegation scope, caps, approvals, audit.
   gateway-mcp:
-    image: stevef1uk/agent-gateway-gateway:1.0.24
+    image: stevef1uk/agent-gateway-gateway:1.0.28  # 1.0.28 (mcponering): read-only protocol discovery (server/discover, resources/*, prompts/*) authorized as "list"; MCP hold text carries console instructions + approval id; Phase 3 client attribution
     container_name: agent-gateway-gateway-mcp
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -128,6 +128,27 @@ services:
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # same operator token as the primary gateway
       # Real downstream: the demo MCP server (mcpsrv). /mcp streams through.
       - UPSTREAM_URL=http://mcpsrv:8091
+      # MCP One Ring OAuth layer (Claude remote connector + any MCP client):
+      # - OAUTH_ISSUER_URL is the URL clients (and claude.ai) reach; the demo
+      #   publishes :8085 on the host.
+      # - OIDC_ISSUER_URL (cluster name) drives code exchange/verification
+      #   server-side; OAUTH_IDP_BROWSER_URL is what the human's browser opens.
+      # Flip OAUTH_ENABLED off to run this instance JWT-only as before.
+      - OAUTH_ENABLED=1
+      # OAUTH_PUBLIC_BASE is the externally reachable base URL of this
+      # gateway: the plain compose default is the published localhost port;
+      # ./oauth-tunnel.sh overrides it (via .env) with an HTTPS tunnel URL
+      # so claude.ai's cloud connector can reach the stack.
+      - OAUTH_ISSUER_URL=${OAUTH_PUBLIC_BASE:-http://localhost:${GATEWAY_MCP_HOST_PORT:-8085}}
+      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_CLIENT_ID=agent-gateway
+      - OAUTH_IDP_BROWSER_URL=http://localhost:5556/dex
+      - OIDC_CONNECTOR_ID=mock
+      # MCP holds notify like every other gateway instance: without these the
+      # only channel is the console poll (and the human may not be watching).
+      - APPROVAL_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - APPROVAL_TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - APPROVAL_CONSOLE_URL=${APPROVAL_CONSOLE_URL:-}   # console deep link on the hold card
       # No egress proxy on this instance — the MCP demo drives the PEP path.
     volumes:
       - ./keys:/keys:ro
@@ -160,7 +181,7 @@ services:
   # add_customer tool call really executed, like demoapi's executed_count).
   mcpsrv:
     build: ./mcp
-    image: ${MCPSRV_IMAGE:-stevef1uk/agent-gateway-mcpsrv:1.0.0}
+    image: ${MCPSRV_IMAGE:-stevef1uk/agent-gateway-mcpsrv:1.0.1}
     container_name: agent-gateway-mcpsrv
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]

@@ -127,6 +127,27 @@ func (s *customerStore) list() []Customer {
 	return all
 }
 
+// find reports every customer whose name/email/company contains the query
+// (case-insensitive substring). The demo's fuzzy finder: "find the customer
+// we added for SJFisher" works without the exact spelling.
+func (s *customerStore) find(query string) []Customer {
+	q := strings.ToLower(strings.TrimSpace(query))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	all := make([]Customer, 0, len(s.customers))
+	for _, c := range s.customers {
+		if q == "" {
+			continue
+		}
+		hay := strings.ToLower(c.FirstName + " " + c.LastName + " " + c.Email + " " + c.Company)
+		if strings.Contains(hay, q) {
+			all = append(all, c)
+		}
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].ID < all[j].ID })
+	return all
+}
+
 // remove deletes by id (case-insensitive, with or without CUST- prefix) and
 // returns the removed record. This is the Demo 9 Part D surface: the gateway
 // reads DELETE /customers/* as its own action ("delete"), so the delegation
@@ -315,6 +336,19 @@ func addTools(s *server.MCPServer) {
 	)
 	s.AddTool(listCustomersTool, listCustomersHandler)
 
+	findCustomerTool := mcp.NewTool("find_customer",
+		mcp.WithDescription("Find customers by case-insensitive substring over name, email, id or company (e.g. 'lovelace' or 'analytical')"),
+		mcp.WithString("query", mcp.Required(), mcp.Description("Sub-phrase to search for")),
+	)
+	s.AddTool(findCustomerTool, findCustomerHandler)
+
+	deleteCustomerTool := mcp.NewTool("delete_customer",
+		mcp.WithDescription("Delete a customer record by id (CUST-0001 form). DESTRUCTIVE: usually held for human approval by the gateway"),
+		mcp.WithString("customer_id", mcp.Required(), mcp.Description("The customer id to delete, e.g. CUST-0002")),
+	)
+	s.AddTool(deleteCustomerTool, deleteCustomerHandler)
+
+
 	// Plumbing tools kept from the original demo server --------------------
 	addTool := mcp.NewTool("add",
 		mcp.WithDescription("Add two numbers together"),
@@ -390,6 +424,44 @@ func listCustomersHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 	return mcp.NewToolResultText(b.String()), nil
 }
 
+func findCustomerHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	query, _ := request.GetArguments()["query"].(string)
+	if strings.TrimSpace(query) == "" {
+		return mcp.NewToolResultError("parameter 'query' is required and must be a non-empty string"), nil
+	}
+	matches := store.find(query)
+	if len(matches) == 0 {
+		return mcp.NewToolResultText(fmt.Sprintf("no customer matches %q", query)), nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d customers match %q:\n", len(matches), query)
+	for _, c := range matches {
+		fmt.Fprintf(&b, "- %s: %s %s <%s>", c.ID, c.FirstName, c.LastName, c.Email)
+		if c.Company != "" {
+			fmt.Fprintf(&b, " (%s)", c.Company)
+		}
+		b.WriteString("\n")
+	}
+	return mcp.NewToolResultText(b.String()), nil
+}
+
+// deleteCustomerHandler is the MCP twin of the REST DELETE: the gateway
+// derives the same per-tool action from the JSON-RPC body, so a delegation
+// with an approval rule for `delete_customer` holds it (202) until a named
+// human approves that exact action.
+func deleteCustomerHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	id, _ := request.GetArguments()["customer_id"].(string)
+	if strings.TrimSpace(id) == "" {
+		return mcp.NewToolResultError("parameter 'customer_id' is required and must be a non-empty string"), nil
+	}
+	removed, ok := store.remove(id)
+	if !ok {
+		return mcp.NewToolResultError(fmt.Sprintf("no customer with id %q (list_customers to find one)", id)), nil
+	}
+	out, _ := json.Marshal(removed)
+	return mcp.NewToolResultText(fmt.Sprintf("Customer deleted: %s", out)), nil
+}
+
 // --- plumbing handlers (demo_mcp originals) ---------------------------------
 
 func addHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -425,7 +497,7 @@ func infoHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToo
 		"name":          "Demo MCP Server",
 		"version":       "1.1.0",
 		"description":   "CRM-flavoured MCP server for the Agent Gateway MCP demo (Demo 9)",
-		"tools":         []string{"add_customer", "lookup_customer", "list_customers", "add", "echo", "get_info"},
+		"tools":         []string{"add_customer", "lookup_customer", "list_customers", "find_customer", "delete_customer", "add", "echo", "get_info"},
 		"resources":     []string{"config://server"},
 		"customers_url": "/customers",
 	}

@@ -59,24 +59,40 @@ MCP client is always configured with the *server URL* — the same leverage as
 Pattern A: point the client at the gateway, put the real MCP server behind it
 as `UPSTREAM_URL`.
 
-Two granularities, both working today:
+**Per-tool enforcement works today**: the gateway parses the MCP JSON-RPC
+body at the enforcement point — for `tools/call` the action is the invoked
+**tool name** and the full argument object feeds caps, approval rules and the
+exact-action hash; discovery calls (`server/discover`, `tools/list`,
+`resources/*`, `prompts/*`) authorize as `initialize`/`list`. Delegations
+therefore scope MCP per tool (`actions: ["initialize","list",
+"add_customer",…]`), approval rules match tool names, holds/denies arrive as
+JSON-RPC envelopes real clients render, and `tools/list` is filtered per
+delegation (visibility only — calls are always re-authorized).
 
 | Enforcement level | What you get | How |
 |---|---|---|
-| Per **server** (day one) | every MCP session against that server is governed: delegation, scope, cap, audit, approval gate | gateway fronts the MCP server; JSON-RPC calls arrive as ordinary HTTP; the gateway derives tool=/mcp, action=POST |
-| Per **tool** (roadmap) | each `tools/call` judged by its own `params.name` → tool-scoped policy | an MCP filter in the gateway parses the JSON-RPC body and re-derives resource/action per call (tracked as a roadmap adapter) |
+| Per **server** (day one) | every MCP session against that server is governed: delegation, scope, cap, audit, approval gate | gateway fronts the MCP server; JSON-RPC calls arrive as ordinary HTTP |
+| **Per tool** (delivered — the default now) | each `tools/call` judged by its own `params.name` → tool-scoped policy | the MCP filter in the gateway parses the JSON-RPC body and re-derives resource/action per call |
 
 For self-operated MCP servers there is a variant worth knowing: wrap the MCP
 server with the gateway agent middleware (a thin server that requires the
 delegation JWT before forwarding) if you prefer enforcement to live next to
 the server rather than in front of it.
 
+> **Claude, Inspector, Cursor — the OAuth connector path.** MCP clients that
+> connect remotely (claude.ai's custom connector, Claude Desktop, MCP
+> Inspector…) obtain their credential through the gateway's own OAuth
+> authorization server (dynamic registration + PKCE against your identity
+> provider), then every call is enforced per tool — the complete user/ops
+> guide is [Claude-Integration.md](Claude-Integration.md); Demo 9
+> ([Demos.md](Demos.md)) runs a CRM MCP server through all three enforcement
+> levels via k3s (manifest k3s/agentgw.yaml); `./demo/mcp-oauth-demo.sh`
+> replays the connector flow against the k3s deployment.
+
 > **Hands-on recipe for protecting YOUR MCP server** — dedicated gateway
-> instance, delegation JSON, OpenClaw client config, the delete-approval
-> pattern and the honest granularity limits — lives in
-> [Protecting-Your-MCP.md](Protecting-Your-MCP.md); Demo 9
-> ([Demos.md](Demos.md)) runs the whole recipe against a live CRM MCP
-> server with OpenClaw as the agent.
+> instance, delegation JSON, client config, the delete-approval pattern and
+> the honest limitations — lives in
+> [Protecting-Your-MCP.md](Protecting-Your-MCP.md).
 
 ### Pattern D — egress control so nobody can bypass
 

@@ -16,6 +16,8 @@ talk to it directly, which is precisely what Demo 9 Part A shows.
 | `add_customer` | writes a customer record (first/last/email/optional company) | the delegated action — the story's "Create Customer" |
 | `lookup_customer` | reads by email, id (`CUST-0002` or `2`) or "First Last" | low-risk read, auto-allowed |
 | `list_customers` | lists the CRM | low-risk read |
+| `find_customer` | fuzzy-find customers by substring over name/email/id/company | conversational demo finder |
+| `delete_customer` | deletes a customer (MCP twin of the REST delete) | the per-tool approval demo — held by rule |
 | `add`, `echo`, `get_info` | math / echo / server info (kept from the original demo MCP server) | plumbing |
 | resource `config://server` | server status JSON | — |
 
@@ -69,16 +71,21 @@ with `UPSTREAM_URL=http://mcpsrv:8091`, so MCP traffic gets its own policy
 enforcement point without touching the other demos. Same decision pipeline:
 identity → delegation → scope → audit, and instant revocation.
 
-## Current enforcement granularity (worth saying out loud)
+## Enforcement granularity (upgraded: per tool)
 
-At the `/mcp` endpoint the gateway derives `resource=/mcp`,
-`action=create` for every MCP tool call — **per-server** governance
-(integration Pattern C). The MCP wire protocol is what the agent speaks;
-the delegation scopes and audits the whole MCP surface. Identifying
-`params.name` per `tools/call` (per-*tool* holds inside MCP bodies) is the
-gateway product's next MCP adapter — this demo exists partly to motivate
-it. Spend caps and per-call approval rules still work through the same
-delegation machinery your REST demos use.
+The gateway **parses the MCP JSON-RPC body** at the enforcement point: for
+`tools/call` the action is the invoked **tool name** and the tool's full
+argument object feeds spend caps, approval rules and the action hash;
+`initialize` and `tools/list` authorize as `initialize` / `list`. The
+delegation therefore scopes MCP *per tool* (`actions: ["initialize",
+"list", "add_customer", …]`, `approval_rules` matching tool names) and the
+audit trail carries which tool each call used. Discoverability is filtered
+too: `tools/list` answers only the tools the delegation allows (visibility
+only — calls are always re-authorized). Held/call outcomes reach MCP
+clients as JSON-RPC envelopes (`isError` + structured `approval_required`
+payload) so real clients (Claude, Inspector) render the hold correctly.
+Approval remains single-use and bound to the exact action hash — arguments
+changed after a hold cannot reuse it.
 
 ## Environment variables
 

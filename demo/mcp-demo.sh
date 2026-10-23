@@ -227,10 +227,10 @@ DELEG=$(curl -s -X POST "$AUTHZ/v1/delegations/" -H 'Content-Type: application/j
 DELEG_ID=$(printf '%s' "$DELEG" | python3 -c "import sys,json; print(json.load(sys.stdin)['delegation']['id'])" 2>/dev/null || true)
 SECRET=$(printf '%s' "$DELEG" | python3 -c "import sys,json; print(json.load(sys.stdin).get('agent_secret',''))" 2>/dev/null || true)
 [ -n "$DELEG_ID" ] && [ -n "$SECRET" ] \
-  && okk "delegation $DELEG_ID — scope /mcp* [read, create], 15 min, bound to the SSO subject" \
+  && okk "delegation $DELEG_ID — scope /mcp* per-tool tools, 15 min, bound to the SSO subject" \
   || { bad "delegation failed: $(printf '%s' "$DELEG" | head -c 200)"; return 1; }
-line "the gateway derives resource=/mcp, action=create for EVERY MCP tool"
-line "call (first path segment + HTTP verb) — the delegation matches that"
+line "the gateway parses the JSON-RPC body: action = the invoked TOOL name"
+line "per call (per-tool enforcement); discovery (initialize / tools/list) is authorized too"
 
 TOKEN=$(curl -s -X POST "$TS/token" -H 'Content-Type: application/json' \
   -d "{\"delegation_id\":\"$DELEG_ID\",\"ttl_seconds\":900,\"agent_secret\":\"$SECRET\"}" \
@@ -584,7 +584,7 @@ TOKEN=$(curl -s -X POST "$TS/token" -H 'Content-Type: application/json' \
   -d "{\"delegation_id\":\"$DELEG_ID\",\"ttl_seconds\":1800,\"agent_secret\":\"$SECRET\"}" \
   | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null)
 [ -n "$DELEG_ID" ] && [ -n "$TOKEN" ] \
-  && okk "delegation $DELEG_ID — /mcp* + /customers* [read, create, delete]; DELETE held for a human (approval_rules)" \
+  && okk "delegation $DELEG_ID — /mcp* + /customers* [per-tool MCP + REST delete]; DELETE held for a human (approval_rules)" \
   || { bad "delegation failed: $(printf '%s' "$DELEG" | head -c 200)"; return 1; }
 
 if [ "$SANDBOX_MODE" = 1 ]; then

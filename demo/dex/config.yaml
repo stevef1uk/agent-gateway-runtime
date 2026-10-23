@@ -39,12 +39,21 @@ staticClients:
     redirectURIs:
       - http://localhost:8083/oidc/callback
       - http://127.0.0.1:8083/oidc/callback
+      - https://example-asthma-excerpt-disposition.trycloudflare.com/oauth/idpcallback
       - http://192.168.10.5:8083/oidc/callback
+      - https://agw.sjfisher.com/oauth/idpcallback
+      - https://agw.sjfisher.com/oidc/callback
       # LAN addresses for multi-device approval notifications (the Telegram
       # card's "Open the console" link lands on the console from whichever
       # device the approver uses). Add one per host/port that can serve the
       # console; in production the console sits behind a single TLS name.
       - http://192.168.1.53:8083/oidc/callback
+      # MCP One Ring OAuth connector flow (gateway + gateway-mcp): the IdP
+      # sends the signed-in browser back to the gateway's OAuth callback.
+      - http://localhost:8080/oauth/idpcallback
+      - http://127.0.0.1:8080/oauth/idpcallback
+      - http://localhost:8085/oauth/idpcallback
+      - http://127.0.0.1:8085/oauth/idpcallback
 
 # Static users for the password grant. The hash is bcrypt of "password". These
 # are development fixtures, never real credentials.
@@ -83,9 +92,15 @@ connectors:
       redirectURIs:
         - http://localhost:8083/oidc/callback
         - http://127.0.0.1:8083/oidc/callback
+        - https://example-asthma-excerpt-disposition.trycloudflare.com/oauth/idpcallback
         - http://192.168.10.5:8083/oidc/callback
         - http://192.168.1.53:8083/oidc/callback
         - http://host.docker.internal:8083/oidc/callback
+        # MCP One Ring OAuth connector flow (gateway + gateway-mcp)
+        - http://localhost:8080/oauth/idpcallback
+        - http://127.0.0.1:8080/oauth/idpcallback
+        - http://localhost:8085/oauth/idpcallback
+        - http://127.0.0.1:8085/oauth/idpcallback
         - $DEX_MOCK_REDIRECT_URIS
 
   # --- Swap in a real identity provider for production ---------------------
