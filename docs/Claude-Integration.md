@@ -151,7 +151,7 @@ story on a destructive tool.
 | `OAUTH_IDP_RELAY=0` | for public IdPs (Okta/Entra) whose issuer is already browsable |
 | `OAUTH_IDP_BROWSER_URL` / `OAUTH_IDP_CLIENT_ID` | override the provider hop / client identity |
 | `OAUTH_TOKEN_TTL` / `OAUTH_REFRESH_TTL` | connector token lifetimes (default 5m / 8h) |
-| `APPROVAL_TELEGRAM_*` / `APPROVAL_CONSOLE_URL` | **hold cards + deep link** — wire these or humans must watch the console |
+| `APPROVAL_TELEGRAM_*` / `APPROVAL_CONSOLE_URL` | **hold cards + deep link** — wire these or humans must watch the console. Telegram cards land **in the operator's chat only**: the bot token and chat id are the infrastructure owner's, so whoever runs the gateway is the notified approver; other humans decide via the console (`APPROVAL_CONSOLE_URL`). Per-user notification channels are roadmap. |
 | `UPSTREAM_URL` | upstream MCP server URL (e.g. `http://mcpsrv:8091`, NOT published) |
 | `OAUTH_ENABLED=1` | turn the OAuth layer on (requires `OIDC_ISSUER_URL`) |
 

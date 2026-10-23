@@ -583,6 +583,12 @@ your tool names, an approval rule on destructive tools, a 12-hour TTL
 actually uses. Auto-bind in the OAuth flow requires **exactly one** active
 delegation — `--replace` revokes previous ones for the same agent first.
 
+**Adding more MCP servers under the same Ring** — `k3s/add-mcp-server.sh <name>`
+(verified end-to-end; see [Integration-Patterns.md](Integration-Patterns.md)
+Pattern C) generates each server ClusterIP-only + a dedicated PEP instance +
+its ingress path + path-scoped delegation, and saves the manifest
+(`k3s/mcp-<name>.yaml`) so the new server is committed code.
+
 **Post-deploy verification**:
 - `GET /healthz` on each service returns `{"status":"ok"}`
 - OAuth flow: add `https://agw.sjfisher.com/mcp` as custom connector in claude.ai,

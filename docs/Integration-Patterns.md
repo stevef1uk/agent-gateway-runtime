@@ -94,6 +94,20 @@ the server rather than in front of it.
 > the honest limitations — lives in
 > [Protecting-Your-MCP.md](Protecting-Your-MCP.md).
 
+> **Many MCP servers under one Ring** — the unit of scale is one dedicated
+> PEP instance per server (`UPSTREAM_URL` is instance-level), each with its
+> own resource path under the same TLS hostname (`/mcp`, `/mcp-finance`, …)
+> and its own delegation scoped to that path and server. Every tool call is
+> authorized against the delegation matching the resource path it arrived
+> on, so servers can't read each other's grants. On k3s this is one command:
+> `./k3s/add-mcp-server.sh <name>` generates the server (ClusterIP-only) + a
+> dedicated PEP instance + the ingress path + the scoped delegation (it
+> calls `create-claude-delegation.sh`), saving the manifest as
+> `k3s/mcp-<name>.yaml`. Verified end to end with a second MCP server behind
+> `https://agw.sjfisher.com/mcp-second` (401 ungoverned-check, RFC 9728
+> challenge, subject-bound delegation). User-facing recipe:
+> [Claude-CRM-Tutorial.md](Claude-CRM-Tutorial.md).
+
 ### Pattern D — egress control so nobody can bypass
 
 In enterprise topology the gateway is inserted only if agents *cannot* shadow

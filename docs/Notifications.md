@@ -116,6 +116,15 @@ message the bot from the target chat, then call
 `https://api.telegram.org/bot<token>/getUpdates` once and read
 `result[0].message.chat.id`.)
 
+> **Ownership note:** Telegram cards go **exactly to the chat this token
+> serves — the infrastructure owner's** chat (or their group), because that
+> is whose credential the gateway holds. Other humans/approvers get nothing
+> on Telegram; they decide via the console (`APPROVAL_CONSOLE_URL`), which
+> enforces its own approver binding. Pointing the chat at a shared group
+> works but does not remove that: the group's members are the notified
+> approvers, chosen by the operator. Per-user notification channels are
+> roadmap.
+
 Every held action then lands in that chat as an HTML-formatted card —
 agent/user, the action summary, the rule's rationale, the `approval_id`, its
 expiry, a **clickable "Open the console to approve" link**, and an
