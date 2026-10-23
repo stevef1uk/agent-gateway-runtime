@@ -94,19 +94,54 @@ the server rather than in front of it.
 > the honest limitations — lives in
 > [Protecting-Your-MCP.md](Protecting-Your-MCP.md).
 
-> **Many MCP servers under one Ring** — the unit of scale is one dedicated
-> PEP instance per server (`UPSTREAM_URL` is instance-level), each with its
-> own resource path under the same TLS hostname (`/mcp`, `/mcp-finance`, …)
-> and its own delegation scoped to that path and server. Every tool call is
-> authorized against the delegation matching the resource path it arrived
-> on, so servers can't read each other's grants. On k3s this is one command:
-> `./k3s/add-mcp-server.sh <name>` generates the server (ClusterIP-only) + a
-> dedicated PEP instance + the ingress path + the scoped delegation (it
-> calls `create-claude-delegation.sh`), saving the manifest as
-> `k3s/mcp-<name>.yaml`. Verified end to end with a second MCP server behind
-> `https://agw.sjfisher.com/mcp-second` (401 ungoverned-check, RFC 9728
-> challenge, subject-bound delegation). User-facing recipe:
-> [Claude-CRM-Tutorial.md](Claude-CRM-Tutorial.md).
+#### Many MCP servers under one Ring
+
+**One PEP process per server — one Ring** (the same gateway image + the
+same policy engine everywhere; the Ring is the *invariant* — no MCP client
+reaches any MCP server without crossing a PEP and a delegation — not a
+single process count):
+
+```
+          ┌────────── ONE EXTERNAL HOST: https://mcp.example.corp ──────────┐
+          │  Ingress (traefik, one Let's Encrypt cert, one issuer identity)  │
+          └──┬──────────────┬───────────────┬──────────────────┬────────────┘
+             │ /mcp         │ /mcp-finance  │ /oauth /.well-known    / → console
+   ┌─────────▼─────┐  ┌─────▼──────────────┐   │
+   │ gateway-mcp   │  │ gateway-mcp-finance│   │            ← same image,
+   │ (PEP for CRM) │  │ (PEP for finance)  │   │              same OAuth layer,
+   │ UPSTREAM=crm  │  │ UPSTREAM=finance   │   │              same delegation
+   └───────┬───────┘  └─────────┬──────────┘   │              engine, one audit
+           │ allowed only       │ allowed only │              ledger
+   ┌───────▼───────┐  ┌────────▼──────────┐   │
+   │ crm MCP server│  │ finance MCP server│   │
+   │ ClusterIP only│  │ ClusterIP only    │   │
+   └───────────────┘  └───────────────────┘   │
+       both UNREACHABLE from outside ─────────┘
+```
+
+**Why per-instance (the design reasoning):**
+
+1. `UPSTREAM_URL` is instance-level by design — path/action derivation is
+   rooted in the one protected back end per PEP.
+2. **Failure isolation** — a flaky upstream cannot take MCP governance down
+   with it.
+3. **Policy arrives by path** — `/mcp-finance` routes to its PEP, so its
+   `tools/call`s authorize against delegations scoped `/mcp-finance*`; the
+   CRM's grants can never spend another server's capabilities.
+4. **The cost is small** — each PEP is ~10 lines of YAML, or one
+   `./k3s/add-mcp-server.sh <name>` invocation (`IMAGE PORT TOOLS
+   DELETE_PATTERN AGENT_ID`), which generates the ClusterIP-only server +
+   dedicated PEP + the ingress path + the path-scoped delegation (calling
+   `create-claude-delegation.sh`) and saves the manifest as code
+   (`k3s/mcp-<name>.yaml`).
+
+> *One hostname, one identity system, one audit ledger — many PEPs, one
+> per protected server, each behind its own path.*
+
+Verified end to end on this repo's k3s deployment: a second MCP server
+behind `https://agw.sjfisher.com/mcp-second` (401 ungoverned-check, RFC
+9728 challenge, subject-bound delegation). User-facing recipe:
+[Claude-CRM-Tutorial.md](Claude-CRM-Tutorial.md).
 
 ### Pattern D — egress control so nobody can bypass
 

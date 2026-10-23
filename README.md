@@ -44,6 +44,13 @@ revocation, and an immutable audit trail.
 > [graphical](#demo-2---graphical) and
 > [policy playground](#demo-3---the-opa-policy-playground)).
 
+> 🚀 **Try Agent Gateway with zero installs.** The CRM demo runs live at
+> `https://agw.sjfisher.com` behind a governed gateway — point claude.ai at
+> the [custom MCP connector](docs/Claude-CRM-Tutorial.md) and watch an AI
+> agent add customers and *ask a human before deleting*: no Docker, no
+> clone, just a browser. The full wiring story lives in
+> [docs/Claude-Integration.md](docs/Claude-Integration.md).
+
 ## The problem, in one paragraph
 
 **New here?** Suggested reading order:
