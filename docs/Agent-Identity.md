@@ -69,6 +69,52 @@ Keeping the triple (framework name ↔ agent_id ↔ credential) consistent
 is one ceremony for admission; everything after is enforcement and audit.
 ```
 
+## Scaling & Multiple Instances: Shared vs. Per-Instance Delegations
+
+When deploying multiple instances, replicas, or worker processes of an agent, teams face a fundamental design choice: **should all instances share one delegation, or should each instance receive its own?**
+
+### What happens if multiple instances share ONE delegation?
+
+Technically, the gateway permits multiple instances to use the same `delegation_id` and `agent_secret`. Both will mint valid tokens and execute authorized tools. However, sharing delegations introduces significant operational risks:
+
+| Dimension | Behavior When Sharing a Delegation | Operational Impact |
+| :--- | :--- | :--- |
+| **Authentication** | All instances mint valid short-lived JWTs from `tokensvc`. | Gateway accepts traffic from all instances. |
+| **Audit Trail** | All instances record the exact same `agent_id` and `delegation_id`. | **Loss of attribution**: In `audit_events`, you cannot distinguish which container, pod, or worker process made which tool call. |
+| **Spend Caps & Quotas** | Spend limits and rate limits apply to the shared delegation. | If a delegation has a cap of €500, Instance A can exhaust the entire budget, starving Instance B. |
+| **Revocation & Blast Radius** | Revocation is all-or-nothing at the delegation level. | If Instance A is compromised or enters an uncontrolled loop, revoking the delegation **terminates Instance B as well**. |
+
+---
+
+### The Recommended Pattern: Per-Instance Delegations
+
+For persistent or long-running worker replicas, provision a distinct delegation per instance using instance-specific suffixes:
+
+```text
+sales-crm-worker-pod1-7f3a  → Delegation del-sales-01  → Agent Secret sec-xxx
+sales-crm-worker-pod2-8b4c  → Delegation del-sales-02  → Agent Secret sec-yyy
+```
+
+**Benefits of per-instance delegations:**
+1. **Pinpoint Auditability**: In incident response or compliance reviews, every audit log entry isolates the exact container or pod that took action.
+2. **Targeted Revocation**: If a specific replica behaves anomalously, an operator revokes only that replica's delegation in the console. The compromised instance is halted within seconds; all other replicas continue serving traffic unaffected.
+3. **Partitioned Budgets**: Spend caps and approval rules apply individually per worker rather than depleting a shared pool.
+
+---
+
+### How to Handle Ephemeral Agent Fleets at Scale
+
+When orchestrators (Kubernetes, Celery, Temporal) dynamically spin up dozens or hundreds of short-lived agent instances, human operators cannot manually click "Create Delegation" in the console for each one. The architecture provides two automated patterns:
+
+1. **Platform Onboarding Broker (API-Driven)**:
+   - When the orchestrator schedules an agent pod, a privileged provisioning service calls `POST /v1/delegations` programmatically on behalf of the sponsoring human principal.
+   - The returned `agent_secret` is delivered directly into the container's environment or mounted secret store.
+2. **Workload Identity (SPIFFE / mTLS & Pattern Binding)**:
+   - Ephemeral workloads receive cryptographic identities at the transport layer (e.g. `spiffe://corp/ns/prod/agent/worker-*`).
+   - The gateway validates the SVID during the TLS handshake and binds the agent fleet to a class delegation pattern automatically without managing individual static secrets.
+
+---
+
 ## Recommendations when agents multiply
 
 - **Name each agent per-instance**, self-describing and team-prefixed:
