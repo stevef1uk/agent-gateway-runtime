@@ -136,6 +136,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 |---|---|
 | [`demo/`](demo/) | One-command demo stack: `docker-compose.yml`, Dex config, demo keys, scripted walkthrough (`demo.sh`), the default OPA policy (`policies/`) with a policy-engine override (`docker-compose.opa.yml`), and the performance benchmark (`bench/`, `bench-engines.sh`) |
 | [`demo/api/`](demo/api/) · [`demo/mcp/`](demo/mcp/) | The demo protected API (Demos 4/8) and, new in Demo 9, the demo MCP server (mcpsrv) — both buildable from this repo |
+| [`docs/UI-Walkthrough.md`](docs/UI-Walkthrough.md) | **Admin Console UI Walk-Through**: Comprehensive visual tour of delegations, human-in-the-loop approvals, disaster recovery, AI configuration assistant, 5-step onboarding wizard, live endpoint tester, and audit explorer |
 | [`docs/FreeRide-Setup.md`](docs/FreeRide-Setup.md) | **FreeRide AI Configuration Assistant setup**: configuring `.env`, AI providers (Gemini, OpenRouter, Groq, Cerebras, etc.), models, and health-checked UI enablement |
 | [`docs/Deployment-Guide.md`](docs/Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
 | [`docs/Agent-Identity.md`](docs/Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
