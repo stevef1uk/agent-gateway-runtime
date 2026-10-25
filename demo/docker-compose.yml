@@ -277,7 +277,6 @@ services:
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/web.token:ro
-      - ${WEB_DIR_MOUNT:-../../agent-gateway/web}:/app/web:ro
     depends_on:
       postgres: { condition: service_started }
       authz: { condition: service_started }

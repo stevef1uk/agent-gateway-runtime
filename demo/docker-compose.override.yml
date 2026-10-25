@@ -1,0 +1,4 @@
+services:
+  web:
+    volumes:
+      - /home/stevef/dev/agent-gateway/web:/app/web:ro
