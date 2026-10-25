@@ -34,7 +34,7 @@ spec:
     spec:
       containers:
         - name: pep
-          image: stevef1uk/agent-gateway-gateway:1.0.28
+          image: stevef1uk/agent-gateway-gateway_m:1.0.31
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }

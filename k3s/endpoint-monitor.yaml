@@ -1,0 +1,252 @@
+# Endpoint Availability & Health Monitor (k3s CronJob)
+#
+# Periodically probes all public endpoints on this cluster (dynamically discovered
+# from all Ingresses across namespaces) + any extra endpoints (like me.sjfisher.com).
+# Sends instant alerts to Telegram when an endpoint fails, and recovery notices when
+# it returns to healthy. Uses state tracking to prevent repeated alert spam.
+#
+# Deploy:
+#   kubectl apply -f k3s/endpoint-monitor.yaml
+#
+# Run an immediate test check:
+#   kubectl create job --from=cronjob/endpoint-monitor endpoint-monitor-test -n tenant-preprod
+#   kubectl logs -n tenant-preprod job/endpoint-monitor-test -f
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: endpoint-monitor
+  namespace: tenant-preprod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: endpoint-monitor-ingress-reader
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: endpoint-monitor-ingress-reader-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: endpoint-monitor-ingress-reader
+subjects:
+  - kind: ServiceAccount
+    name: endpoint-monitor
+    namespace: tenant-preprod
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: endpoint-monitor-state-manager
+  namespace: tenant-preprod
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: endpoint-monitor-state-manager-binding
+  namespace: tenant-preprod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: endpoint-monitor-state-manager
+subjects:
+  - kind: ServiceAccount
+    name: endpoint-monitor
+    namespace: tenant-preprod
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: endpoint-monitor-state
+  namespace: tenant-preprod
+data:
+  failed_hosts: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: endpoint-monitor-script
+  namespace: tenant-preprod
+data:
+  probe.sh: |
+    #!/bin/sh
+    set -e
+
+    CA_CERT="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+    TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token 2>/dev/null || echo "")
+    NAMESPACE="${POD_NAMESPACE:-tenant-preprod}"
+
+    send_telegram() {
+      local msg="$1"
+      if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          -d "chat_id=${TELEGRAM_CHAT_ID}" \
+          -d "parse_mode=HTML" \
+          --data-urlencode "text=${msg}" >/dev/null 2>&1 || true
+      fi
+    }
+
+    echo "=== [$(date -u '+%Y-%m-%d %H:%M:%S UTC')] Starting Endpoint Monitor Check ==="
+
+    # 1. Discover Ingress hosts dynamically from Kubernetes API
+    INGRESS_HOSTS=""
+    if [ -f "$CA_CERT" ] && [ -n "$TOKEN" ]; then
+      INGRESS_HOSTS=$(curl -s --cacert "$CA_CERT" -H "Authorization: Bearer $TOKEN" \
+        https://kubernetes.default.svc/apis/networking.k8s.io/v1/ingresses 2>/dev/null | \
+        grep -o '"host": *"[^"]*"' | awk -F'"' '{print $4}' | sort -u || true)
+    fi
+
+    # Combine discovered ingress hosts with any explicit extra endpoints
+    ALL_HOSTS=$(printf "%s\n%s\n" "$INGRESS_HOSTS" "${EXTRA_ENDPOINTS:-}" | tr ',' '\n' | tr ' ' '\n' | sed '/^$/d' | sort -u)
+
+    if [ -z "$ALL_HOSTS" ]; then
+      echo "WARNING: No hosts discovered from cluster ingresses or EXTRA_ENDPOINTS."
+      exit 0
+    fi
+
+    # 2. Read previous failure state from ConfigMap
+    PREV_FAILED=""
+    if [ -f "$CA_CERT" ] && [ -n "$TOKEN" ]; then
+      RESP=$(curl -s --cacert "$CA_CERT" -H "Authorization: Bearer $TOKEN" \
+        "https://kubernetes.default.svc/api/v1/namespaces/${NAMESPACE}/configmaps/endpoint-monitor-state" 2>/dev/null || true)
+      PREV_FAILED=$(echo "$RESP" | grep -o '"failed_hosts": *"[^"]*"' | awk -F'"' '{print $4}' || true)
+    fi
+
+    CURRENT_FAILED=""
+    CHECKED_COUNT=0
+    DOWN_COUNT=0
+
+    # 3. Probe each host
+    for host in $ALL_HOSTS; do
+      CHECKED_COUNT=$((CHECKED_COUNT + 1))
+      
+      # Check /healthz first
+      RES=$(curl -s -k -L -w "%{http_code}:%{time_total}" -o /dev/null --connect-timeout 8 --max-time 12 "https://${host}/healthz" 2>/dev/null || echo "000:0")
+      CODE=$(echo "$RES" | cut -d: -f1)
+      LATENCY=$(echo "$RES" | cut -d: -f2)
+      STATUS="DOWN"
+      ERR_DESC="HTTP ${CODE}"
+
+      if [ "$CODE" = "200" ]; then
+        STATUS="UP"
+      elif [ "$CODE" = "404" ]; then
+        # Endpoint may be a website or avatar app (like me.sjfisher.com) without /healthz; try root /
+        RES_ROOT=$(curl -s -k -L -w "%{http_code}:%{time_total}" -o /dev/null --connect-timeout 8 --max-time 12 "https://${host}/" 2>/dev/null || echo "000:0")
+        CODE_ROOT=$(echo "$RES_ROOT" | cut -d: -f1)
+        LATENCY_ROOT=$(echo "$RES_ROOT" | cut -d: -f2)
+        if [ "$CODE_ROOT" -ge 200 ] && [ "$CODE_ROOT" -lt 400 ]; then
+          STATUS="UP"
+          CODE="$CODE_ROOT"
+          LATENCY="$LATENCY_ROOT"
+        else
+          ERR_DESC="HTTP ${CODE_ROOT} on /"
+        fi
+      elif [ "$CODE" = "000" ]; then
+        ERR_DESC="Connection timeout / SSL error (>12s)"
+      fi
+
+      # Determine previous state
+      case " $PREV_FAILED " in
+        *" $host "*) WAS_DOWN=1 ;;
+        *) WAS_DOWN=0 ;;
+      esac
+
+      if [ "$STATUS" = "UP" ]; then
+        echo "  [UP]   https://${host} (code: ${CODE}, latency: ${LATENCY}s)"
+        if [ "$WAS_DOWN" -eq 1 ]; then
+          echo "  >>> Sending recovery alert for ${host}..."
+          MSG="✅ <b>Endpoint Alert: Recovered</b>%0A%0A<b>Host:</b> <code>https://${host}</code>%0A<b>Status:</b> Healthy (HTTP ${CODE}, ${LATENCY}s)%0A<b>Time:</b> $(date -u '+%Y-%m-%d %H:%M:%S UTC')%0A<b>Cluster:</b> k3s (endpoint-monitor)"
+          send_telegram "$MSG"
+        fi
+      else
+        echo "  [DOWN] https://${host} (${ERR_DESC})"
+        DOWN_COUNT=$((DOWN_COUNT + 1))
+        CURRENT_FAILED="${CURRENT_FAILED} ${host}"
+        if [ "$WAS_DOWN" -eq 0 ]; then
+          echo "  >>> Sending downtime alert for ${host}..."
+          MSG="🚨 <b>Endpoint Alert: Downtime Detected</b>%0A%0A<b>Host:</b> <code>https://${host}</code>%0A<b>Error:</b> ${ERR_DESC}%0A<b>Time:</b> $(date -u '+%Y-%m-%d %H:%M:%S UTC')%0A<b>Cluster:</b> k3s (endpoint-monitor)"
+          send_telegram "$MSG"
+        fi
+      fi
+    done
+
+    # 4. Save new failed state to ConfigMap
+    CLEAN_FAILED=$(echo "$CURRENT_FAILED" | sed 's/^ *//;s/ *$//')
+    if [ -f "$CA_CERT" ] && [ -n "$TOKEN" ]; then
+      curl -s --cacert "$CA_CERT" -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/strategic-merge-patch+json" \
+        -X PATCH \
+        -d "{\"data\":{\"failed_hosts\":\"$CLEAN_FAILED\"}}" \
+        "https://kubernetes.default.svc/api/v1/namespaces/${NAMESPACE}/configmaps/endpoint-monitor-state" >/dev/null 2>&1 || true
+    fi
+
+    echo "=== Summary: ${CHECKED_COUNT} checked, ${DOWN_COUNT} down. State updated. ==="
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: endpoint-monitor
+  namespace: tenant-preprod
+spec:
+  # Run every 30 minutes
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: endpoint-monitor
+        spec:
+          serviceAccountName: endpoint-monitor
+          restartPolicy: OnFailure
+          containers:
+            - name: monitor
+              image: curlimages/curl:latest
+              command: ["/bin/sh", "/scripts/probe.sh"]
+              env:
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: TELEGRAM_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: agentgw-telegram
+                      key: bot_token
+                - name: TELEGRAM_CHAT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: agentgw-telegram
+                      key: chat_id
+                # Optional: additional external hosts outside this cluster
+                - name: EXTRA_ENDPOINTS
+                  value: ""
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+          volumes:
+            - name: script
+              configMap:
+                name: endpoint-monitor-script
+                defaultMode: 0755

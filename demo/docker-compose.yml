@@ -112,7 +112,7 @@ services:
   # demoapi), so MCP traffic gets its own PEP here: /mcp/* in, mcpsrv out.
   # Same decision pipeline: delegation scope, caps, approvals, audit.
   gateway-mcp:
-    image: stevef1uk/agent-gateway-gateway:1.0.28  # 1.0.28 (mcponering): read-only protocol discovery (server/discover, resources/*, prompts/*) authorized as "list"; MCP hold text carries console instructions + approval id; Phase 3 client attribution
+    image: stevef1uk/agent-gateway-gateway:1.0.29  # 1.0.28 (mcponering): read-only protocol discovery (server/discover, resources/*, prompts/*) authorized as "list"; MCP hold text carries console instructions + approval id; Phase 3 client attribution
     container_name: agent-gateway-gateway-mcp
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -126,8 +126,8 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # same operator token as the primary gateway
-      # Real downstream: the demo MCP server (mcpsrv). /mcp streams through.
-      - UPSTREAM_URL=http://mcpsrv:8091
+      # Real downstream: the Emotion Detection MCP server (unlicensed evaluation mode).
+      - UPSTREAM_URL=http://emotion-mcp:9000
       # MCP One Ring OAuth layer (Claude remote connector + any MCP client):
       # - OAUTH_ISSUER_URL is the URL clients (and claude.ai) reach; the demo
       #   publishes :8085 on the host.
@@ -157,12 +157,16 @@ services:
       authz: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
-      mcpsrv: { condition: service_healthy }
+      emotion-mcp: { condition: service_started }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      default:
+        aliases:
+          - gateway-mcp-emotion
 
   demoapi:
     image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.6}  # 1.0.6 adds security response headers (nosniff, CORP/COOP/COEP — ZAP findings) alongside the 1.0.5 Payments-API surface; source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
@@ -174,6 +178,33 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # Emotion Service (LLM Inference Engine) - Protected by secure_packager
+  # In public docker-compose demo without customer_private.pem mounted,
+  # the model remains encrypted and calls prompt the user to obtain a commercial license.
+  emotion-api:
+    image: stevef1uk/emotion-service:${IMAGE_TAG:-amd64}
+    container_name: agent-gateway-emotion-api
+    restart: unless-stopped
+    ports: ["8000:8000"]
+    environment:
+      - MODEL_PATH=/app/model
+      - GO_SERVER_PORT=8000
+      - PRIVATE_KEY_PATH=/app/keys/customer_private.pem
+      - TOKEN_FILE_PATH=/app/gemma3_emotion_model_unsloth/release/token.txt
+
+  # Emotion Detection MCP Server (Go-based, dual Streamable-HTTP & SSE)
+  emotion-mcp:
+    image: ${MCP_IMAGE:-stevef1uk/emotion-mcp:latest}
+    container_name: agent-gateway-emotion-mcp
+    restart: unless-stopped
+    ports: ["9000:9000"]
+    environment:
+      - EMOTION_SERVICE_URL=http://emotion-api:8000/predict
+      - MCP_PORT=9000
+      - MCP_TRANSPORT=dual
+    depends_on:
+      - emotion-api
 
   # Demo 9 — the protected MCP server (source: demo/mcp, built from this
   # repo the way demoapi is). Streamable-HTTP MCP at /mcp + a read-only
@@ -193,14 +224,16 @@ services:
       retries: 5
 
   web:
-    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.44}  # 1.0.44 (latest): strict CSP (pages' script/CSS are static assets, no 'unsafe-inline'), COOP/COOEP hardening, IdP-relay CSP escape hatch, current authorizer.rego as the shipped initial policy; 1.0.31 #approvals deep-link (notification cards land on the pending-approvals view); 1.0.30 IdP-proxy chooser/link fix (provider links stay under /oidc/idp even without a pinned connector); 1.0.27 decision approver = verified session subject (gateway enforces the binding); 1.0.26 in-page approval notifications (pending badge + toast); 1.0.19 session-gated console APIs (whoami identity, no readable token cookie) + CSP + demo kill switch; 1.0.20 non-root; 1.0.21 rate-limited /oidc/login; 1.0.22 expired-probe-delegation recovery; 1.0.23/24 console Sign out button; 1.0.25 demo step 1 auto-resumes after the SSO redirect; patched Go toolchain
+    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.54}  # 1.0.54: first-class refunds API support with auto-allow vs cap hold scenarios & guidance
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     ports: ["8083:8083"]
     environment:
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - AUTHZ_URL=http://authz:8081
       - GATEWAY_URL=http://gateway:8080
+      - GATEWAY_MCP_URL=http://gateway-mcp:8080
       - TOKENSVC_URL=http://tokensvc:8082
       - OIDC_ISSUER_URL=http://dex:5556/dex
       - OIDC_CLIENT_ID=agent-gateway
@@ -208,10 +241,14 @@ services:
       - WEB_ADDR=:8083
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # forwarded to the gateway's operator endpoints
       - DEMO_UI=1                     # serve the R&D pages (/demo.html, /policy.html); production omits this
+      - FREERIDE_URL=http://freeride:11434/v1/chat/completions
+      - FREERIDE_MODEL=${FREERIDE_MODEL:-gpt-4o}
+      - FREERIDE_PROVIDER=${FREERIDE_PROVIDER:-FreeRide}
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/web.token:ro
     depends_on:
+      postgres: { condition: service_started }
       authz: { condition: service_started }
       gateway: { condition: service_started }
     healthcheck:
@@ -256,6 +293,28 @@ services:
     environment:
       - DEX_MOCK_REDIRECT_URIS=${DEX_MOCK_REDIRECT_URIS:-http://localhost:8083/oidc/callback,http://host.docker.internal:8083/oidc/callback}
     command: ["dex", "serve", "/etc/dex/config.yaml"]
+
+  freeride:
+    image: ${FREERIDE_IMAGE:-stevef1uk/freeride:1.4.0}
+    container_name: agent-gateway-freeride
+    restart: unless-stopped
+    ports: ["${FREERIDE_HOST_PORT:-11435}:11434"]
+    environment:
+      - PORT=11434
+      # Configure whichever provider API keys you wish to use (passed from demo/.env)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY:-}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:11434/api/hello"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
 volumes:
   redis-data:

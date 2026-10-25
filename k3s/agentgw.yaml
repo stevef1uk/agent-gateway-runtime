@@ -8,14 +8,14 @@
 #   policies/  — the live OPA policy: web (playground) writes it,
 #                authz (engine) watches and serves it — any node
 #
-# Prereq (secrets are NOT in this file): from the demo repo's demo/keys run
-#   kubectl create ns agentgw
-#   kubectl -n agentgw create secret generic agentgw-keys \
-#     --from-file=customer_private.pem=keys/customer_private.pem \
-#     --from-file=license.token=keys/license.token
+# Managed image prerequisite (secrets are NOT in this file): create
+# agentgw-keys from the hosted private key in the private source repo and a
+# fresh vendor-signed licence. Never use demo/keys for these _m images and
+# never copy hosted key material to the public demo repo.
+# Do not apply publicly until trusted OIDC and agentgw-web-admin are ready.
 #
 # Endpoints after rollout (NodePort on any node, e.g. 192.168.1.74):
-#   console  http://<node>:30083   (DEMO_UI=1 → guided demo + playground)
+#   console  http://<node>:30083   (public approvals; operator signup review)
 #   gateway  http://<node>:30080   (agents; X-Admin-Token operator API)
 ---
 apiVersion: v1
@@ -96,6 +96,7 @@ data:
           - http://192.168.1.45:30083/oidc/callback
           - http://192.168.1.63:30083/oidc/callback
           - http://host.docker.internal:30083/oidc/callback
+          - https://agw.sjfisher.com/oidc/callback
           # MCP One Ring OAuth connector callback (gateway-mcp via ingress)
           - https://agw.sjfisher.com/oauth/idpcallback
     enablePasswordDB: true
@@ -104,21 +105,7 @@ data:
         hash: "$2a$10$2b2cU8CPhOTaGrs1HRQuAueS7JTT5ZHsHSzYiFPm1leZck7Mc8T4W"
         username: "alice"
         userID: "alice"
-    connectors:
-      - type: mockCallback
-        id: mock
-        name: "Mock (dev)"
-        config:
-          redirectURIs:
-            - http://localhost:30083/oidc/callback
-            - http://127.0.0.1:30083/oidc/callback
-            - http://192.168.1.74:30083/oidc/callback
-            - http://192.168.1.53:30083/oidc/callback
-            - http://192.168.1.45:30083/oidc/callback
-            - http://192.168.1.63:30083/oidc/callback
-            - http://host.docker.internal:30083/oidc/callback
-            # MCP One Ring OAuth connector callback (gateway-mcp via ingress)
-            - https://agw.sjfisher.com/oauth/idpcallback
+    connectors: []
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -280,7 +267,7 @@ spec:
     spec:
       containers:
         - name: authz
-          image: stevef1uk/agent-gateway-authz:1.0.12
+          image: stevef1uk/agent-gateway-authz_m:1.0.13
           ports: [{ containerPort: 8081 }]
           env:
             - { name: PERSISTENCE, value: postgres }
@@ -295,7 +282,7 @@ spec:
             - { name: OIDC_CLIENT_ID, value: agent-gateway }
             # One-click mock sign-in (compose-demo parity); omit to show Dex's
             # connector chooser — its links are proxied correctly since 1.0.30.
-            - { name: OIDC_CONNECTOR_ID, value: mock }
+            - { name: OIDC_CONNECTOR_ID, value: local }
             - { name: AUTHZ_POLICY_ENGINE, value: opa }
             - { name: OPA_POLICY_PATH, value: /policy/authorizer.rego }
           volumeMounts:
@@ -337,7 +324,7 @@ spec:
     spec:
       containers:
         - name: tokensvc
-          image: stevef1uk/agent-gateway-tokensvc:1.0.5
+          image: stevef1uk/agent-gateway-tokensvc_m:1.0.6
           ports: [{ containerPort: 8082 }]
           env:
             - name: JWT_SECRET
@@ -382,7 +369,7 @@ spec:
           # images >= gateway 1.0.22 add the egress forward proxy
           # (GATEWAY_PROXY_ADDR). 1.0.22 ships after local validation —
           # publish with: make push-gateway ALLOW_PUSH=yes
-          image: stevef1uk/agent-gateway-gateway:1.0.24
+          image: stevef1uk/agent-gateway-gateway_m:1.0.31
           ports: [{ containerPort: 8080 }, { containerPort: 8088 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -501,7 +488,7 @@ spec:
     spec:
       containers:
         - name: gateway-mcp
-          image: stevef1uk/agent-gateway-gateway:1.0.28  # OAuth layer (DCR+PKCE+delegation binding) + per-tool MCP enforcement
+          image: stevef1uk/agent-gateway-gateway_m:1.0.31  # managed OAuth layer + per-tool MCP enforcement
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -521,7 +508,7 @@ spec:
             - { name: OAUTH_ISSUER_URL, value: "https://agw.sjfisher.com" }
             - { name: OIDC_ISSUER_URL, value: "http://dex:5556/dex" }
             - { name: OIDC_CLIENT_ID, value: "agent-gateway" }
-            - { name: OIDC_CONNECTOR_ID, value: "mock" }
+            - { name: OIDC_CONNECTOR_ID, value: "local" }
             - { name: UPSTREAM_URL, value: "http://mcpsrv:8091" }   # the CRM MCP server — never published
             - name: APPROVAL_TELEGRAM_BOT_TOKEN
               valueFrom: { secretKeyRef: { name: agentgw-telegram, key: bot_token, optional: true } }
@@ -597,7 +584,7 @@ spec:
     spec:
       initContainers:
         - name: seed-policy
-          image: stevef1uk/agent-gateway-web:1.0.44
+          image: stevef1uk/agent-gateway-web_m:1.0.47
           # The shared Gluster file system root-squashes, and pods may run as an
           # unprivileged uid, so the console runs as root (squashed to `nobody`
           # by the share — the same owner the first seed created files with).
@@ -607,21 +594,26 @@ spec:
           volumeMounts: [{ name: policies, mountPath: /policies }]
       containers:
         - name: web
-          image: stevef1uk/agent-gateway-web:1.0.44
+          image: stevef1uk/agent-gateway-web_m:1.0.47
           securityContext: { runAsUser: 0 }
           ports: [{ containerPort: 8083 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
             - { name: GATEWAY_URL, value: "http://gateway:8080" }
             - { name: TOKENSVC_URL, value: "http://tokensvc:8082" }
+            # Do not roll out publicly until the Dex mock above is replaced
+            # with trusted OIDC and this allowlist Secret is provisioned.
             - { name: OIDC_ISSUER_URL, value: "http://dex:5556/dex" }
             - { name: OIDC_CLIENT_ID, value: agent-gateway }
             # One-click mock sign-in (compose-demo parity); omit to show Dex's
             # connector chooser — its links are proxied correctly since 1.0.30.
-            - { name: OIDC_CONNECTOR_ID, value: mock }
+            - { name: OIDC_CONNECTOR_ID, value: local }
             - name: GATEWAY_ADMIN_TOKEN
               valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
-            - { name: DEMO_UI, value: "1" }
+            - { name: WEB_PUBLIC_CONSOLE, value: "1" }
+            - { name: DEMO_UI, value: "0" }
+            - name: WEB_ADMIN_EMAILS
+              valueFrom: { secretKeyRef: { name: agentgw-web-admin, key: emails } }
             - { name: PUBLIC_GATEWAY_URL, value: "http://192.168.1.74:30080" }  # agents reach the gateway here
             - { name: POLICY_FILE, value: /policies/authorizer.rego }
             - { name: POLICY_DEFAULT_FILE, value: /app/default-policy.rego }

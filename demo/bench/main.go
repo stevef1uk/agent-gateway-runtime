@@ -51,6 +51,9 @@ type options struct {
 	authz    string
 	tokensvc string
 
+	token      string
+	delegation string
+
 	allowPath, allowMethod, allowBody string
 	denyPath, denyMethod, denyBody    string
 	allowExpect, denyExpect           int
@@ -77,6 +80,8 @@ func main() {
 	flag.StringVar(&o.gateway, "gateway", "http://localhost:8080", "gateway base URL (the system under test)")
 	flag.StringVar(&o.authz, "authz", "http://localhost:8081", "authz base URL (delegation creation)")
 	flag.StringVar(&o.tokensvc, "tokensvc", "http://localhost:8082", "tokensvc base URL (token minting)")
+	flag.StringVar(&o.token, "token", "", "pre-minted Bearer token (skips mock SSO sign-in, delegation, and minting)")
+	flag.StringVar(&o.delegation, "delegation", "", "delegation ID for report when -token is provided (default: parsed from token claims)")
 
 	flag.StringVar(&o.allowPath, "allow-path", "/orders", "ALLOWED passthrough path (proxied downstream)")
 	flag.StringVar(&o.allowMethod, "allow-method", http.MethodPost, "ALLOWED passthrough method")
@@ -123,28 +128,49 @@ func run(o options) error {
 	}
 
 	// --- setup: SSO -> delegation -> access token --------------------------
-	idToken, sub, err := mockSignIn(client, o.web)
-	if err != nil {
-		return fmt.Errorf("mock SSO sign-in: %w", err)
-	}
-	delegID, secret, err := createDelegation(client, o.authz, idToken, o.agentID, o.allowPath)
-	if err != nil {
-		return fmt.Errorf("create delegation: %w", err)
-	}
-	token, err := mintToken(client, o.tokensvc, delegID, secret, o.tokenTTL)
-	if err != nil {
-		return fmt.Errorf("mint token: %w", err)
-	}
+	var token, delegID, sub, engine string
+	if o.token != "" {
+		token = o.token
+		claims := parseJWTClaims(token)
+		sub = claims.Sub
+		delegID = o.delegation
+		if delegID == "" {
+			delegID = claims.DelegationID
+		}
+		if o.agentID == "bench-agent" && claims.AgentID != "" {
+			o.agentID = claims.AgentID
+		}
+		engine = o.engineLabel
+		if engine == "" {
+			engine = "opa"
+		}
+	} else {
+		idToken, s, err := mockSignIn(client, o.web)
+		if err != nil {
+			return fmt.Errorf("mock SSO sign-in: %w", err)
+		}
+		sub = s
+		dID, secret, err := createDelegation(client, o.authz, idToken, o.agentID, o.allowPath)
+		if err != nil {
+			return fmt.Errorf("create delegation: %w", err)
+		}
+		delegID = dID
+		tok, err := mintToken(client, o.tokensvc, delegID, secret, o.tokenTTL)
+		if err != nil {
+			return fmt.Errorf("mint token: %w", err)
+		}
+		token = tok
 
-	// Which policy engine is authz actually using? The decision carries a
-	// policy_id ("basic" for the built-in engine, "opa" for Rego). Auto-detect
-	// unless the caller pinned a label.
-	engine := o.engineLabel
-	if engine == "" {
-		if e, derr := detectEngine(client, o.authz, delegID, o.agentID, sub, o.allowPath); derr == nil && e != "" {
-			engine = e
-		} else {
-			engine = "unknown"
+		// Which policy engine is authz actually using? The decision carries a
+		// policy_id ("basic" for the built-in engine, "opa" for Rego). Auto-detect
+		// unless the caller pinned a label.
+		engine = o.engineLabel
+		if engine == "" {
+			if e, derr := detectEngine(client, o.authz, delegID, o.agentID, sub, o.allowPath); derr == nil && e != "" {
+				engine = e
+			} else {
+				engine = "unknown"
+			}
 		}
 	}
 
@@ -589,20 +615,28 @@ func postJSON(client *http.Client, endpoint string, payload any, headers map[str
 	return nil
 }
 
-func jwtSubject(token string) string {
+type jwtClaims struct {
+	Sub          string `json:"sub"`
+	DelegationID string `json:"delegation_id"`
+	AgentID      string `json:"agent_id"`
+}
+
+func parseJWTClaims(token string) jwtClaims {
 	parts := strings.Split(token, ".")
 	if len(parts) < 2 {
-		return ""
+		return jwtClaims{}
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return ""
+		return jwtClaims{}
 	}
-	var claims struct {
-		Sub string `json:"sub"`
-	}
+	var claims jwtClaims
 	_ = json.Unmarshal(raw, &claims)
-	return claims.Sub
+	return claims
+}
+
+func jwtSubject(token string) string {
+	return parseJWTClaims(token).Sub
 }
 
 // --- small utils ------------------------------------------------------------

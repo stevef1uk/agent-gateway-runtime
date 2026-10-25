@@ -1,6 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -93,5 +98,47 @@ func TestLookupBareNumID(t *testing.T) {
 	s := newCustomerStore()
 	if c, ok := s.lookup("1"); !ok || c.ID != "CUST-0001" {
 		t.Fatalf("lookup(\"1\") = %v ok=%v; want CUST-0001", c, ok)
+	}
+}
+
+func TestOrdersHandler(t *testing.T) {
+	mux := http.NewServeMux()
+	var orderCount int64
+	mux.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var payload struct {
+			Amount   float64 `json:"amount"`
+			Supplier string  `json:"supplier"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		count := atomic.AddInt64(&orderCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":         "ok",
+			"service":        "mcpsrv",
+			"path":           "/orders",
+			"executed_count": count,
+			"amount":         payload.Amount,
+			"supplier":       payload.Supplier,
+			"note":           "executed BEHIND the Agent Gateway",
+		})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/orders", strings.NewReader(`{"amount":150,"supplier":"acme"}`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if resp["status"] != "ok" || resp["amount"].(float64) != 150 {
+		t.Fatalf("unexpected response: %v", resp)
 	}
 }

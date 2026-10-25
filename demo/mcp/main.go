@@ -23,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -267,6 +268,32 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"removed":   removed,
 				"remaining": len(store.list()),
+			})
+		})
+
+		// Orders endpoint: proof-of-execution for the purchase order REST demo
+		// (Step 4 & 6 of the Demo UI). POST /orders runs under the agent's delegation.
+		var orderCount int64
+		mux.HandleFunc("/orders", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			var payload struct {
+				Amount   float64 `json:"amount"`
+				Supplier string  `json:"supplier"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			count := atomic.AddInt64(&orderCount, 1)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":         "ok",
+				"service":        "mcpsrv",
+				"path":           "/orders",
+				"executed_count": count,
+				"amount":         payload.Amount,
+				"supplier":       payload.Supplier,
+				"note":           "executed BEHIND the Agent Gateway",
 			})
 		})
 

@@ -1,16 +1,17 @@
 # Agent Gateway on k3s
 
-Deploy the full stack (authz, tokensvc, gateway, console, Dex IdP, Postgres,
-Redis) into the `agentgw` namespace.
+Deploy the full stack (authz, tokensvc, gateway, console, OIDC provider,
+Postgres, Redis) into the `agentgw` namespace. The checked-in Dex mock is for
+private development only; public use requires a trusted external OIDC provider.
 
 ## Layout
 
 | Service | Image | Exposure |
 |---|---|---|
-| web (console + playground) | `agent-gateway-web:1.0.44` | NodePort **30083** |
-| gateway (enforcement) | `agent-gateway-gateway:1.0.24` | NodePort **30080** + **30088** (egress proxy) |
-| authz (decision point) | `agent-gateway-authz:1.0.12` | NodePort **30081** |
-| tokensvc (minting) | `agent-gateway-tokensvc:1.0.5` | NodePort **30082** |
+| web (console + playground) | `agent-gateway-web_m:1.0.47` | NodePort **30083** |
+| gateway (enforcement) | `agent-gateway-gateway_m:1.0.31` | NodePort **30080** + **30088** (egress proxy) |
+| authz (decision point) | `agent-gateway-authz_m:1.0.13` | NodePort **30081** |
+| tokensvc (minting) | `agent-gateway-tokensvc_m:1.0.6` | NodePort **30082** |
 | dex (local OIDC IdP) | `dexidp/dex:v2.46.0` | ClusterIP only (browser traffic is proxied via `/oidc/idp/…`) |
 | postgres / redis | official | ClusterIP, pinned to one node on local storage |
 
@@ -57,24 +58,58 @@ IAM-based access in the cloud — you can drop that `securityContext` override.
 
 ## Deploy
 
+Build and validate the managed (`_m`) images in the private source repo, then
+publish the multi-arch tags before asking the cluster to pull them:
+
+```bash
+cd /home/stevef/dev/agent-gateway
+make image-m
+# Validate the local managed images before publishing.
+make push-m ALLOW_PUSH=yes
+```
+
 ```bash
 kubectl create ns agentgw
-# licence material (from the demo repo's demo/keys)
-cd agent-gateway-demo/demo/keys
+# From the private source checkout, issue a fresh managed licence.
+cd /home/stevef/dev/agent-gateway
+TMP_OUT=/tmp/managed-licences ./scripts/issue-managed-licence.sh agentgw -d 100
+# From the private demo repo, apply the hosted key and generated licence as a Secret.
+cd /home/stevef/dev/agent-gateway-demo
 kubectl -n agentgw create secret generic agentgw-keys \
-  --from-file=customer_private.pem=customer_private.pem \
-  --from-file=license.token=license.token
-cd -
+  --from-file=customer_private.pem=/home/stevef/dev/agent-gateway/keys/hosted/hosted_private.pem \
+  --from-file=license.token=/tmp/managed-licences/agentgw/license.token \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Do **not** apply the public manifest while it still uses the demo Dex mock.
+Configure the trusted OIDC issuer for authz, gateway and web, and create the
+allowlist Secret from your verified operator address:
+
+```bash
+kubectl -n agentgw create secret generic agentgw-web-admin \
+  --from-literal=emails='<verified-operator-email>'
+```
+
+Only after those prerequisites are ready, apply and watch the deployment:
+
+```bash
 kubectl apply -f k3s/agentgw.yaml
 kubectl -n agentgw get pods -w
 ```
 
-Then open `http://<node>:30083` (Dex mock connector → one-click sign-in;
-the OIDC redirect whitelist already contains `http://127.0.0.1:30083/...`,
-`localhost` and `host.docker.internal` — **add your node's URI form** (as in
-the committed `http://192.168.1.74:30083/...`) to the `dex-config` ConfigMap
-in [`agentgw.yaml`](agentgw.yaml) if you expose the console elsewhere; then
-`kubectl apply` + `kubectl rollout restart deployment/dex -n agentgw`).
+Tenant provisioning defaults to `MANAGED=1`. It requires the hosted private
+key and issues a fresh vendor-signed licence; it will not silently fall back
+to eval keys or eval images. Set `MANAGED=0` only for an explicitly chosen
+evaluation deployment.
+
+The managed images are encrypted to `keys/hosted/hosted_public.pem`; the
+matching private key stays in the private source repo and is installed only
+as the `agentgw-keys` Kubernetes Secret. Do not copy hosted key material into
+the public demo repo.
+
+After the real OIDC provider and managed images are deployed, open
+`https://agw.sjfisher.com/`. Do not use the Dex mock/static credentials for a
+public deployment.
 
 ## Running the console & demo UIs
 
@@ -82,9 +117,9 @@ Everything browser-facing is served by the `web` service:
 
 | Surface | URL | What to try |
 |---|---|---|
-| Admin console | `http://<node>:30083/` | Sign in with Dex (one click, mock connector) · create a delegation and copy the agent env · watch the **Approvals** heading show a red pending badge + toast when a held action appears · approve only as the signed-in delegating user (the gateway refuses anyone else) |
-| Guided demo | `http://<node>:30083/demo.html` | The nine-step walkthrough: SSO → delegation → mint → allow → hold → approve → retry → revoke → deny. Step 1 auto-resumes after the SSO redirect |
-| OPA playground | `http://<node>:30083/policy.html` | Run the probes, edit the `spend_breached` cap, **Apply** and watch the €250 probe flip within ~5 s — the engine re-reads the policy from the cluster-shared volume, so the edit and the engine may be on **different nodes**. **Restore initial policy** reverts |
+| Shared console | `https://agw.sjfisher.com/` | Public users sign in and decide only their own eligible CRM delete requests; the verified allowlisted operator also sees signup review |
+| Guided demo | Disabled in the shared public profile | `DEMO_UI=0` |
+| OPA playground | Disabled in the shared public profile | Policy administration stays private |
 
 Notes:
 
@@ -102,6 +137,46 @@ Notes:
   `approval_rules`, against the demoapi upstream): the same script works on
   both platforms — `demo/protected-api-demo.sh` (compose) or
   `demo/protected-api-demo.sh --node <ip>` (k3s; `make protected-api-k3s`).
+
+## Public connector versus tenant administration
+
+`https://agw.sjfisher.com` is the shared customer-connector demo. Ordinary
+signed-in users can decide only their own pending `delete_customer` CRM
+requests. The verified operator account can additionally review signup
+requests; the API checks the configured email allowlist server-side.
+Telegram, tenant administration and policy controls remain unavailable on
+this shared console. The profile is configured on the web deployment with:
+
+```yaml
+- { name: WEB_PUBLIC_CONSOLE, value: "1" }
+- { name: DEMO_UI, value: "0" }
+```
+
+With a web image that implements this profile, signed-in users can see and
+decide only their own pending `delete_customer` CRM requests. Signup requests
+remain public at `/signup.html`; only the verified, allowlisted operator can
+see or decide them. The app has no password-change API; password and identity
+administration belong to each tenant's own identity provider.
+
+The manifest targets the managed web image and enables this profile, but it
+must not be applied publicly until a real OIDC provider replaces the Dex
+mock/static credentials and `agentgw-web-admin` contains the operator's
+verified email. Create that Secret from the provider-verified address before
+rollout. Never use the demo Dex mock as the public identity boundary. Expose
+only the HTTPS ingress needed by Claude and the web console; firewall
+NodePorts `30080`–`30083` from the public Internet.
+
+```bash
+kubectl -n agentgw create secret generic agentgw-web-admin \
+  --from-literal=emails='<verified-operator-email>'
+```
+
+For an isolated tenant instance, configure `WEB_ADMIN_EMAILS` with that
+tenant operator's email as verified by the tenant's OIDC provider. Only then
+are signup review and tenant-scoped Telegram controls available in that
+tenant's console. Keep each tenant's IdP/password lifecycle and Telegram
+secret inside its own namespace; do not copy those settings into the shared
+connector deployment.
 
 ## Rotate for anything real
 
@@ -149,3 +224,37 @@ re-applying the manifest rebinds without re-seeding.)
   migrations are idempotent and the previous DB is reused.
 * authz demands the policy file at start-up and may crash-loop briefly until
   web's init container has (re)seeded it; pod restarts absorb the ordering.
+
+## Tenant DNS & Cluster CoreDNS
+
+Preprod multi-tenancy routes tenants to `<name>.preprod.agw.sjfisher.com`.
+
+### DNS Wildcards (Authoritative DNS)
+Standard DNS wildcards (RFC 1034) do not cross dot boundaries. The authoritative DNS requires:
+* `*.agw.sjfisher.com -> k3s.sjfisher.com` (covers 1st-level subdomains)
+* `*.preprod.agw.sjfisher.com -> k3s.sjfisher.com` (covers 2nd-level tenant preprod subdomains)
+
+### Cluster CoreDNS Upstream Forwarder (`coredns-custom.yaml`)
+To prevent internal pod OIDC discovery and cert-manager ACME checks from failing when local routers cache negative NXDOMAIN responses, CoreDNS is configured via `k3s/coredns-custom.yaml` to forward `agw.sjfisher.com` directly to public upstream resolvers (`1.1.1.1` and `8.8.8.8`). `add-tenant.sh` automatically ensures this ConfigMap is applied.
+
+## Endpoint & Tenant Availability Monitor (`endpoint-monitor.yaml`)
+
+A lightweight, zero-maintenance Kubernetes CronJob running every 30 minutes (`*/30 * * * *`) that probes all public endpoints on the cluster and alerts you via Telegram if any endpoint goes down, with recovery notifications when it returns to healthy.
+
+### Features
+* **Dynamic Tenant Discovery**: Reads all hostnames across all cluster `Ingress` objects (`agw.sjfisher.com`, `preprod.agw.sjfisher.com`, `testten1.preprod.agw.sjfisher.com`, `me.sjfisher.com`, plus any future tenants created by `add-tenant.sh`).
+* **Smart Probing**: Checks `/healthz` (falling back to `/` for personal/avatar apps like `me.sjfisher.com`).
+* **State-Aware (No Alert Spam)**: Maintains previous failure state in ConfigMap `endpoint-monitor-state`. Only alerts on state changes (new failure 🚨, or recovery ✅).
+* **Zero Custom Image**: Uses standard `curlimages/curl:latest` and existing `agentgw-telegram` secret.
+
+### Deploy & Test
+```bash
+# Deploy to cluster
+kubectl apply -f k3s/endpoint-monitor.yaml
+
+# Run an immediate manual check
+kubectl create job --from=cronjob/endpoint-monitor endpoint-monitor-test -n tenant-preprod
+kubectl logs -n tenant-preprod job/endpoint-monitor-test -f
+```
+
+

@@ -31,6 +31,7 @@ NAME=${1:?"usage: add-mcp-server.sh <name>  (env: IMAGE PORT TOOLS DELETE_PATTER
 NS=${NAMESPACE:-agentgw}
 HOST=${HOST:-agw.sjfisher.com}
 IMAGE=${IMAGE:-stevef1uk/agent-gateway-mcpsrv:1.0.1}
+GATEWAY_IMAGE=${GATEWAY_IMAGE:-stevef1uk/agent-gateway-gateway_m:1.0.31}
 PORT=${PORT:-8091}
 TOOL_ACTIONS=${TOOLS:-"add_customer lookup_customer list_customers find_customer delete_customer"}
 DELETE_PATTERN=${DELETE_PATTERN:-delete_customer}
@@ -82,7 +83,7 @@ spec:
     spec:
       containers:
         - name: pep
-          image: stevef1uk/agent-gateway-gateway:1.0.28
+          image: ${GATEWAY_IMAGE}
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -98,9 +99,9 @@ spec:
               valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
             - { name: OAUTH_ENABLED, value: "1" }
             - { name: OAUTH_ISSUER_URL, value: "https://${HOST}" }
-            - { name: OIDC_ISSUER_URL, value: "http://dex:5556/dex" }
+            - { name: OIDC_ISSUER_URL, value: "${OIDC_ISSUER_URL:-$(kubectl -n "$NS" get deploy gateway-mcp -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OIDC_ISSUER_URL")].value}' 2>/dev/null || echo http://dex:5556/dex)}" }
             - { name: OIDC_CLIENT_ID, value: "agent-gateway" }
-            - { name: OIDC_CONNECTOR_ID, value: "mock" }
+            - { name: OIDC_CONNECTOR_ID, value: "${OIDC_CONNECTOR_ID:-$(kubectl -n "$NS" get deploy gateway-mcp -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="OIDC_CONNECTOR_ID")].value}' 2>/dev/null || echo mock)}" }
             - { name: UPSTREAM_URL, value: "http://mcp-${NAME}:${PORT}" }
             - name: APPROVAL_TELEGRAM_BOT_TOKEN
               valueFrom: { secretKeyRef: { name: agentgw-telegram, key: bot_token, optional: true } }

@@ -1,9 +1,9 @@
 # Agent Gateway — AI agents work, humans stay in control
 
 <p align="center">
-  <img src="images/conceptual.png"
-       alt="Agent Gateway conceptual architecture — an end user signs in through an OIDC provider (Dex / Keycloak / Entra / Okta); the Web UI + Authz service manages delegations, decisions and approvals; the token service issues short-lived, audience-scoped JWTs; the AI agent runtime presents its SPIFFE ID while calling the policy enforcement gateway (PEP) that validates identity, delegation, action, limits, approval and audit before proxying authorized, audited requests to downstream APIs and enterprise systems. Key security principles: distinct identities, delegated time-bound authorization, short-lived scoped tokens, policy enforcement, risk-based approvals, full audit — standards include OpenID Connect, OAuth 2.0 token exchange, Rich Authorization Requests, DPoP/mTLS and SPIFFE/SPIRE workload identities."
-       width="844">
+  <img src="images/conceptual.jpg"
+       alt="Agent Gateway conceptual architecture — an end user signs in through an OIDC provider (Dex / Keycloak / Entra / Okta); the Admin Web Console provides a 5-step onboarding wizard, Freeride AI assistant, live endpoint tester, OPA playground, tap-to-approve, and compliance audit trail; the token service issues short-lived, audience-scoped JWTs; the AI agent runtime presents its workload identity while calling the policy enforcement gateway (PEP) that validates identity, delegation, action, limits, approval and audit before proxying authorized, audited requests to any external REST API, remote MCP server, or downstream enterprise system."
+       width="960">
 </p>
 
 > **Status note on the diagram.** Two panels describe the target design and
@@ -136,6 +136,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 |---|---|
 | [`demo/`](demo/) | One-command demo stack: `docker-compose.yml`, Dex config, demo keys, scripted walkthrough (`demo.sh`), the default OPA policy (`policies/`) with a policy-engine override (`docker-compose.opa.yml`), and the performance benchmark (`bench/`, `bench-engines.sh`) |
 | [`demo/api/`](demo/api/) · [`demo/mcp/`](demo/mcp/) | The demo protected API (Demos 4/8) and, new in Demo 9, the demo MCP server (mcpsrv) — both buildable from this repo |
+| [`docs/FreeRide-Setup.md`](docs/FreeRide-Setup.md) | **FreeRide AI Configuration Assistant setup**: configuring `.env`, AI providers (Gemini, OpenRouter, Groq, Cerebras, etc.), models, and health-checked UI enablement |
 | [`docs/Deployment-Guide.md`](docs/Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
 | [`docs/Agent-Identity.md`](docs/Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
 | [`docs/Agent-Auth-Basics.md`](docs/Agent-Auth-Basics.md) | How agents actually get a credential — a beginners' guide to the delegation → mint → JWT dance, with copy-paste curl examples and a troubleshooting table |
