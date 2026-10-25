@@ -107,10 +107,8 @@ services:
       timeout: 3s
       retries: 5
 
-  # Demo 9 — a second gateway instance fronting the MCP server. UPSTREAM_URL
-  # is per-instance (the primary gateway forwards /orders and /api/* to
-  # demoapi), so MCP traffic gets its own PEP here: /mcp/* in, mcpsrv out.
-  # Same decision pipeline: delegation scope, caps, approvals, audit.
+  # Demo 9 — CRM MCP server PEP. UPSTREAM_URL is per-instance,
+  # so MCP CRM traffic gets its own PEP here: /mcp in, mcpsrv:8091 out.
   gateway-mcp:
     image: stevef1uk/agent-gateway-gateway:1.0.29  # 1.0.28 (mcponering): read-only protocol discovery (server/discover, resources/*, prompts/*) authorized as "list"; MCP hold text carries console instructions + approval id; Phase 3 client attribution
     container_name: agent-gateway-gateway-mcp
@@ -126,8 +124,8 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # same operator token as the primary gateway
-      # Real downstream: the Emotion Detection MCP server (unlicensed evaluation mode).
-      - UPSTREAM_URL=http://emotion-mcp:9000
+      # CRM MCP server (Demo 9)
+      - UPSTREAM_URL=http://mcpsrv:8091
       # MCP One Ring OAuth layer (Claude remote connector + any MCP client):
       # - OAUTH_ISSUER_URL is the URL clients (and claude.ai) reach; the demo
       #   publishes :8085 on the host.
@@ -157,16 +155,51 @@ services:
       authz: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
+      mcpsrv: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Dedicated Gateway PEP fronting the Emotion Detection MCP server
+  gateway-mcp-emotion:
+    image: stevef1uk/agent-gateway-gateway:1.0.29
+    container_name: agent-gateway-gateway-mcp-emotion
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ports: ["${GATEWAY_MCP_EMOTION_HOST_PORT:-8086}:8080"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - UPSTREAM_URL=http://emotion-mcp:9000
+      - OAUTH_ENABLED=1
+      - OAUTH_ISSUER_URL=${OAUTH_PUBLIC_BASE_EMOTION:-http://localhost:${GATEWAY_MCP_EMOTION_HOST_PORT:-8086}}
+      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_CLIENT_ID=agent-gateway
+      - OAUTH_IDP_BROWSER_URL=http://localhost:5556/dex
+      - OIDC_CONNECTOR_ID=mock
+      - APPROVAL_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - APPROVAL_TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - APPROVAL_CONSOLE_URL=${APPROVAL_CONSOLE_URL:-}
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    depends_on:
+      authz: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
       emotion-mcp: { condition: service_started }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
       interval: 5s
       timeout: 3s
       retries: 5
-    networks:
-      default:
-        aliases:
-          - gateway-mcp-emotion
 
   demoapi:
     image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.6}  # 1.0.6 adds security response headers (nosniff, CORP/COOP/COEP — ZAP findings) alongside the 1.0.5 Payments-API surface; source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
@@ -206,12 +239,9 @@ services:
     depends_on:
       - emotion-api
 
-  # Demo 9 — the protected MCP server (source: demo/mcp, built from this
-  # repo the way demoapi is). Streamable-HTTP MCP at /mcp + a read-only
-  # REST view of its in-memory CRM at /customers (out-of-band proof that an
-  # add_customer tool call really executed, like demoapi's executed_count).
+  # Demo 9 — the protected MCP server (source: demo/mcp). Streamable-HTTP MCP
+  # at /mcp + a read-only REST view of its in-memory CRM at /customers.
   mcpsrv:
-    build: ./mcp
     image: ${MCPSRV_IMAGE:-stevef1uk/agent-gateway-mcpsrv:1.0.1}
     container_name: agent-gateway-mcpsrv
     restart: unless-stopped
@@ -251,6 +281,8 @@ services:
       postgres: { condition: service_started }
       authz: { condition: service_started }
       gateway: { condition: service_started }
+      gateway-mcp: { condition: service_started }
+      gateway-mcp-emotion: { condition: service_started }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8083/healthz"]
       interval: 5s
