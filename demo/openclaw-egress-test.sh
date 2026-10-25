@@ -290,7 +290,7 @@ if [ "$RUN_GW" = 1 ]; then
   # The gateway's approvals list (admin API) is the source of truth for holds:
   # every held tunnel appears as a pending approval for this delegation.
   pending_hint() { # label
-    curl -s --max-time 3 "http://localhost:${GATEWAY_HOST_PORT:-9000}/v1/approvals/" \
+    curl -s --max-time 3 "$GW_URL/v1/approvals/" \
       -H "X-Admin-Token: agent-gateway-demo-admin" \
       | python3 -c "
 import sys, json

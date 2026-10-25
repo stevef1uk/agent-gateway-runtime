@@ -254,7 +254,7 @@ services:
       retries: 5
 
   web:
-    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.54}  # 1.0.54: first-class refunds API support with auto-allow vs cap hold scenarios & guidance
+    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.55}  # 1.0.55: emotion analysis mcp server wizard presets and auto-discovery
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -277,6 +277,7 @@ services:
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/web.token:ro
+      - ${WEB_DIR_MOUNT:-../../agent-gateway/web}:/app/web:ro
     depends_on:
       postgres: { condition: service_started }
       authz: { condition: service_started }
