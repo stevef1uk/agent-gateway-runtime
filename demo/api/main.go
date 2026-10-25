@@ -200,9 +200,59 @@ func (a *api) handle(rw http.ResponseWriter, r *http.Request) {
 		a.paymentPost(rw, r, n)
 	case r.Method == http.MethodGet && r.URL.Path == "/payments":
 		a.paymentsGet(rw, r, n)
+	case r.Method == http.MethodGet && (strings.HasPrefix(r.URL.Path, "/v1/search") || strings.Contains(r.URL.Path, "geocoding")):
+		a.geocodingGet(rw, r, n)
 	default:
 		a.echo(rw, r, n)
 	}
+}
+
+// geocodingGet proxies or responds to geocoding search queries, proving the
+// request was executed behind the Agent Gateway with verified actor headers.
+func (a *api) geocodingGet(rw http.ResponseWriter, r *http.Request, n int) {
+	qs := r.URL.RawQuery
+	if qs == "" {
+		qs = "name=Berlin&count=5&language=en&format=json"
+	}
+	openMeteoURL := "https://geocoding-api.open-meteo.com/v1/search?" + qs
+	client := &http.Client{Timeout: 4 * time.Second}
+	resp, err := client.Get(openMeteoURL)
+	if err == nil && resp.StatusCode == http.StatusOK {
+		defer resp.Body.Close()
+		var res map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
+			res["executed_count"] = n
+			res["note"] = "executed BEHIND the Agent Gateway"
+			res["service"] = "demoapi (open-meteo)"
+			res["actor_headers"] = actorHeaders(r)
+			writeJSON(rw, http.StatusOK, res)
+			return
+		}
+	}
+	writeJSON(rw, http.StatusOK, map[string]any{
+		"status":            "ok",
+		"service":           "demoapi (geocoding)",
+		"executed_count":    n,
+		"path":              r.URL.Path,
+		"note":              "executed BEHIND the Agent Gateway",
+		"actor_headers":     actorHeaders(r),
+		"generationtime_ms": 0.15,
+		"results": []map[string]any{
+			{
+				"id":           2950159,
+				"name":         "Berlin",
+				"latitude":     52.52437,
+				"longitude":    13.41053,
+				"elevation":    74.0,
+				"feature_code": "PPLC",
+				"country_code": "DE",
+				"country":      "Germany",
+				"admin1":       "Land Berlin",
+				"timezone":     "Europe/Berlin",
+				"population":   3644826,
+			},
+		},
+	})
 }
 
 func actorHeaders(r *http.Request) map[string]string {

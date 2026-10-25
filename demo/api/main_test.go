@@ -253,3 +253,17 @@ func TestActorHeadersEchoedOnPayments(t *testing.T) {
 		t.Fatalf("actor headers not echoed: %v", h)
 	}
 }
+
+func TestGeocodingReturnsCoordinates(t *testing.T) {
+	ts := httptest.NewServer(handler())
+	defer ts.Close()
+
+	resp := call(t, ts, http.MethodGet, "/v1/search?name=Berlin&count=5", nil)
+	if resp["__http_status"] != float64(http.StatusOK) {
+		t.Fatalf("want 200, got %v", resp["__http_status"])
+	}
+	results, ok := resp["results"].([]any)
+	if !ok || len(results) == 0 {
+		t.Fatalf("expected non-empty results array: %v", resp)
+	}
+}
