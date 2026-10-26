@@ -519,6 +519,28 @@ onto the MCP tool call itself; the agent's MCP token is a static header in
 the sandbox's `openclaw.json` with a TTL matching its delegation (30 min),
 the same trade-off any static-header MCP credential carries.
 
+## Demo 10 — DPoP (RFC 9449) & RAR (RFC 9396) live verification (`demo/dpop-rar-demo.sh`)
+
+Proves cryptographic sender-constrained tokens and least-privilege permission downscoping against the live stack:
+
+```bash
+cd demo
+./dpop-rar-demo.sh       # or: make dpop-demo
+```
+
+What the script verifies:
+1. **Asymmetric Key-Bound Minting (RFC 9449)**: The client runtime generates an ephemeral EC P-256 key pair, signs a DPoP proof JWT with its private key, and requests a token from `tokensvc`. The returned token is sender-constrained (`token_type: "DPoP"`), carrying the key's thumbprint in the `cnf.jkt` claim.
+2. **Token Exfiltration Defense**: An attacker who intercepts or steals the access token attempts to present it as a standard `Authorization: Bearer <token>` or without a valid proof. The gateway PEP rejects it immediately (**HTTP 401 Unauthorized**).
+3. **Cryptographic Proof Verification**: The client presents `Authorization: DPoP <token>` accompanied by a fresh signed DPoP proof matching the HTTP method, URL, and `ath` (access token hash). The gateway PEP validates the ECDSA signature, confirms the public key thumbprint matches `cnf.jkt`, verifies `ath`, and allows the request (**HTTP 200 OK**).
+4. **Replay Protection**: The client attempts to replay the exact same proof JWT. The gateway's in-memory `jti` replay cache catches the reuse and rejects the request (**HTTP 401 Unauthorized**).
+5. **Least-Privilege Downscoping (RFC 9396)**: The agent downscopes a parent delegation (`[read, create]`) to a sub-token granting only `actions: ["read"]` on `/orders` via `authorization_details`.
+6. **Fine-Grained PEP Enforcement**:
+   - `GET /orders` matches the downscoped authorization details and succeeds (**HTTP 200 OK**).
+   - `POST /orders` (create) exceeds the downscoped permissions and is blocked by the gateway PEP (**HTTP 403 Forbidden**).
+7. **Combined Zero-Trust Request**: Exercises a token that is both sender-constrained via DPoP and restricted by RAR authorization details, demonstrating end-to-end zero-trust protection.
+
+For in-depth protocol architecture, proof headers, and metadata discovery, see [DPoP-and-RAR.md](DPoP-and-RAR.md).
+
 ## Real-World Production Example: Fronting Emotion Server MCP for Public Web
 
 For a complete real-world deployment running outside synthetic demos, see the

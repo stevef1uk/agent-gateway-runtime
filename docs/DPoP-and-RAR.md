@@ -240,3 +240,35 @@ No changes are required for existing integrations:
 - Requests to `/token` without `DPoP` or `authorization_details` issue standard `Bearer` tokens.
 - Requests to the gateway with `Authorization: Bearer <token>` continue to be validated against delegation policies as usual.
 - MCP connectors (Claude, Cursor, Inspector) continue operating unchanged.
+
+---
+
+## 7. Running Tests & Live Verification
+
+### Automated Live Scripted Demo
+With the demo stack running (`docker compose up -d`), run:
+```bash
+./demo/dpop-rar-demo.sh
+```
+This script exercises the full lifecycle against the live stack:
+1. Authenticates via Dex SSO
+2. Creates a human delegation with spend limits
+3. Generates an asymmetric EC key pair and mints an RFC 9449 DPoP token
+4. Verifies stolen DPoP tokens presented as `Bearer` are rejected (HTTP 401)
+5. Verifies valid DPoP presentations are accepted (HTTP 200)
+6. Verifies replayed proof attempts are rejected (HTTP 401)
+7. Mints an RFC 9396 RAR downscoped token (`["read"]` only)
+8. Verifies RAR policy enforcement (`read` allowed, `create` denied with HTTP 403)
+9. Executes combined DPoP + RAR sender-constrained downscoped call
+
+### Source Test Suite (in `agent-gateway`)
+```bash
+# Unit tests
+go test -v ./internal/auth/dpop/...
+go test -v ./internal/auth/rar/...
+go test -v ./internal/tokensvc -run "DPoP|RAR"
+go test -v ./internal/gateway -run "DPoP|RAR"
+
+# End-to-end integration test against running compose stack
+go test -v -count=1 ./test/ -run TestLiveDPoPAndRAREndToEnd
+```

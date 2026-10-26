@@ -6,16 +6,14 @@
        width="960">
 </p>
 
-> **Status note on the diagram.** Two panels describe the target design and
-> are **not implemented yet**: **DPoP / RFC 9449** (sender-constrained,
-> key-bound tokens) and **Rich Authorization Requests / RFC 9396**
-> (structured negotiation of fine-grained permissions at the token endpoint).
-> Everything else shown — OIDC sign-in (Dex ships; Keycloak / Entra / Okta
-> connect via `OIDC_ISSUER_URL`), delegations, RFC 8693 token exchange,
-> short-lived scoped tokens, the PEP with approval + audit, SPIFFE/SPIRE
-> workload identity — is live in the shipped images. Progress is tracked in
-> the project's roadmap; Production deployments relying on either panel
-> should ask the vendor before designing around them.
+> **Architecture & Standards.** All panels shown in the diagram — OIDC sign-in
+> (Dex ships; Keycloak / Entra / Okta connect via `OIDC_ISSUER_URL`), delegations,
+> RFC 8693 token exchange, short-lived scoped tokens, the PEP with approval + audit,
+> SPIFFE/SPIRE workload identity, **DPoP / RFC 9449** (sender-constrained, key-bound
+> tokens), and **Rich Authorization Requests / RFC 9396** (least-privilege downscoped
+> permissions at the token endpoint) — are **live and fully implemented in the
+> shipped images**. See [DPoP and RAR Documentation](docs/DPoP-and-RAR.md) for
+> architecture details and live verification tests.
 
 > 📑 **Reading the docs:** all links in this README are relative so the
 > repository stays portable. If a documentation link lands on a 404 in your
@@ -26,7 +24,7 @@
 > 🚧 **Early preview — and your feedback sets the direction.** Agent Gateway
 > is a **new project**, published so you can pull it, run it and try it.
 > Nothing here is frozen: what gets built next (agent-request flows,
-> fine-grained delegations, per-tool MCP enforcement, DPoP/RAR…) is decided
+> fine-grained delegations, per-tool MCP enforcement…) is decided
 > largely by what users tell us matters. If you run the demos, deploy it to
 > your own stack, or just disagree with a design choice — write to
 > **steve@sjfisher.com** or open an issue on this repository; both go
@@ -159,6 +157,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`demo/openclaw-egress-test.sh`](demo/openclaw-egress-test.sh) | Demo 7 — proves the sandbox's egress rules from inside the sandbox (`--gateway` adds the Agent-Gateway checks: allow/deny/CONNECT-hold/approved-retry; `--no-human` auto-approves holds for unattended runs) |
 | [`demo/human-delegation-demo.sh`](demo/human-delegation-demo.sh) | Demo 8 — **Human Delegation under prompt injection**: OpenClaw reviews and pays a supplier invoice through the gateway (one invoice carries injected "change the beneficiary" instructions); reads auto-allowed, every payment held, the human sees supplier record vs proposed beneficiary and decides — denial sticks (403), approval executes exactly once |
 | [`demo/mcp-demo.sh`](demo/mcp-demo.sh) | Demo 9 — **MCP under the gateway**: a CRM MCP server (`demo/mcp/`, mcpsrv) shown unprotected (anonymous writes, no audit), then behind a dedicated gateway instance (`gateway-mcp`, :8085) — 401 unauthenticated, delegated + audited MCP calls, instant revocation — then **OpenClaw itself** adding a customer through vanilla MCP with zero agent-side code, and a **customer deletion held for a human decision** (202 → approve ⇒ gone once / deny ⇒ 403, customer stays) |
+| [`demo/dpop-rar-demo.sh`](demo/dpop-rar-demo.sh) | Demo 10 — **DPoP (RFC 9449) & RAR (RFC 9396)**: Ephemeral asymmetric EC P-256 key pair generation, sender-constrained token minting, token theft defense, cryptographic proof verification, replay protection (`jti` cache), least-privilege RAR downscoping, and combined DPoP+RAR PEP enforcement |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
 | [`docs/Commercial-Licence.md`](docs/Commercial-Licence.md) | Licence terms: what you get, what is not warranted, liability limits, indemnity |
 | [`docs/Pricing.md`](docs/Pricing.md) | Licensing tiers and buying path |
@@ -439,6 +438,23 @@ and verification: [docs/Demos.md](docs/Demos.md §Demo-9); the component
 itself — a plain, un-licenced image, like demoapi — lives in
 [`demo/mcp/`](demo/mcp/README.md). Protecting your **own** MCP servers the
 same way: [docs/Protecting-Your-MCP.md](docs/Protecting-Your-MCP.md).
+
+### Demo 10 — DPoP (RFC 9449) & RAR (RFC 9396) live verification
+
+Demonstrates cryptographically sender-constrained tokens and least-privilege permission downscoping:
+1. **DPoP Token Minting**: Agent generates an EC P-256 key pair, signs a DPoP proof, and mints a token cryptographically bound to its public key (`cnf.jkt`).
+2. **Token Theft Defense**: Verifies that presenting the stolen access token without the corresponding private key signature is blocked with **HTTP 401 Unauthorized**.
+3. **Replay Defense**: Verifies that replaying the same proof JWT is caught by the gateway's `jti` replay cache and rejected with **HTTP 401 Unauthorized**.
+4. **RAR Downscoping**: Mints a sub-token restricted to a specific action subset (`actions: ["read"]`), proving least-privilege delegation.
+5. **PEP Enforcement**: Verifies `GET /orders` succeeds (200), while `POST /orders` is denied (**HTTP 403 Forbidden**).
+6. **Combined DPoP + RAR**: Verifies the Gateway PEP accepts combined key-bound, downscoped requests.
+
+```bash
+cd demo && docker compose up -d
+./dpop-rar-demo.sh       # or: make dpop-demo
+```
+
+Comprehensive architecture guide: [docs/DPoP-and-RAR.md](docs/DPoP-and-RAR.md).
 
 ## Performance
 

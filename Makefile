@@ -88,6 +88,10 @@ protected-api: ## Run the protected-API demo (compose)
 mcp-demo: ## Run Demo 9 — MCP under the gateway (add ARGS="--no-openclaw" to skip the agent leg)
 	./demo/mcp-demo.sh $(ARGS)
 
+.PHONY: dpop-demo
+dpop-demo: ## Run Demo 10 — RFC 9449 DPoP & RFC 9396 RAR verification
+	./demo/dpop-rar-demo.sh
+
 # ---------------------------------------------------------------------------
 # OpenClaw in an NVIDIA OpenShell sandbox (demo/openclaw-sandbox.sh).
 #
