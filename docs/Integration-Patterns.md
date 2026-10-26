@@ -180,6 +180,8 @@ pod) between the browser and the Agent Gateway:
 ┌─────────────────────────────────────────────────────────────┐
 │  K3S INGRESS & REWRITE (Traefik)                            │
 │  • Middleware: emotion-cors (Access-Control-Allow-Origin: *)│
+│  • Middleware: emotion-ratelimit (10 req/min, burst 3 / IP) │
+│  • Middleware: emotion-inflight (max 2 concurrent requests) │
 │  • Middleware: emotion-rewrite (/api/emotion/* → /api/*)    │
 └──────────────────────────────┬──────────────────────────────┘
                                │ POST /api/analyze
@@ -222,6 +224,13 @@ pod) between the browser and the Agent Gateway:
 5. **CORS & Path Decoupling**: Traefik middleware handles CORS preflights (`OPTIONS`)
    and rewrites paths so the static site (hosted on external domains like DigitalOcean)
    can connect seamlessly to the backend cluster without CORS errors.
+6. **Edge Throttling & DoS Protection**: Because public AI demo backends (such as LLM
+   inference on small nodes like Raspberry Pis) are CPU- and memory-intensive, ingress
+   layers must prevent denial-of-service attacks. Traefik middlewares `rateLimit`
+   (e.g., 10 req/min per IP with burst capacity of 3) and `inFlightReq` (max 2
+   simultaneous concurrent requests) intercept traffic at the cluster perimeter and
+   instantly reject abusive traffic with `HTTP 429 Too Many Requests` (complete with
+   CORS headers) before abusive calls reach the proxy or LLM pod.
 
 #### Live Reference Repositories & Working Code
 
