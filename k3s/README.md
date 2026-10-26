@@ -9,9 +9,9 @@ private development only; public use requires a trusted external OIDC provider.
 | Service | Image | Exposure |
 |---|---|---|
 | web (console + playground) | `agent-gateway-web_m:1.0.47` | NodePort **30083** |
-| gateway (enforcement) | `agent-gateway-gateway_m:1.0.31` | NodePort **30080** + **30088** (egress proxy) |
+| gateway (enforcement) | `agent-gateway-gateway_m:1.0.35` | NodePort **30080** + **30088** (egress proxy) |
 | authz (decision point) | `agent-gateway-authz_m:1.0.13` | NodePort **30081** |
-| tokensvc (minting) | `agent-gateway-tokensvc_m:1.0.6` | NodePort **30082** |
+| tokensvc (minting) | `agent-gateway-tokensvc_m:1.0.7` | NodePort **30082** |
 | dex (local OIDC IdP) | `dexidp/dex:v2.46.0` | ClusterIP only (browser traffic is proxied via `/oidc/idp/…`) |
 | postgres / redis | official | ClusterIP, pinned to one node on local storage |
 

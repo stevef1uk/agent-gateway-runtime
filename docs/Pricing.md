@@ -50,6 +50,13 @@ modifications permitted, no annual renewals, no seat or deployment limits,
 no maintenance commitment of any kind. Updates and fixes after purchase are
 supplied only if the vendor chooses to, and may be quoted separately.
 
+#### Free Evaluation for Security Professionals
+
+Full source code access can be provided free of charge to qualified security
+professionals, security researchers, and enterprise auditors upon request for
+evaluation and verification purposes. Contact **steve@sjfisher.com** with your
+organization details or professional profile to request evaluation access.
+
 ## Support levels (current stage)
 
 Support is **by email** (steve@sjfisher.com) at every tier. There is

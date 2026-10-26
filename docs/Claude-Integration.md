@@ -168,4 +168,7 @@ story on a destructive tool.
   a tool is not a control, denying it is.
 - **In-memory CRM note**: the demo MCP server's store resets on container
   restart; approvals persist (Postgres), the customers do not.
-- DPoP (RFC 9449) and RAR (RFC 9396) remain roadmap; do not design on them.
+- **DPoP (RFC 9449) and RAR (RFC 9396)**: Fully implemented in core Agent Gateway.
+  Tokens can be sender-constrained to agent-held keys (`cnf.jkt`) and downscoped
+  to fine-grained action, resource, and limit structures (`authorization_details`).
+  See [DPoP-and-RAR.md](DPoP-and-RAR.md).

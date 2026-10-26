@@ -241,14 +241,14 @@ fi
 # lane (same Dockerfiles, payload encrypted to the hosted padlock — inert
 # without keys/hosted/hosted_private.pem, safe on the same public registry).
 IMG_AUTHZ=${IMG_AUTHZ:-stevef1uk/agent-gateway-authz:1.0.12}
-IMG_TOKENSVC=${IMG_TOKENSVC:-stevef1uk/agent-gateway-tokensvc:1.0.5}
+IMG_TOKENSVC=${IMG_TOKENSVC:-stevef1uk/agent-gateway-tokensvc:1.0.6}
 IMG_WEB=${IMG_WEB:-stevef1uk/agent-gateway-web:1.0.44}
-IMG_GATEWAY=${IMG_GATEWAY:-stevef1uk/agent-gateway-gateway:1.0.29}
+IMG_GATEWAY=${IMG_GATEWAY:-stevef1uk/agent-gateway-gateway:1.0.31}
 if [ "${MANAGED:-0}" = "1" ]; then
   IMG_AUTHZ=${IMG_AUTHZ_M:-stevef1uk/agent-gateway-authz_m:1.0.15}
-  IMG_TOKENSVC=${IMG_TOKENSVC_M:-stevef1uk/agent-gateway-tokensvc_m:1.0.6}
+  IMG_TOKENSVC=${IMG_TOKENSVC_M:-stevef1uk/agent-gateway-tokensvc_m:1.0.7}
   IMG_WEB=${IMG_WEB_M:-stevef1uk/agent-gateway-web_m:1.0.60}
-  IMG_GATEWAY=${IMG_GATEWAY_M:-stevef1uk/agent-gateway-gateway_m:1.0.33}
+  IMG_GATEWAY=${IMG_GATEWAY_M:-stevef1uk/agent-gateway-gateway_m:1.0.35}
   ok "MANAGED lane: _m images (${IMG_GATEWAY_M:-stevef1uk/agent-gateway-gateway_m:${IMG_GATEWAY##*:}})"
 fi
 

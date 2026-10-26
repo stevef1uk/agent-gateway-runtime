@@ -38,7 +38,7 @@ services:
       retries: 5
 
   tokensvc:
-    image: stevef1uk/agent-gateway-tokensvc:1.0.5  # 1.0.5 (latest); 1.0.4 per-IP rate limit on /token + /token/exchange; patched toolchain
+    image: stevef1uk/agent-gateway-tokensvc:1.0.6  # 1.0.6 (latest); RFC 9449 DPoP sender-constrained tokens + RFC 9396 RAR downscoping; 1.0.4 per-IP rate limit on /token + /token/exchange; patched toolchain
     container_name: agent-gateway-tokensvc
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -58,7 +58,7 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.24  # 1.0.24 opt-in Basic Proxy-Authorization (PROXY_BASIC_AUTH / PROXY_BASIC_AUTH_CIDRS, token-as-username for OpenShell upstream proxy); 1.0.22 adds the egress forward proxy (GATEWAY_PROXY_ADDR, second listener on :8088) + approval cards carry the console deep-link on egress holds; 1.0.14 cards link to the console (APPROVAL_CONSOLE_URL); 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
+    image: stevef1uk/agent-gateway-gateway:1.0.31  # 1.0.31 (latest); RFC 9449 DPoP proof validation + RFC 9396 RAR PEP enforcement; 1.0.24 opt-in Basic Proxy-Authorization (PROXY_BASIC_AUTH / PROXY_BASIC_AUTH_CIDRS, token-as-username for OpenShell upstream proxy); 1.0.22 adds the egress forward proxy (GATEWAY_PROXY_ADDR, second listener on :8088) + approval cards carry the console deep-link on egress holds; 1.0.14 cards link to the console (APPROVAL_CONSOLE_URL); 1.0.7 webhook payload carries the real approval expiry; 1.0.6 Load() fix for webhook/approver envs; 1.0.5 approver binding (only the delegating user can approve) + approval.required webhook (HMAC-signed) + user_email routing claim; patched Go toolchain; 1.0.9 Telegram approval notifications (APPROVAL_TELEGRAM_BOT_TOKEN/CHAT_ID)
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -110,7 +110,7 @@ services:
   # Demo 9 — CRM MCP server PEP. UPSTREAM_URL is per-instance,
   # so MCP CRM traffic gets its own PEP here: /mcp in, mcpsrv:8091 out.
   gateway-mcp:
-    image: stevef1uk/agent-gateway-gateway:1.0.29  # 1.0.28 (mcponering): read-only protocol discovery (server/discover, resources/*, prompts/*) authorized as "list"; MCP hold text carries console instructions + approval id; Phase 3 client attribution
+    image: stevef1uk/agent-gateway-gateway:1.0.31  # 1.0.31 (latest); RFC 9449 DPoP + RFC 9396 RAR; 1.0.28 (mcponering): read-only protocol discovery (server/discover, resources/*, prompts/*) authorized as "list"; MCP hold text carries console instructions + approval id; Phase 3 client attribution
     container_name: agent-gateway-gateway-mcp
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -164,7 +164,7 @@ services:
 
   # Dedicated Gateway PEP fronting the Emotion Detection MCP server
   gateway-mcp-emotion:
-    image: stevef1uk/agent-gateway-gateway:1.0.29
+    image: stevef1uk/agent-gateway-gateway:1.0.31
     container_name: agent-gateway-gateway-mcp-emotion
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]

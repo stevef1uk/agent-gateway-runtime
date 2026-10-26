@@ -147,6 +147,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/Local-Agents.md`](docs/Local-Agents.md) | Personal/local agent runtimes (OpenClaw, Hermes, your own) — per-skill delegations, MCP adapter, spend caps, phone-side revoke |
 | [`docs/Architecture.md`](docs/Architecture.md) | How the pieces fit, the policy model, security properties |
 | [`docs/Security-Model.md`](docs/Security-Model.md) | **Security Model**: How Agent Gateway answers the 12 standard agent-security questions (identification, delegated authority, blast radius control, single-use action-hash replay protection, immediate revocation) |
+| [`docs/DPoP-and-RAR.md`](docs/DPoP-and-RAR.md) | **DPoP (RFC 9449) & RAR (RFC 9396)**: Sender-constrained cryptographic key-bound agent tokens and structured fine-grained permission downscoping with full backwards compatibility |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
 | [`docs/Protecting-Your-API.md`](docs/Protecting-Your-API.md) | Hands-on guide for new users: every constraint you can configure on a delegation, what the built-in engine enforces directly, what needs OPA, and the limitations to design around |
 | [`docs/Protecting-Your-MCP.md`](docs/Protecting-Your-MCP.md) | The MCP twin: put the gateway in front of agents' MCP servers with zero server/agent code — dedicated gateway instance, delegation JSON, approval-gated risky operations (Demo 9 Part D's delete pattern), revocation + audit, and today's granularity limits |

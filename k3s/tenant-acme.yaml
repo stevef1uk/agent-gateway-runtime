@@ -240,7 +240,7 @@ spec:
     spec:
       containers:
         - name: tokensvc
-          image: stevef1uk/agent-gateway-tokensvc_m:1.0.6
+          image: stevef1uk/agent-gateway-tokensvc_m:1.0.7
           ports: [{ containerPort: 8082 }]
           env:
             - name: JWT_SECRET
@@ -335,7 +335,7 @@ spec:
     spec:
       containers:
         - name: gateway-mcp
-          image: stevef1uk/agent-gateway-gateway_m:1.0.31
+          image: stevef1uk/agent-gateway-gateway_m:1.0.35
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
