@@ -184,6 +184,19 @@ curl -o /dev/null -w 'revoke → HTTP %{http_code}\n' -X DELETE \
 # the agent's very next MCP call → 403, token still valid on the wire
 ```
 
+## Pattern: Fronting MCP Tools for Public Web Applications
+
+If you are exposing an MCP tool to public web visitors (e.g. an interactive
+product demo or web chat), **never put the `agent_secret` or delegation ID into
+client-side JavaScript**. Instead, front the MCP gateway PEP with an internal
+Backend Proxy pod that mints tokens and maps REST calls to MCP JSON-RPC.
+
+See [Integration-Patterns.md §Pattern E](Integration-Patterns.md#pattern-e--public-web-frontends--backend-proxy-bff)
+for the architecture diagram and live working code:
+* **Frontend Demo**: [stevef1uk/emotion-server-api](https://github.com/stevef1uk/emotion-server-api)
+* **Backend K8s Setup**: [stevef1uk/emotion-server-demo](https://github.com/stevef1uk/emotion-server-demo)
+* **Live Site**: [https://emotion-service-api.sjfisher.com](https://emotion-service-api.sjfisher.com)
+
 ## Honest limits today (so nothing over-promises)
 
 * **Per-tool enforcement is delivered** — the gateway parses the JSON-RPC

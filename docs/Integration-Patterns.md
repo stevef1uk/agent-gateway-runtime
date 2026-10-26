@@ -17,7 +17,7 @@ hold-for-approval gate and the audit record around it.
 > constraints (scope patterns, spend/count limits, approval rules) and which of
 > them the built-in engine enforces directly vs. which need OPA.
 
-## The four integration patterns
+## The five integration patterns
 
 ### Pattern A — base-URL cutover (the one-line change)  *recommended first*
 
@@ -156,6 +156,87 @@ route around it. Standard belt-and-braces:
 
 This is what turns "we prefer agents use the gateway" into "agents go through
 the gateway," which is also what the auditors will ask for.
+
+### Pattern E — Public Web Frontends & Backend Proxy (BFF)
+
+When you want a public-facing website, SPA, or mobile frontend to invoke an MCP
+server (such as an interactive demo or customer-facing AI feature), **never embed
+gateway credentials (`agent_secret`, `delegation_id`, or long-lived Bearer tokens)
+into client-side JavaScript or HTML**. Anyone inspecting the page can extract the
+credentials and invoke unauthorized tools, bypass quotas, or drain spend caps.
+
+Instead, insert an ultra-lightweight Backend Proxy (or Backend-for-Frontend / BFF
+pod) between the browser and the Agent Gateway:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  PUBLIC BROWSER / STATIC HOSTING                            │
+│  (DigitalOcean, Cloudflare Pages, S3, GitHub Pages)        │
+│                                                             │
+│  index.html: fetch("https://preprod.agw.example.com/api/emotion/analyze", { text })
+└──────────────────────────────┬──────────────────────────────┘
+                               │ POST /api/emotion/analyze (CORS: *)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│  K3S INGRESS & REWRITE (Traefik)                            │
+│  • Middleware: emotion-cors (Access-Control-Allow-Origin: *)│
+│  • Middleware: emotion-rewrite (/api/emotion/* → /api/*)    │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ POST /api/analyze
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│  BACKEND WEB PROXY POD (ClusterIP only)                     │
+│  • Securely injects DELEGATION_ID + AGENT_SECRET via Secret │
+│  • TokenManager: Mints & auto-refreshes short-lived Bearer  │
+│    tokens from https://preprod.agw.example.com/token        │
+│  • Maps REST payload {"text":"..."} to MCP tools/call JSON-RPC
+└──────────────────────────────┬──────────────────────────────┘
+                               │ Authorization: Bearer <cached_jwt>
+                               │ tools/call {"name":"emotion_detection"}
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│  AGENT GATEWAY PEP (gateway-mcp-emotion)                    │
+│  • Enforces delegation del-050d7ee83471a3ff90495cf6         │
+│  • Validates tool actions ["emotion_detection", ...]        │
+│  • Emits tamper-proof audit record                          │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ allowed call
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│  BACKEND MCP SERVER (fine-tuned Gemma3 on ARM64)            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### How it works in practice:
+
+1. **Clean Client Interface**: The public web page issues an unauthenticated
+   `POST` with user inputs (e.g., text to analyze). No API keys, secrets, or
+   tokens are present in the frontend.
+2. **Cluster Secret Storage**: The proxy pod runs internally in Kubernetes with
+   `DELEGATION_ID` and `AGENT_SECRET` loaded strictly from Kubernetes Secrets.
+3. **In-Memory Token Cache**: A lightweight `TokenManager` in Go fetches a short-lived
+   JWT from `/token`, caches it in memory with mutex locking, and refreshes it
+   automatically 60 seconds before TTL expiration.
+4. **JSON-RPC MCP Formatting**: The proxy wraps the incoming JSON into a standard
+   MCP `tools/call` envelope and forwards it to the gateway PEP with `Authorization: Bearer <jwt>`.
+5. **CORS & Path Decoupling**: Traefik middleware handles CORS preflights (`OPTIONS`)
+   and rewrites paths so the static site (hosted on external domains like DigitalOcean)
+   can connect seamlessly to the backend cluster without CORS errors.
+
+#### Live Reference Repositories & Working Code
+
+This pattern is live in production running a fine-tuned Gemma 3 emotion detection
+MCP server on a Raspberry Pi k3s cluster fronted by a public website:
+
+* **Live Website**: [https://emotion-service-api.sjfisher.com](https://emotion-service-api.sjfisher.com)
+* **Frontend Web Repo**: [stevef1uk/emotion-server-api](https://github.com/stevef1uk/emotion-server-api)
+  * [`index.html`](https://github.com/stevef1uk/emotion-server-api/blob/main/index.html): Public web page calling the API without secrets.
+  * [`proxy/`](https://github.com/stevef1uk/emotion-server-api/tree/main/proxy): Go proxy pod code (`main.go`, `token.go`, `Dockerfile`, `.env.example`).
+* **Backend Deployment Repo**: [stevef1uk/emotion-server-demo](https://github.com/stevef1uk/emotion-server-demo)
+  * [`src/web-proxy/`](https://github.com/stevef1uk/emotion-server-demo/tree/master/src/web-proxy): Go backend proxy implementation and test suite.
+  * [`k8s/emotion-web.yaml`](https://github.com/stevef1uk/emotion-server-demo/blob/master/k8s/emotion-web.yaml): Deployment and ClusterIP service for the proxy.
+  * [`k8s/emotion-ingressroute.yaml`](https://github.com/stevef1uk/emotion-server-demo/blob/master/k8s/emotion-ingressroute.yaml): Traefik CORS and path-rewriting IngressRoute.
+  * [`k8s/create-gateway-secret.sh`](https://github.com/stevef1uk/emotion-server-demo/blob/master/k8s/create-gateway-secret.sh): Helper script to generate Kubernetes secret without writing secrets to disk.
 
 ## What about credentials already present in the agents?
 

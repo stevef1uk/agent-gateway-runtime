@@ -519,6 +519,22 @@ onto the MCP tool call itself; the agent's MCP token is a static header in
 the sandbox's `openclaw.json` with a TTL matching its delegation (30 min),
 the same trade-off any static-header MCP credential carries.
 
+## Real-World Production Example: Fronting Emotion Server MCP for Public Web
+
+For a complete real-world deployment running outside synthetic demos, see the
+**Emotion Server API** integration. A public website hosted on DigitalOcean
+([https://emotion-service-api.sjfisher.com](https://emotion-service-api.sjfisher.com))
+features a live interactive sentiment analysis demo powered by a fine-tuned Gemma 3
+model exposed as an MCP server on a private Raspberry Pi k3s cluster.
+
+Rather than exposing sensitive credentials in browser JavaScript, the frontend connects
+through a lightweight Go backend proxy pod fronting the Agent Gateway PEP, complete with
+automated token minting, JSON-RPC MCP translation, Traefik CORS preflights, and path rewriting.
+
+* **Architecture & Guide**: [Integration-Patterns.md §Pattern E](Integration-Patterns.md#pattern-e--public-web-frontends--backend-proxy-bff)
+* **Frontend Web Repo**: [stevef1uk/emotion-server-api](https://github.com/stevef1uk/emotion-server-api)
+* **Backend & K8s Demo Repo**: [stevef1uk/emotion-server-demo](https://github.com/stevef1uk/emotion-server-demo)
+
 ## Troubleshooting
 
 | Symptom | Fix |
