@@ -44,8 +44,6 @@ set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DEMO_DIR"
 
-source "$DEMO_DIR/lib/engine.sh"
-
 RED=''; GRN=''; YLW=''; BLU=''; BLD=''; RST=''
 if [ -t 1 ]; then
   RED='\033[0;31m'; GRN='\033[0;32m'; YLW='\033[0;33m'; BLU='\033[0;36m'; BLD='\033[1m'; RST='\033[0m'
