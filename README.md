@@ -42,6 +42,14 @@ revocation, and an immutable audit trail.
 > [graphical](#demo-2---graphical) and
 > [policy playground](#demo-3---the-opa-policy-playground)).
 
+## 📺 Demo videos
+
+| Demo | Link |
+|------|------|
+| Quick Demo | [https://youtu.be/0n9V7A_6KZg](https://youtu.be/0n9V7A_6KZg) |
+| Introduction to Managed Service | [https://youtu.be/qTvqpE9fqXM](https://youtu.be/qTvqpE9fqXM) |
+| Console Wizard Demo | [https://youtu.be/eHiA4wtHUFk](https://youtu.be/eHiA4wtHUFk) |
+
 > 🚀 **Try Agent Gateway with zero installs.** The CRM demo runs live at
 > `https://agw.sjfisher.com` behind a governed gateway — point claude.ai at
 > the [custom MCP connector](docs/Claude-CRM-Tutorial.md) and watch an AI
