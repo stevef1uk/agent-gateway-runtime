@@ -42,6 +42,26 @@ things:
 **Rule of thumb:** `delegation_id` + `agent_secret` are the *keys to the
 mint*. The JWT is the *pass you carry* to the gateway.
 
+### Where the ID token comes from (human side)
+
+Before a delegation can be created on a tenant with SSO enabled, the
+human (delegating user) must prove who they are with an OIDC ID token.
+`POST /v1/delegations` on authz requires `"id_token": "<jwt>"`; authz
+verifies it against the tenant's IdP (JWKS) and binds the delegation to
+the token's `sub` claim.
+
+On the local demo stack this happens automatically through Dex (the mock
+connector needs no credentials), which is why `demo.sh` and
+`kill-switch-demo.sh` sign you in transparently. On a remote tenant
+(preprod, k3s, cloud) you obtain it yourself:
+
+| Method | How |
+|--------|-----|
+| **Console session** | Sign in at the tenant console, open DevTools → Network, find the `POST` to the token endpoint (`/dex/token`, `/oauth/token`, …) whose response JSON contains `id_token`. Copy that JWT. |
+| **OIDC auth-code flow** | Complete the authorization-code flow against the tenant's IdP and exchange the code for an ID token (see *Obtaining an ID token for a remote tenant* in [Demos.md](Demos.md)). |
+
+Once you have the ID token, pass it in the delegation body (`"id_token"`) — or as `--id-token` / `ID_TOKEN=` when using `kill-switch-remote.sh` — and the delegation is bound to your verified subject. Any later call made with a delegation-scoped JWT is re-authorized against that subject's grant.
+
 ## How the agent obtains a JWT
 
 One HTTP call to the token service:

@@ -541,6 +541,149 @@ What the script verifies:
 
 For in-depth protocol architecture, proof headers, and metadata discovery, see [DPoP-and-RAR.md](DPoP-and-RAR.md).
 
+## Demo 11 — the kill switch (`demo/kill-switch-demo.sh`)
+
+A dedicated demo for cutting off an agent's access to an upstream API at the
+enforcement point, at two levels:
+
+```bash
+cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+./kill-switch-demo.sh
+cd ..
+./demo/kill-switch-demo.sh                  # compose, all scripted
+./demo/kill-switch-demo.sh --node 192.168.1.74   # k3s cluster
+```
+
+What you will see, step by step:
+
+| Step | What happens | Expected |
+|------|-------------|----------|
+| 3 | three agents (purchasing, shipping, billing) each get a delegation to `/orders` on demoapi, all minted with short-lived tokens | three delegations created |
+| 4 | every agent calls `POST /orders` → **HTTP 200** | all three reach the upstream |
+| 5 | **kill switch #1**: revoke shipping-agent's delegation only | delegation revoked instantly |
+| 6 | shipping-agent retries → **HTTP 403**; purchasing & billing still **200** | one agent cut off, others unaffected |
+| 7 | **kill switch #2**: revoke every delegation to `/orders` | all delegations to that upstream revoked |
+| 8 | every agent retries → **HTTP 403** | the whole upstream is closed to every agent |
+| 9 | demoapi's own `executed_count` counter proves no call reached the upstream after revocation | upstream never contacted |
+
+The two properties worth calling out to an audience:
+
+1. **Revoke beats validity** — the revoked agent's JWT is still cryptographically
+   valid (it would pass signature/expiry checks for minutes more), yet the
+   gateway refuses it immediately. Revocation is enforced by the authz service
+   *before* any engine (built-in or OPA) runs, so no policy file or Rego bug
+   can resurrect a killed delegation.
+2. **Nothing reaches the upstream** — demoapi keeps a per-path call counter.
+   After each kill switch, the counter does not move: calls are refused at the
+   enforcement point, never proxied. This is real cut-off, not just a status
+   code.
+
+Verify the audit trail afterward:
+
+```bash
+docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway \
+  -c "SELECT ts, agent_id, resource, action, outcome, reason FROM audit_events
+      WHERE resource='/orders' ORDER BY ts DESC LIMIT 12;"
+```
+
+### Kill switch against a remote tenant (`demo/kill-switch-remote.sh`)
+
+The local `kill-switch-demo.sh` runs the Dex SSO flow and talks to `localhost:8090` for the demoapi counter proof. Against a remote tenant (preprod, k3s, cloud) those don't apply — use the remote variant instead:
+
+```bash
+GW=https://gw.preprod.agw.sjfisher.com \
+AUTHZ=https://authz.preprod.agw.sjfisher.com \
+TS=https://tokensvc.preprod.agw.sjfisher.com \
+ID_TOKEN=<your OIDC id token> \
+ADMIN_TOKEN=<operator token> \
+./demo/kill-switch-remote.sh
+```
+
+Or with flags:
+
+```bash
+./demo/kill-switch-remote.sh \
+  --gateway   https://gw.preprod.agw.sjfisher.com \
+  --authz     https://authz.preprod.agw.sjfisher.com \
+  --tokensvc  https://tokensvc.preprod.agw.sjfisher.com \
+  --id-token  <your OIDC id token> \
+  --admin-token <operator token> \
+  --resource  /orders \
+  --path      /orders \
+  --amount    100
+```
+
+What you need:
+
+| Input | Where to get it |
+|-------|-----------------|
+| `GW` | The gateway (PEP) base URL for the tenant |
+| `AUTHZ` | The authz (decision-point) base URL for the tenant |
+| `TS` | The tokensvc base URL for the tenant |
+| `ID_TOKEN` | A verified OIDC ID token for the delegating human — sign in at the tenant's console and extract the ID token from the session, or complete the OIDC authorization-code flow against the tenant's IdP |
+| `ADMIN_TOKEN` | The tenant's operator/admin token (guards `DELETE /v1/delegations/{id}` and `POST /v1/approvals`) |
+| `--resource` | The resource pattern the delegations grant (e.g. `/orders`, `/mcp*`) |
+| `--path` | The gateway path agents call (e.g. `/orders`) |
+| `--amount` | Body `amount` sent with each call (default `100`) |
+
+The remote variant skips the Dex SSO flow and the demoapi counter check — it creates real delegations, mints real tokens, makes real calls through the gateway, and revokes in real time. The same two kill-switch levels apply: revoke one delegation → that agent's still-valid token gets 403; revoke all delegations to a resource → every agent gets 403. Revocation is enforced by authz before any engine runs, on any tenant.
+
+### Obtaining an ID token for a remote tenant
+
+The `ID_TOKEN` must be a verified OIDC ID token — authz checks its signature against the tenant's IdP (JWKS) and binds every delegation you create to the token's `sub` claim. Two ways to get one:
+
+**Method A — from the console session (quickest)**
+
+1. Open the tenant console in a browser (e.g. `https://testten1.preprod.agw.sjfisher.com`).
+2. Sign in with your OIDC credentials.
+3. Open DevTools → Network, filter for the token endpoint (often `/dex/token`, `/oauth/token`, or `/connect/token`).
+4. After sign-in completes, find the `POST` whose response JSON contains `id_token`. Copy that value — it's a JWT (three base64url segments separated by dots).
+5. Pass it as `--id-token` (or `ID_TOKEN=` env).
+
+**Method B — OIDC authorization-code flow (scriptable)**
+
+Replicate the local demo's Dex flow against the tenant's IdP:
+
+```bash
+# 1. Start the auth request; follow redirects until you get ?code=...
+LOC="https://<idp-host>/dex/auth?response_type=code&client_id=<client>&redirect_uri=<redirect>&connector_id=<connector>&scope=openid"
+
+# 2. Exchange the code for an ID token:
+ID_TOKEN=$(curl -s -X POST https://<idp-host>/dex/token \
+  -d "grant_type=authorization_code&client_id=<client>&code=<code>&redirect_uri=<redirect>" \
+  | python3 -c "import sys,json;print(json.load(sys.stdin).get('id_token',''))")
+```
+
+The exact `<client>`, `<redirect>`, and `<connector_id>` depend on the tenant's IdP configuration — check the browser sign-in flow in DevTools or ask the tenant admin. On the local demo stack these are `agent-gateway`, `http://localhost:8083/oidc/callback`, and `mock` respectively (that's what `demo.sh` and `kill-switch-demo.sh` use automatically).
+
+For convenience, `demo/obtain-id-token.sh` automates both flows:
+
+```bash
+# Local demo stack — fully unattended (Dex mock connector needs no login)
+ID_TOKEN=$(./demo/obtain-id-token.sh)
+
+# Remote tenant — browser sign-in required, then paste the callback URL
+ID_TOKEN=$(./demo/obtain-id-token.sh --code-url '<callback-url-with-?code=...>' \
+  --token https://idp.preprod.agw.sjfisher.com/dex/token \
+  --client agent-gateway \
+  --redirect https://console.preprod.agw.sjfisher.com/oidc/callback)
+
+# Dex password grant (dev stacks only)
+ID_TOKEN=$(./demo/obtain-id-token.sh --password --user alice@example.com --pass password)
+```
+
+The script prints only the raw JWT to stdout — all progress messages go to stderr — so it's safe to capture in a variable and pipe directly into `kill-switch-remote.sh`:
+
+```bash
+ID_TOKEN=$(./demo/obtain-id-token.sh 2>/dev/null)
+GW=https://gw.preprod.agw.sjfisher.com \
+AUTHZ=https://authz.preprod.agw.sjfisher.com \
+TS=https://tokensvc.preprod.agw.sjfisher.com \
+ID_TOKEN="$ID_TOKEN" \
+ADMIN_TOKEN=<operator token> \
+./demo/kill-switch-remote.sh
+```
+
 ## Real-World Production Example: Fronting Emotion Server MCP for Public Web
 
 For a complete real-world deployment running outside synthetic demos, see the
