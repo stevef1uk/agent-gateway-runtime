@@ -50,6 +50,14 @@ revocation, and an immutable audit trail.
 | Introduction to Managed Service | [https://youtu.be/qTvqpE9fqXM](https://youtu.be/qTvqpE9fqXM) |
 | Console Wizard Demo | [https://youtu.be/eHiA4wtHUFk](https://youtu.be/eHiA4wtHUFk) |
 
+## 🎬 Demo GIF
+
+<p align="center">
+  <img src="images/deletedemo-ezgif.com-optimize.gif"
+       alt="Delete demo — held approval then execute"
+       width="720">
+</p>
+
 > 🚀 **Try Agent Gateway with zero installs.** The CRM demo runs live at
 > `https://agw.sjfisher.com` behind a governed gateway — point claude.ai at
 > the [custom MCP connector](docs/Claude-CRM-Tutorial.md) and watch an AI
