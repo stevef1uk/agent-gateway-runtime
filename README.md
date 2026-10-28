@@ -475,6 +475,30 @@ cd demo && docker compose up -d
 
 Comprehensive architecture guide: [docs/DPoP-and-RAR.md](docs/DPoP-and-RAR.md).
 
+### Demo 11 — the kill switch
+
+Demonstrates cutting off an agent's access to an upstream API at the
+enforcement point, at two levels:
+
+1. **Kill one agent** — revoke a single delegation; that agent's token is still
+   cryptographically valid yet every subsequent call is refused (403).
+2. **Kill all agents** — revoke every delegation to the same upstream API; the
+   whole agent population loses access instantly.
+
+Revoke is enforced by authz before any engine runs — it beats token validity,
+pending approvals, and any policy file. Nothing reaches the upstream after a
+kill switch is thrown.
+
+```bash
+cd demo && docker compose up -d
+./kill-switch-demo.sh      # local compose stack
+```
+
+Remote tenants (preprod / k3s / cloud) use `kill-switch-remote.sh`, which takes
+`GW`/`AUTHZ`/`TS`/`ID_TOKEN`/`ADMIN_TOKEN` as env or flags instead of running
+the local Dex SSO flow. Full walkthrough and remote-tenant instructions:
+[docs/Demos.md §Demo 11](docs/Demos.md#demo-11--the-kill-switch-demokill-switch-demosh).
+
 ## Performance
 
 The gateway is a policy enforcement point in front of every agent call, so its
