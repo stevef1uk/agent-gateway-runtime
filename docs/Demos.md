@@ -50,6 +50,7 @@ notifications/model turns.
 | `TELEGRAM_BOT_TOKEN` | compose → gateway's `APPROVAL_TELEGRAM_BOT_TOKEN` | the bot token from @BotFather; **approval cards are pushed here** (Demos 4/5/7 approvals) — without it, decide in the console instead |
 | `TELEGRAM_CHAT_ID` | compose → gateway's `APPROVAL_TELEGRAM_CHAT_ID` | the chat (user id or group id) that receives the cards — get it from the bot's `/start` + getUpdates |
 | `APPROVAL_CONSOLE_URL` | compose → gateway | the console URL stamped on approval cards/webhooks; must be **routable from the approver's device** — Telegram refuses `localhost` in buttons, so a LAN address (e.g. `http://192.168.1.53:8083`) |
+| `APPROVAL_TTL` | compose → primary gateway | Lifetime of new approvals, including consumption after consent; Go duration, default `15m`. Demo 12 uses `10s`; recreate the gateway to change it. Requires gateway 1.0.32+ (managed 1.0.36+). |
 | `DEMO_CONSOLE_URL` | the egress overlay (`docker-compose.egress.yml`) for `APPROVAL_CONSOLE_URL` | same sentence, but used when the stack is brought up **with the egress overlay** (Demos 5–7); keep it the same value |
 | `NVIDIA_API_KEY` | `openclaw-sandbox.sh` (`configure`, `chat*`) and `openclaw-egress-test.sh` | your NVIDIA API key (nvapi-…); wired to the in-sandbox provider as an env SecretRef for model calls (Demo 6/7) |
 | `GATEWAY_HOST_PORT` | compose `ports` and every script | the PEP's **published host port** (default 8080); use e.g. `9000` when a local OpenShell gateway already owns 8080 — scripts fall back to 8080 unless told |
@@ -683,6 +684,86 @@ ID_TOKEN="$ID_TOKEN" \
 ADMIN_TOKEN=<operator token> \
 ./demo/kill-switch-remote.sh
 ```
+
+## Demo 12 — approval edge cases (`demo/approval-edge-cases-demo.sh`)
+
+An unattended R&D pilot proving what happens when consent arrives late or the
+proposed action changes. Requires Bash, curl, Python 3, the local Compose stack
+with Dex's mock connector, demoapi and gateway **1.0.32+**. No database edits
+or model credentials are needed.
+
+```bash
+# Repository root: recreate the gateway with a real 10-second approval TTL,
+# wait for health, then run the script (Docker/Podman auto-detected).
+make approval-edge-demo
+# Or start the stack explicitly and invoke the script:
+APPROVAL_TTL=10s docker compose -f demo/docker-compose.yml up -d --wait
+./demo/approval-edge-cases-demo.sh
+```
+
+| Scenario | Expected evidence |
+|---|---|
+| €250 exceeds the €200 auto-approve cap | `202`, pending approval, no upstream execution |
+| Wait until its actual `expires_at`, then approve | `410 Gone`; no execution |
+| Retry the identical expired action | `202` with a different approval ID; approve and retry → `200` |
+| Replay that consumed approval | `202`; another human decision is required |
+| Approve €250 but send €500 before consuming it | `202` with a distinct approval; changing the amount cannot reuse consent |
+| Approve and retry €500, then retry original €250 | Each executes once under its own approval; upstream counter advances by exactly two |
+| Deny a new €250 hold, then retry | `403` (or a fresh hold), never execution; upstream counter stays unchanged |
+| Revoke the delegation | Still-valid agent token receives `403` |
+
+**Decision versus execution:** `POST /v1/approvals/` records the human's
+decision; it does not execute the order. The script separately retries the
+exact approved action, checks demoapi's `executed_count`, then queries
+`/v1/audit/?delegation_id=<this-run>&limit=100`. It requires the expected
+hold IDs, exactly three approved order executions, approver attribution and
+the denied retry, all bound to this run's human/agent/delegation. Approval
+decision responses expose the stored status, approver and decision timestamp;
+hold/allow/deny events record enforcement and executed calls.
+
+**Configuration:** `APPROVAL_TTL` is a Go duration, default `15m`; unset,
+invalid and non-positive values fall back to that default. Managed images
+support it from **1.0.36**. It applies to newly created approvals and the
+consumption window after consent, not existing requests. `make
+approval-edge-demo APPROVAL_TTL=20s` overrides the test TTL. The script refuses
+to wait longer than `APPROVAL_WAIT` (default `60` seconds); set
+`APPROVAL_WAIT=90` for longer pilots. It also accepts `GW`, `AUTHZ`, `TS`,
+`WEB`, `DEX`, `ADMIN_TOKEN` and `AGENT_ID` overrides; the scripted sign-in is
+for the local Dex demo, not a remote tenant's production IdP.
+
+Restore the normal human decision window after the test:
+
+```bash
+APPROVAL_TTL=15m docker compose -f demo/docker-compose.yml up -d --wait gateway
+```
+
+The Make target recreates the gateway because changing an environment value
+on the host or merely restarting a container cannot update its environment.
+For k3s configuration, see [Deployment Guide — approval expiry](Deployment-Guide.md#approval-expiry-approval_ttl).
+
+### Verified tenant run (2026-10-29)
+
+The same scenarios were also exercised against
+`https://testten1.preprod.agw.sjfisher.com` using a real Google-authenticated
+console session and the tenant's `/api/delegations`, `/api/tokens`,
+`/api/gateway/call`, `/api/approvals/{id}/decision` and `/api/audit` APIs.
+Its MCP demo server also implements a counting `POST /orders` endpoint;
+€150 auto-allowed POSTs bracketed the test to read that counter (unlike the
+local demoapi, it does not support `GET /orders`). No browser session
+credentials are stored in this repository.
+
+Result: **PASS** on managed gateway **1.0.36**, with a temporary `10s` TTL:
+late approval **410**, fresh hold and approved retry, changed-action hash,
+three separately approved executions, single-use replay held, denial **403**,
+correlated audit evidence and immediate post-revocation **403**. The test
+delegations were revoked and the normal `15m` approval lifetime restored.
+
+The first tenant run exposed `DECISION_CACHE_TTL=30s`: an optional cached
+allow can survive revocation for that window. The tenant and provisioning
+default now use `0s` (disabled) so revocation is immediate. Keep this cache
+disabled when running the kill-switch/instant-revocation assertions. See the
+[configuration reference](Deployment-Guide.md#5-configuration-reference)
+for the caching trade-off.
 
 ## Real-World Production Example: Fronting Emotion Server MCP for Public Web
 

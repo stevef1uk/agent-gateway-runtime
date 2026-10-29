@@ -195,6 +195,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`demo/mcp-demo.sh`](demo/mcp-demo.sh) | Demo 9 — **MCP under the gateway**: a CRM MCP server (`demo/mcp/`, mcpsrv) shown unprotected (anonymous writes, no audit), then behind a dedicated gateway instance (`gateway-mcp`, :8085) — 401 unauthenticated, delegated + audited MCP calls, instant revocation — then **OpenClaw itself** adding a customer through vanilla MCP with zero agent-side code, and a **customer deletion held for a human decision** (202 → approve ⇒ gone once / deny ⇒ 403, customer stays) |
 | [`demo/dpop-rar-demo.sh`](demo/dpop-rar-demo.sh) | Demo 10 — **DPoP (RFC 9449) & RAR (RFC 9396)**: Ephemeral asymmetric EC P-256 key pair generation, sender-constrained token minting, token theft defense, cryptographic proof verification, replay protection (`jti` cache), least-privilege RAR downscoping, and combined DPoP+RAR PEP enforcement |
 | [`demo/kill-switch-demo.sh`](demo/kill-switch-demo.sh) | Demo 11 — **the kill switch**: revoke one agent's delegation to an upstream API (that agent's still-valid token → 403), then revoke every delegation to that same upstream (all agents → 403). demoapi's call counter proves nothing reaches the upstream after revocation |
+| [`demo/approval-edge-cases-demo.sh`](demo/approval-edge-cases-demo.sh) | Demo 12 — **approval edge cases**: real short-TTL expiry, changed-action binding, single-use consent, denial, revocation and delegation-scoped audit/upstream evidence |
 | [`demo/kill-switch-remote.sh`](demo/kill-switch-remote.sh) | **Kill switch against a remote tenant** (preprod / k3s / cloud): same two kill-switch levels (one agent, all agents) but takes `GW`/`AUTHZ`/`TS`/`ID_TOKEN`/`ADMIN_TOKEN` as env or flags instead of running the local Dex SSO flow |
 | [`demo/obtain-id-token.sh`](demo/obtain-id-token.sh) | **ID token helper**: automates OIDC authorization-code flow (or Dex password grant) to obtain a verified ID token for a remote tenant — output is the raw JWT on stdout, safe to capture in a variable |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
@@ -518,6 +519,28 @@ Remote tenants (preprod / k3s / cloud) use `kill-switch-remote.sh`, which takes
 `GW`/`AUTHZ`/`TS`/`ID_TOKEN`/`ADMIN_TOKEN` as env or flags instead of running
 the local Dex SSO flow. Full walkthrough and remote-tenant instructions:
 [docs/Demos.md §Demo 11](docs/Demos.md#demo-11--the-kill-switch-demokill-switch-demosh).
+
+### Demo 12 — approval edge cases (R&D pilot)
+
+[`demo/approval-edge-cases-demo.sh`](demo/approval-edge-cases-demo.sh) verifies
+late decisions (**410 Gone** after real expiry), exact-action binding when the
+amount changes (€250 → €500), single-use execution, denial and revocation.
+It correlates this run's hold/allow/deny audit events with the human, agent,
+delegation and approval IDs, and checks the upstream execution counter.
+
+```bash
+# From the repository root; starts/recreates the gateway with a short TTL:
+make approval-edge-demo                 # APPROVAL_TTL=10s by default
+# Restore the normal decision window afterward:
+APPROVAL_TTL=15m docker compose -f demo/docker-compose.yml up -d --wait gateway
+```
+
+Requires gateway **1.0.32+**. `APPROVAL_TTL` is a Go duration (default `15m`)
+set on the gateway at startup; it affects new approvals only. The script waits
+for actual expiry and fails if it would take over `APPROVAL_WAIT` (default
+60 seconds). Full steps and configuration:
+[docs/Demos.md §Demo 12](docs/Demos.md#demo-12--approval-edge-cases-demoapproval-edge-cases-demosh)
+and [Deployment Guide](docs/Deployment-Guide.md#approval-expiry-approval_ttl).
 
 ## Performance
 

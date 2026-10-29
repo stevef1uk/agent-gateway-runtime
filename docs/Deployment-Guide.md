@@ -297,6 +297,30 @@ All configuration is via environment variables (12-factor style).
 | `gateway` | `GATEWAY_ADDR` (`:8080`), `AUTHZ_URL`, `UPSTREAM_URL` (your protected backend; unset = synthetic response for demos), `GATEWAY_ADMIN_TOKEN` (guards `GET/POST /v1/approvals` + `POST /v1/tokens/revoke` via `X-Admin-Token`; unset = those endpoints disabled), `APPROVAL_WEBHOOK_URL` / `APPROVAL_WEBHOOK_SECRET` (push an `approval.required` event whenever an action is held — HMAC-signed; see [Notifications.md](Notifications.md)) |
 | `web` | `WEB_ADDR` (`:8083`), `AUTHZ_URL`, `GATEWAY_URL`, `WEB_DIR` (static assets, do not change), `GATEWAY_ADMIN_TOKEN` (forwarded to the gateway's operator endpoints), `WEB_SESSION_TTL` (default `8h`), `DEMO_UI` (default off — serves `demo.html`, `policy.html` and their APIs), `POLICY_FILE` + `POLICY_DEFAULT_FILE` (OPA playground, needs the OPA override), `PUBLIC_GATEWAY_URL` (where agents reach the gateway from the browser's network — set on NodePort/Ingress deployments; see `k3s/`) |
 
+### Approval expiry (`APPROVAL_TTL`)
+
+Gateway images **1.0.32+** (managed **1.0.36+**) accept `APPROVAL_TTL` as a
+Go duration (`15m`, `30s`, `1h`). Default: **15 minutes**, also used for
+invalid or non-positive values. The TTL applies to newly created approvals
+and their single-use consumption window; existing requests retain their
+original expiry. Late decisions return **410 Gone**. Recording an approval
+does not execute the action: the agent retries the identical request.
+
+Compose forwards `${APPROVAL_TTL:-15m}` to the primary gateway. Recreate it
+after changing the value; `docker compose restart` keeps the old environment:
+
+```bash
+APPROVAL_TTL=10s docker compose -f demo/docker-compose.yml up -d --wait gateway
+make approval-edge-demo
+# Restore the normal human decision window afterward:
+APPROVAL_TTL=15m docker compose -f demo/docker-compose.yml up -d --wait gateway
+```
+
+On k3s, configure each relevant gateway Deployment with
+`kubectl -n <namespace> set env deployment/<gateway> APPROVAL_TTL=15m`.
+The image default stays `15m`; use `10s` only for an isolated pilot.
+See [Demo 12](Demos.md#demo-12--approval-edge-cases-demoapproval-edge-cases-demosh).
+
 ### Container runtime keys (all four images)
 
 | Variable | Default | Purpose |

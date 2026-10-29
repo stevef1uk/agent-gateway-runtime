@@ -243,12 +243,12 @@ fi
 IMG_AUTHZ=${IMG_AUTHZ:-stevef1uk/agent-gateway-authz:1.0.12}
 IMG_TOKENSVC=${IMG_TOKENSVC:-stevef1uk/agent-gateway-tokensvc:1.0.6}
 IMG_WEB=${IMG_WEB:-stevef1uk/agent-gateway-web:1.0.44}
-IMG_GATEWAY=${IMG_GATEWAY:-stevef1uk/agent-gateway-gateway:1.0.31}
+IMG_GATEWAY=${IMG_GATEWAY:-stevef1uk/agent-gateway-gateway:1.0.32}
 if [ "${MANAGED:-0}" = "1" ]; then
   IMG_AUTHZ=${IMG_AUTHZ_M:-stevef1uk/agent-gateway-authz_m:1.0.15}
   IMG_TOKENSVC=${IMG_TOKENSVC_M:-stevef1uk/agent-gateway-tokensvc_m:1.0.7}
   IMG_WEB=${IMG_WEB_M:-stevef1uk/agent-gateway-web_m:1.0.60}
-  IMG_GATEWAY=${IMG_GATEWAY_M:-stevef1uk/agent-gateway-gateway_m:1.0.35}
+  IMG_GATEWAY=${IMG_GATEWAY_M:-stevef1uk/agent-gateway-gateway_m:1.0.36}
   ok "MANAGED lane: _m images (${IMG_GATEWAY_M:-stevef1uk/agent-gateway-gateway_m:${IMG_GATEWAY##*:}})"
 fi
 
@@ -433,7 +433,7 @@ spec:
             - { name: OIDC_CLIENT_ID, value: agent-gateway }
             - { name: OIDC_CONNECTOR_ID, value: "${TENANT_OIDC_CONNECTOR}" }
             - { name: AUTHZ_POLICY_ENGINE, value: opa }
-            - { name: DECISION_CACHE_TTL, value: "30s" }
+            - { name: DECISION_CACHE_TTL, value: "0s" }  # immediate revocation; do not reuse cached allows
             - { name: OPA_POLICY_PATH, value: /policy/authorizer.rego }
             - { name: SIGNUP_ENABLED, value: "1" }
             - name: GATEWAY_ADMIN_TOKEN

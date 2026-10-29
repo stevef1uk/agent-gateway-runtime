@@ -9,7 +9,7 @@ private development only; public use requires a trusted external OIDC provider.
 | Service | Image | Exposure |
 |---|---|---|
 | web (console + playground) | `agent-gateway-web_m:1.0.47` | NodePort **30083** |
-| gateway (enforcement) | `agent-gateway-gateway_m:1.0.35` | NodePort **30080** + **30088** (egress proxy) |
+| gateway (enforcement) | `agent-gateway-gateway_m:1.0.36` | NodePort **30080** + **30088** (egress proxy) |
 | authz (decision point) | `agent-gateway-authz_m:1.0.13` | NodePort **30081** |
 | tokensvc (minting) | `agent-gateway-tokensvc_m:1.0.7` | NodePort **30082** |
 | dex (local OIDC IdP) | `dexidp/dex:v2.46.0` | ClusterIP only (browser traffic is proxied via `/oidc/idp/…`) |
@@ -37,6 +37,23 @@ See the main repo's [OpenShell-Integration.md](
 https://github.com/stevef/agent-gateway/blob/main/OpenShell-Integration.md)
 for the full wiring and the `egress-demo.sh` demo for the call-by-call
 walkthrough (smoke.sh checks the 407 posture on `:30088`).
+
+### Approval lifetime
+
+Gateway **1.0.32+** / managed **1.0.36+** supports `APPROVAL_TTL` (Go
+duration; default `15m`). Set it on each relevant gateway Deployment; it
+applies to new approvals only. For an isolated short-TTL pilot:
+
+```bash
+kubectl -n <namespace> set env deployment/<gateway> APPROVAL_TTL=10s
+kubectl -n <namespace> rollout status deployment/<gateway>
+# Restore the normal human decision window afterward:
+kubectl -n <namespace> set env deployment/<gateway> APPROVAL_TTL=15m
+```
+
+[Demo 12](../docs/Demos.md#demo-12--approval-edge-cases-demoapproval-edge-cases-demosh)
+runs the automated local Compose test; the k3s image rollout keeps the normal
+15-minute default rather than applying a cluster-wide 10-second TTL.
 
 
 ## Storage (shared Gluster file system)
@@ -256,5 +273,4 @@ kubectl apply -f k3s/endpoint-monitor.yaml
 kubectl create job --from=cronjob/endpoint-monitor endpoint-monitor-test -n tenant-preprod
 kubectl logs -n tenant-preprod job/endpoint-monitor-test -f
 ```
-
 

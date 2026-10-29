@@ -205,7 +205,7 @@ spec:
             - { name: OIDC_CLIENT_ID, value: agent-gateway }
             - { name: OIDC_CONNECTOR_ID, value: "google" }
             - { name: AUTHZ_POLICY_ENGINE, value: opa }
-            - { name: DECISION_CACHE_TTL, value: "30s" }
+            - { name: DECISION_CACHE_TTL, value: "0s" }  # immediate revocation; do not reuse cached allows
             - { name: OPA_POLICY_PATH, value: /policy/authorizer.rego }
             - { name: SIGNUP_ENABLED, value: "1" }
             - name: GATEWAY_ADMIN_TOKEN
@@ -343,7 +343,7 @@ spec:
     spec:
       containers:
         - name: gateway-mcp
-          image: stevef1uk/agent-gateway-gateway_m:1.0.35
+          image: stevef1uk/agent-gateway-gateway_m:1.0.36
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }

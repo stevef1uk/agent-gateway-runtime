@@ -369,7 +369,7 @@ spec:
           # images >= gateway 1.0.22 add the egress forward proxy
           # (GATEWAY_PROXY_ADDR). 1.0.22 ships after local validation —
           # publish with: make push-gateway ALLOW_PUSH=yes
-          image: stevef1uk/agent-gateway-gateway_m:1.0.35
+          image: stevef1uk/agent-gateway-gateway_m:1.0.36
           ports: [{ containerPort: 8080 }, { containerPort: 8088 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -488,7 +488,7 @@ spec:
     spec:
       containers:
         - name: gateway-mcp
-          image: stevef1uk/agent-gateway-gateway_m:1.0.35  # managed OAuth layer + per-tool MCP enforcement
+          image: stevef1uk/agent-gateway-gateway_m:1.0.36  # managed OAuth layer + per-tool MCP enforcement
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }

@@ -150,6 +150,13 @@ openclaw-demo: openclaw-image openclaw-up openclaw-configure ## Full path: image
 human-delegation-demo: ## Demo 8 — OpenClaw pays an invoice (one fraudulent) through the gateway; add ARGS="--no-human" for unattended
 	./demo/human-delegation-demo.sh $(ARGS)
 
+APPROVAL_TTL ?= 10s
+
+.PHONY: approval-edge-demo
+approval-edge-demo: ## R&D pilot — approval edge cases (expiry, action-change binding, single-use, audit trail)
+	APPROVAL_TTL=$(APPROVAL_TTL) $(COMPOSE) -f demo/docker-compose.yml up -d --wait gateway demoapi web tokensvc
+	CONTAINER_ENGINE=$(ENGINE) ./demo/approval-edge-cases-demo.sh
+
 .PHONY: security-scan
 security-scan: ## OWASP ZAP baseline scan of the core containers → security/results/
 	./security/zap-scan.sh
