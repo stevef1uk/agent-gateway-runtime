@@ -19,6 +19,11 @@ hold-for-approval gate and the audit record around it.
 
 ## The five integration patterns
 
+**Keeping an existing upstream API URL and adding a forward proxy?** See
+[Go Proxy Integration](Go-Proxy-Integration.md) for a standalone walkthrough
+using the gateway's `:8088` listener, with direct-client and local Go helper
+options, credentials, HTTPS enforcement boundaries, and approval handling.
+
 ### Pattern A — base-URL cutover (the one-line change)  *recommended first*
 
 Agents read their tool endpoints from configuration (env var, settings file,
