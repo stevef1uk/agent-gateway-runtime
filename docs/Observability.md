@@ -30,6 +30,10 @@ licence. The demo Compose stack uses evaluation images and demo credentials.
 
 ## Docker Compose quickstart
 
+Want a visual trace waterfall? Follow
+[Observability with Jaeger](Observability_With_Jaegar.md) for the optional Jaeger
+Compose overlay, a real six-span demo trace and screenshot instructions.
+
 The repository includes an optional
 [`docker-compose.observability.yml`](../demo/docker-compose.observability.yml)
 override and a pinned OpenTelemetry Collector image. From the repository root:

@@ -1,0 +1,13 @@
+# Add after docker-compose.yml and docker-compose.observability.yml.
+# UI: http://localhost:16686 — see docs/Observability_With_Jaegar.md.
+services:
+  jaeger:
+    image: "${JAEGER_IMAGE:-jaegertracing/jaeger@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17}"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"
+  otel-collector:
+    volumes:
+      - ./otel-collector.jaeger.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      jaeger: { condition: service_started }
