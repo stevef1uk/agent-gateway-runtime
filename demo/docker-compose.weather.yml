@@ -1,0 +1,30 @@
+# Curl-only public API tutorial. Run from the repository root:
+# docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml up -d --wait tokensvc gateway-weather
+services:
+  gateway-weather:
+    image: stevef1uk/agent-gateway-gateway:1.0.32
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    ports: ["127.0.0.1:${WEATHER_HOST_PORT:-8087}:8080"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - APPROVAL_TTL=15m
+      - UPSTREAM_URL=https://api.open-meteo.com
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    depends_on:
+      authz: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10

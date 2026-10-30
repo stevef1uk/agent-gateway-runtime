@@ -4,6 +4,10 @@
 in the loop for the sharp edges. What can I actually restrict, and where do I
 set it?"*
 
+**Want a runnable first example?** Start with the
+[curl-only public weather API tutorial](Public-API-Curl-Tutorial.md): real
+Open-Meteo requests, a script, scoped reads, human approval, revocation and audit.
+
 This is the practical companion to the other two policy documents:
 
 - [Integration-Patterns.md](Integration-Patterns.md) — **how** to put the

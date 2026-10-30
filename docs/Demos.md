@@ -36,6 +36,7 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 | http://localhost:8083/policy.html | OPA policy playground *(needs the policy override — see Demo 3)* |
 | http://localhost:8080 | gateway (PEP) — what your agents call |
 | http://localhost:8088 | gateway egress proxy (needs the egress overlay — Demos 5–7) |
+| http://localhost:8087 | dedicated Open-Meteo gateway (needs the weather overlay — Demo 13) |
 | http://localhost:8081, :8082, :5556 | authz · tokensvc · SSO (Dex) |
 
 ## `demo/.env` — every variable at a glance
@@ -764,6 +765,68 @@ default now use `0s` (disabled) so revocation is immediate. Keep this cache
 disabled when running the kill-switch/instant-revocation assertions. See the
 [configuration reference](Deployment-Guide.md#5-configuration-reference)
 for the caching trade-off.
+
+## Demo 13 — protect a public API with curl
+
+[`demo/public-weather-tutorial.sh`](../demo/public-weather-tutorial.sh) is a
+beginner-friendly walkthrough protecting the **Open-Meteo weather API**. It
+uses real forecast and elevation data without an API key. All HTTP calls use
+`curl`, with `jq` for JSON; no browser, console or AI runtime is needed.
+
+### Run it
+
+This demo uses its own weather overlay rather than the egress overlay in the
+general setup above. Run these commands **from the repository root**:
+
+```bash
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+  up -d --wait tokensvc gateway-weather
+bash demo/public-weather-tutorial.sh
+```
+
+Requirements: Docker Compose v2 with `--wait` support (or a compatible Podman
+Compose provider), Bash, `curl`, `jq`, and internet access to Open-Meteo. The
+command starts the weather gateway and its authz/token/Dex/Postgres/Redis
+services. The dedicated gateway listens on **http://localhost:8087** and
+forwards allowed requests to `https://api.open-meteo.com`.
+
+The script pauses before recording Alice's approval: press Enter to approve
+or Ctrl-C to cancel. Complete the pause within the agent token's five-minute
+lifetime. For an unattended demonstration with a scripted operator approval:
+
+```bash
+bash demo/public-weather-tutorial.sh --yes
+```
+
+### What it proves
+
+| Scenario | Expected evidence |
+|---|---|
+| Forecast without an agent token | **401** |
+| Delegated forecast GET | **200**, real temperature and wind-speed data |
+| POST with a read-only delegation | **403** |
+| Path outside the delegation | **403** |
+| Elevation lookup before approval | **202** with an approval ID |
+| Operator records the delegating human's decision; agent retries | **200**, real elevation data |
+| Repeat the approved lookup | **202**, fresh approval required |
+| Revoke and reuse the same agent token | **403** |
+| Fetch this delegation's audit events | Correlated allow, hold, approved execution and deny records |
+
+The script asserts these results, exits nonzero on failure and revokes its
+delegation on completion or early exit. The approval step uses a separate
+operator credential; `--yes` simulates the human decision for demonstration.
+This controls calls through the gateway; Open-Meteo's public endpoint remains
+directly accessible.
+
+Stop just the weather gateway afterward:
+
+```bash
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+  stop gateway-weather
+```
+
+Full explanations, individual curl commands, configuration boundaries and
+cleanup: [Public API curl tutorial](Public-API-Curl-Tutorial.md).
 
 ## Real-World Production Example: Fronting Emotion Server MCP for Public Web
 

@@ -73,6 +73,7 @@ revocation, and an immutable audit trail.
 2. [Quickstart](#quickstart) — two commands to a live stack
 3. Demo 1 — the scripted walkthrough of the whole story
 4. When you want to write your own agent against it: [`docs/Agent-Auth-Basics.md`](docs/Agent-Auth-Basics.md)
+5. For a terminal-only first integration: [Protect a public weather API with curl](docs/Public-API-Curl-Tutorial.md) — real Open-Meteo data, scoped access, human approval, revocation and audit, with a runnable script.
 
 AI agents call tools that do real things — payments, deployments, data
 exports. "Trust me, the agent knows what it's doing" is not a control you can
@@ -185,6 +186,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/DPoP-and-RAR.md`](docs/DPoP-and-RAR.md) | **DPoP (RFC 9449) & RAR (RFC 9396)**: Sender-constrained cryptographic key-bound agent tokens and structured fine-grained permission downscoping with full backwards compatibility |
 | [`docs/Policy-and-OPA.md`](docs/Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
 | [`docs/Protecting-Your-API.md`](docs/Protecting-Your-API.md) | Hands-on guide for new users: every constraint you can configure on a delegation, what the built-in engine enforces directly, what needs OPA, and the limitations to design around |
+| [`docs/Public-API-Curl-Tutorial.md`](docs/Public-API-Curl-Tutorial.md) | Beginner curl-only tutorial: protect Open-Meteo forecasts and elevation lookups; runnable script: [`demo/public-weather-tutorial.sh`](demo/public-weather-tutorial.sh) |
 | [`docs/Protecting-Your-MCP.md`](docs/Protecting-Your-MCP.md) | The MCP twin: put the gateway in front of agents' MCP servers with zero server/agent code — dedicated gateway instance, delegation JSON, approval-gated risky operations (Demo 9 Part D's delete pattern), revocation + audit, and today's granularity limits |
 | [`docs/Benchmarking.md`](docs/Benchmarking.md) | Measuring gateway performance — allowed vs denied passthroughs, built-in vs OPA engine, how to run and read it |
 | [`docs/Demos.md`](docs/Demos.md) | Runbook for the demos and what each step proves |
@@ -197,6 +199,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`demo/dpop-rar-demo.sh`](demo/dpop-rar-demo.sh) | Demo 10 — **DPoP (RFC 9449) & RAR (RFC 9396)**: Ephemeral asymmetric EC P-256 key pair generation, sender-constrained token minting, token theft defense, cryptographic proof verification, replay protection (`jti` cache), least-privilege RAR downscoping, and combined DPoP+RAR PEP enforcement |
 | [`demo/kill-switch-demo.sh`](demo/kill-switch-demo.sh) | Demo 11 — **the kill switch**: revoke one agent's delegation to an upstream API (that agent's still-valid token → 403), then revoke every delegation to that same upstream (all agents → 403). demoapi's call counter proves nothing reaches the upstream after revocation |
 | [`demo/approval-edge-cases-demo.sh`](demo/approval-edge-cases-demo.sh) | Demo 12 — **approval edge cases**: real short-TTL expiry, changed-action binding, single-use consent, denial, revocation and delegation-scoped audit/upstream evidence |
+| [`demo/public-weather-tutorial.sh`](demo/public-weather-tutorial.sh) | Demo 13 — **protect a public API with curl**: real Open-Meteo weather, read/path restrictions, human approval, single-use consent, revocation and audit |
 | [`demo/kill-switch-remote.sh`](demo/kill-switch-remote.sh) | **Kill switch against a remote tenant** (preprod / k3s / cloud): same two kill-switch levels (one agent, all agents) but takes `GW`/`AUTHZ`/`TS`/`ID_TOKEN`/`ADMIN_TOKEN` as env or flags instead of running the local Dex SSO flow |
 | [`demo/obtain-id-token.sh`](demo/obtain-id-token.sh) | **ID token helper**: automates OIDC authorization-code flow (or Dex password grant) to obtain a verified ID token for a remote tenant — output is the raw JWT on stdout, safe to capture in a variable |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
@@ -542,6 +545,28 @@ for actual expiry and fails if it would take over `APPROVAL_WAIT` (default
 60 seconds). Full steps and configuration:
 [docs/Demos.md §Demo 12](docs/Demos.md#demo-12--approval-edge-cases-demoapproval-edge-cases-demosh)
 and [Deployment Guide](docs/Deployment-Guide.md#approval-expiry-approval_ttl).
+
+### Demo 13 — protect a public API with curl
+
+A beginner-friendly walkthrough using **Open-Meteo**: fetch real weather data
+without an API key, then enforce scoped reads, human approval for elevation
+lookups, single-use consent, immediate revocation and an audit trail. All HTTP
+calls use `curl`; `jq` handles JSON. No browser or AI runtime is required.
+
+```bash
+# From the repository root:
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+  up -d --wait tokensvc gateway-weather
+bash demo/public-weather-tutorial.sh         # pause for your approval
+# Or run with a scripted demo approval:
+bash demo/public-weather-tutorial.sh --yes
+```
+
+The dedicated weather gateway listens on **http://localhost:8087**. The script
+checks the expected responses and revokes its delegation when it exits.
+Step-by-step commands and explanations:
+[Public API curl tutorial](docs/Public-API-Curl-Tutorial.md).
+Runbook: [docs/Demos.md §Demo 13](docs/Demos.md#demo-13--protect-a-public-api-with-curl).
 
 ## Performance
 
