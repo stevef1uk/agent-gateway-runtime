@@ -8,12 +8,19 @@ private development only; public use requires a trusted external OIDC provider.
 
 | Service | Image | Exposure |
 |---|---|---|
-| web (console + playground) | `agent-gateway-web_m:1.0.47` | NodePort **30083** |
-| gateway (enforcement) | `agent-gateway-gateway_m:1.0.36` | NodePort **30080** + **30088** (egress proxy) |
-| authz (decision point) | `agent-gateway-authz_m:1.0.13` | NodePort **30081** |
-| tokensvc (minting) | `agent-gateway-tokensvc_m:1.0.7` | NodePort **30082** |
+| web (console + playground) | `agent-gateway-web_m:1.0.69` | NodePort **30083** |
+| gateway (enforcement) | `agent-gateway-gateway_m:1.0.37` | NodePort **30080** + **30088** (egress proxy) |
+| authz (decision point) | `agent-gateway-authz_m:1.0.16` | NodePort **30081** |
+| tokensvc (minting) | `agent-gateway-tokensvc_m:1.0.8` | NodePort **30082** |
 | dex (local OIDC IdP) | `dexidp/dex:v2.46.0` | ClusterIP only (browser traffic is proxied via `/oidc/idp/…`) |
 | postgres / redis | official | ClusterIP, pinned to one node on local storage |
+
+### Observability
+
+These image versions include correlated JSON operational logs and optional
+OpenTelemetry traces and metrics. See [Observability](../docs/Observability.md)
+for collector configuration, per-Deployment environment settings and verification.
+Export is opt-in; upgrading an image does not install a collector.
 
 ### Egress proxy (gateway images ≥ 1.0.22)
 
@@ -273,4 +280,3 @@ kubectl apply -f k3s/endpoint-monitor.yaml
 kubectl create job --from=cronjob/endpoint-monitor endpoint-monitor-test -n tenant-preprod
 kubectl logs -n tenant-preprod job/endpoint-monitor-test -f
 ```
-

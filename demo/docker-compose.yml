@@ -10,7 +10,7 @@
 
 services:
   authz:
-    image: stevef1uk/agent-gateway-authz:1.0.12  # 1.0.12 (latest); 1.0.11 patched Go toolchain (govulncheck clean) + OPA 1.21.2
+    image: stevef1uk/agent-gateway-authz:1.0.13  # OpenTelemetry tracing/metrics + correlated JSON logs
     container_name: agent-gateway-authz
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -38,7 +38,7 @@ services:
       retries: 5
 
   tokensvc:
-    image: stevef1uk/agent-gateway-tokensvc:1.0.6  # 1.0.6 (latest); RFC 9449 DPoP sender-constrained tokens + RFC 9396 RAR downscoping; 1.0.4 per-IP rate limit on /token + /token/exchange; patched toolchain
+    image: stevef1uk/agent-gateway-tokensvc:1.0.7  # OpenTelemetry tracing/metrics + correlated JSON logs
     container_name: agent-gateway-tokensvc
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -58,7 +58,7 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.32  # configurable APPROVAL_TTL + durable expired status; DPoP/RAR enforcement
+    image: stevef1uk/agent-gateway-gateway:1.0.33  # OpenTelemetry tracing/metrics + trace-linked audit
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -111,7 +111,7 @@ services:
   # Demo 9 — CRM MCP server PEP. UPSTREAM_URL is per-instance,
   # so MCP CRM traffic gets its own PEP here: /mcp in, mcpsrv:8091 out.
   gateway-mcp:
-    image: stevef1uk/agent-gateway-gateway:1.0.32  # configurable APPROVAL_TTL + durable expired status; MCP discovery and client attribution
+    image: stevef1uk/agent-gateway-gateway:1.0.33  # OpenTelemetry tracing/metrics + trace-linked MCP audit
     container_name: agent-gateway-gateway-mcp
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -165,7 +165,7 @@ services:
 
   # Dedicated Gateway PEP fronting the Emotion Detection MCP server
   gateway-mcp-emotion:
-    image: stevef1uk/agent-gateway-gateway:1.0.32
+    image: stevef1uk/agent-gateway-gateway:1.0.33
     container_name: agent-gateway-gateway-mcp-emotion
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -255,7 +255,7 @@ services:
       retries: 5
 
   web:
-    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.55}  # 1.0.55: emotion analysis mcp server wizard presets and auto-discovery
+    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.56}  # OpenTelemetry tracing/metrics + correlated JSON logs
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]

@@ -1,0 +1,30 @@
+# Optional OTLP/HTTP export. Layer over docker-compose.yml; see docs/Observability.md.
+x-telemetry: &telemetry
+  OTEL_ENABLED: "${OTEL_ENABLED:-true}"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}"
+  OTEL_RESOURCE_ATTRIBUTES: "${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment.name=demo,service.namespace=agent-gateway}"
+  OTEL_METRIC_EXPORT_INTERVAL: "${OTEL_METRIC_EXPORT_INTERVAL:-5000}"
+
+services:
+  authz:
+    environment: *telemetry
+  tokensvc:
+    environment: *telemetry
+  gateway:
+    environment: *telemetry
+  gateway-mcp:
+    environment:
+      <<: *telemetry
+      OTEL_SERVICE_NAME: gateway-mcp
+  gateway-mcp-emotion:
+    environment:
+      <<: *telemetry
+      OTEL_SERVICE_NAME: gateway-mcp-emotion
+  web:
+    environment: *telemetry
+  otel-collector:
+    image: "${OTEL_COLLECTOR_IMAGE:-otel/opentelemetry-collector@sha256:28b6d41ac51bff6b41ba5e8fe503569ffb9d6a1ea90f7a78419e86f34e44f750}"
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro

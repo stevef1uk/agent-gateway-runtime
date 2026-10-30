@@ -184,13 +184,13 @@ spec:
     spec:
       initContainers:
         - name: seed-policy          # same race fix as web: fresh PVs start
-          image: stevef1uk/agent-gateway-web_m:1.0.47   # empty; the web image
+          image: stevef1uk/agent-gateway-web_m:1.0.69   # empty; the web image
           securityContext: { runAsUser: 0 }           # carries the default rego
           command: ["sh","-c","test -f /policies/authorizer.rego || cp /app/default-policy.rego /policies/authorizer.rego; chmod 666 /policies/authorizer.rego; exit 0"]
           volumeMounts: [{ name: policies, mountPath: /policies, subPath: policies }]
       containers:
         - name: authz
-          image: stevef1uk/agent-gateway-authz_m:1.0.13
+          image: stevef1uk/agent-gateway-authz_m:1.0.16
           ports: [{ containerPort: 8081 }]
           env:
             - { name: PERSISTENCE, value: postgres }
@@ -240,7 +240,7 @@ spec:
     spec:
       containers:
         - name: tokensvc
-          image: stevef1uk/agent-gateway-tokensvc_m:1.0.7
+          image: stevef1uk/agent-gateway-tokensvc_m:1.0.8
           ports: [{ containerPort: 8082 }]
           env:
             - name: JWT_SECRET
@@ -279,13 +279,13 @@ spec:
       serviceAccountName: web-console   # scoped by Role (see below); T6 console onboarding
       initContainers:
         - name: seed-policy
-          image: stevef1uk/agent-gateway-web_m:1.0.47
+          image: stevef1uk/agent-gateway-web_m:1.0.69
           securityContext: { runAsUser: 0 }
           command: ["sh","-c","test -f /policies/authorizer.rego || cp /app/default-policy.rego /policies/authorizer.rego; chmod 666 /policies/authorizer.rego; exit 0"]
           volumeMounts: [{ name: policies, mountPath: /policies, subPath: policies }]
       containers:
         - name: web
-          image: stevef1uk/agent-gateway-web_m:1.0.47
+          image: stevef1uk/agent-gateway-web_m:1.0.69
           securityContext: { runAsUser: 0 }
           ports: [{ containerPort: 8083 }]
           env:
@@ -335,7 +335,7 @@ spec:
     spec:
       containers:
         - name: gateway-mcp
-          image: stevef1uk/agent-gateway-gateway_m:1.0.36
+          image: stevef1uk/agent-gateway-gateway_m:1.0.37
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }

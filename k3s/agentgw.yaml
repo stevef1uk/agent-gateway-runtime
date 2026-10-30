@@ -267,7 +267,7 @@ spec:
     spec:
       containers:
         - name: authz
-          image: stevef1uk/agent-gateway-authz_m:1.0.13
+          image: stevef1uk/agent-gateway-authz_m:1.0.16
           ports: [{ containerPort: 8081 }]
           env:
             - { name: PERSISTENCE, value: postgres }
@@ -324,7 +324,7 @@ spec:
     spec:
       containers:
         - name: tokensvc
-          image: stevef1uk/agent-gateway-tokensvc_m:1.0.7
+          image: stevef1uk/agent-gateway-tokensvc_m:1.0.8
           ports: [{ containerPort: 8082 }]
           env:
             - name: JWT_SECRET
@@ -369,7 +369,7 @@ spec:
           # images >= gateway 1.0.22 add the egress forward proxy
           # (GATEWAY_PROXY_ADDR). 1.0.22 ships after local validation —
           # publish with: make push-gateway ALLOW_PUSH=yes
-          image: stevef1uk/agent-gateway-gateway_m:1.0.36
+          image: stevef1uk/agent-gateway-gateway_m:1.0.37
           ports: [{ containerPort: 8080 }, { containerPort: 8088 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -488,7 +488,7 @@ spec:
     spec:
       containers:
         - name: gateway-mcp
-          image: stevef1uk/agent-gateway-gateway_m:1.0.36  # managed OAuth layer + per-tool MCP enforcement
+          image: stevef1uk/agent-gateway-gateway_m:1.0.37  # managed OAuth layer + per-tool MCP enforcement
           ports: [{ containerPort: 8080 }]
           env:
             - { name: AUTHZ_URL, value: "http://authz:8081" }
@@ -584,7 +584,7 @@ spec:
     spec:
       initContainers:
         - name: seed-policy
-          image: stevef1uk/agent-gateway-web_m:1.0.47
+          image: stevef1uk/agent-gateway-web_m:1.0.69
           # The shared Gluster file system root-squashes, and pods may run as an
           # unprivileged uid, so the console runs as root (squashed to `nobody`
           # by the share — the same owner the first seed created files with).
@@ -594,7 +594,7 @@ spec:
           volumeMounts: [{ name: policies, mountPath: /policies }]
       containers:
         - name: web
-          image: stevef1uk/agent-gateway-web_m:1.0.47
+          image: stevef1uk/agent-gateway-web_m:1.0.69
           securityContext: { runAsUser: 0 }
           ports: [{ containerPort: 8083 }]
           env:

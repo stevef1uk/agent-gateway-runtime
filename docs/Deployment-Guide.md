@@ -4,6 +4,10 @@
 their own infrastructure — from a single laptop node to a highly available
 enterprise deployment.*
 
+For request-correlated JSON logs, trace-linked audit records and optional
+OpenTelemetry traces and metrics, see [Observability](Observability.md), including
+a Docker Compose Collector example and managed-service configuration.
+
 ---
 
 ## 1. What Agent Gateway is
