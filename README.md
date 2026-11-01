@@ -202,6 +202,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`demo/kill-switch-demo.sh`](demo/kill-switch-demo.sh) | Demo 11 — **the kill switch**: revoke one agent's delegation to an upstream API (that agent's still-valid token → 403), then revoke every delegation to that same upstream (all agents → 403). demoapi's call counter proves nothing reaches the upstream after revocation |
 | [`demo/approval-edge-cases-demo.sh`](demo/approval-edge-cases-demo.sh) | Demo 12 — **approval edge cases**: real short-TTL expiry, changed-action binding, single-use consent, denial, revocation and delegation-scoped audit/upstream evidence |
 | [`demo/public-weather-tutorial.sh`](demo/public-weather-tutorial.sh) | Demo 13 — **protect a public API with curl**: real Open-Meteo weather, read/path restrictions, human approval, single-use consent, revocation and audit |
+| [`demo/gmail-demo.sh`](demo/gmail-demo.sh) | Demo 14 — **Gmail assistant, human-approved sends**: fake/live Gmail MCP connector, exact-message approvals, operator decision desk, OAuth credentials outside the agent, and a durable duplicate-send ledger |
 | [`demo/kill-switch-remote.sh`](demo/kill-switch-remote.sh) | **Kill switch against a remote tenant** (preprod / k3s / cloud): same two kill-switch levels (one agent, all agents) but takes `GW`/`AUTHZ`/`TS`/`ID_TOKEN`/`ADMIN_TOKEN` as env or flags instead of running the local Dex SSO flow |
 | [`demo/obtain-id-token.sh`](demo/obtain-id-token.sh) | **ID token helper**: automates OIDC authorization-code flow (or Dex password grant) to obtain a verified ID token for a remote tenant — output is the raw JWT on stdout, safe to capture in a variable |
 | [`docs/Security-and-Licensing.md`](docs/Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
@@ -569,6 +570,24 @@ checks the expected responses and revokes its delegation when it exits.
 Step-by-step commands and explanations:
 [Public API curl tutorial](docs/Public-API-Curl-Tutorial.md).
 Runbook: [docs/Demos.md §Demo 13](docs/Demos.md#demo-13--protect-a-public-api-with-curl).
+
+### Demo 14 — Gmail assistant, human-approved sends
+
+Let an AI agent search and read your Gmail, compose a reply,
+then **hold every send for your approval of the exact recipients and content**.
+Google credentials stay in a private MCP connector; the agent uses a scoped
+gateway delegation. Start with simulated mail and real gateway approvals,
+then connect live Gmail using Google OAuth. Includes an interactive approval
+desk for your own MCP-capable AI agent.
+
+```bash
+make gmail-up
+make gmail-demo                    # review and type SEND / DENY
+ARGS=--yes make gmail-demo          # scripted decisions; fake mail only
+```
+
+Setup, live Gmail and agent configuration:
+[Gmail approval tutorial](docs/Gmail-Approval-Tutorial.md).
 
 ## Performance
 

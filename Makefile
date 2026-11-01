@@ -38,10 +38,22 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: test
-test: ## Vet + test the demo API and MCP server, and vet the benchmark tool
+test: ## Vet + test the demo API, MCP and Gmail connector, and vet the benchmark tool
 	cd demo/api && go vet ./... && go test ./...
 	cd demo/mcp && go vet ./... && go test ./...
 	cd demo/bench && go vet ./...
+	python3 -m unittest discover -s demo/gmail -v
+
+.PHONY: gmail-up gmail-demo gmail-test
+gmail-up: ## Build/start Demo 14 (fake mail by default; GMAIL_MODE=live for Gmail)
+	python3 demo/gmail/demo.py --init
+	$(COMPOSE) -f demo/docker-compose.yml -f demo/docker-compose.gmail.yml up -d --build --wait tokensvc gmail-ingress
+
+gmail-demo: ## Gmail demo; pauses for approval (ARGS=--yes for scripted fake mail)
+	CONTAINER_ENGINE=$(ENGINE) bash demo/gmail-demo.sh $(ARGS)
+
+gmail-test: ## Test Gmail validation, ingress, MIME and durable send ledger without Docker
+	python3 -m unittest discover -s demo/gmail -v
 
 .PHONY: image
 image: ## Build the demo API image (host arch — docker or podman per ENGINE)

@@ -1,7 +1,8 @@
 # Running the demos
 
 The demos run against the same seven-container stack in [`demo/`](../demo/)
-and make **real** calls — nothing is simulated. Run the stack first:
+and make **real gateway** calls. Demo 14 optionally simulates the Gmail
+backend while retaining live authorization and approvals. Run the stack first:
 
 ```bash
 cd demo
@@ -38,6 +39,26 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 | http://localhost:8088 | gateway egress proxy (needs the egress overlay — Demos 5–7) |
 | http://localhost:8087 | dedicated Open-Meteo gateway (needs the weather overlay — Demo 13) |
 | http://localhost:8081, :8082, :5556 | authz · tokensvc · SSO (Dex) |
+
+## Demo 14 — Gmail assistant, human-approved sends
+
+An agent reads email automatically and requires the mailbox owner's approval
+for every outgoing message. Start with fake mail and real approvals:
+
+```bash
+make gmail-up
+make gmail-demo
+```
+
+The dedicated MCP ingress listens on `http://localhost:8089/mcp-gmail`.
+The terminal shows the full outgoing message and asks you to type SEND or
+DENY. Use `ARGS=--yes make gmail-demo` for scripted fake-mail decisions.
+Live Gmail uses OAuth and refuses unattended approval. Your own MCP-capable
+agent can use `bash demo/gmail-demo.sh --agent-config demo/gmail/agent-config.json`
+while you run the human approval desk.
+
+Full setup, live Gmail, agent configuration, tests and expiry verification:
+[Gmail approval tutorial](Gmail-Approval-Tutorial.md).
 
 ## `demo/.env` — every variable at a glance
 

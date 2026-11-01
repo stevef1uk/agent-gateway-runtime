@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1060" viewBox="0 0 1600 1060" role="img" aria-labelledby="title description">
+  <title id="title">Gmail assistant: read automatically, approve every send</title>
+  <desc id="description">An AI agent uses a scoped gateway token to call a restricted MCP ingress. The Agent Gateway allows email reads and holds every send for human approval before the private Gmail connector is called. The human reviews all recipients, subject and body, then approves once or denies. Approval records consent; the agent must retry the identical tool call to send. Google OAuth credentials remain in the private connector. A durable send ledger guards against duplicate submission, and gateway audit records link the agent, human, delegation and approval. Fake mail and live Gmail use the same tools and policy.</desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.06"/>
+    </filter>
+    <marker id="arrow-slate" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 8 4 0 8Z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 9 5 0 10Z" fill="#059669"/>
+    </marker>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 9 5 0 10Z" fill="#d97706"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0 9 5 0 10Z" fill="#7c3aed"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+      .heading { font-size: 23px; font-weight: 700; fill: #0f172a; }
+      .body { font-size: 19px; fill: #475569; }
+      .small { font-size: 16px; fill: #64748b; }
+      .label { font-size: 15px; font-weight: 700; letter-spacing: 1.4px; }
+      .mono { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace; font-size: 16px; }
+      .line { fill: none; stroke-width: 3; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1060" rx="24" fill="#f8fafc"/>
+  <path d="M24 0H1576Q1600 0 1600 24V156H0V24Q0 0 24 0Z" fill="#0f172a"/>
+  <text x="64" y="43" class="label" fill="#93c5fd">AGENT GATEWAY · DEMO 14</text>
+  <text x="64" y="93" font-size="37" font-weight="750" fill="#ffffff">Your Gmail. An AI assistant. You control every send.</text>
+  <text x="64" y="129" font-size="20" fill="#cbd5e1">Read and prepare replies automatically. Release an exact outgoing message only after a human decision.</text>
+
+  <circle cx="80" cy="190" r="5" fill="#059669"/>
+  <text x="94" y="196" class="small">Automatic reads</text>
+  <circle cx="294" cy="190" r="5" fill="#d97706"/>
+  <text x="308" y="196" class="small">Human-held sends</text>
+  <circle cx="537" cy="190" r="5" fill="#7c3aed"/>
+  <text x="551" y="196" class="small">Separate Google consent</text>
+  <text x="1536" y="196" text-anchor="end" class="small">Conceptual request flow · MCP tools → Gmail API</text>
+
+  <!-- Managed boundary: only the ingress is published to the agent. -->
+  <rect x="342" y="228" width="900" height="390" rx="20" fill="#eff6ff" stroke="#bfdbfe" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="366" y="260" class="label" fill="#2563eb">GOVERNED ACCESS BOUNDARY</text>
+  <text x="1216" y="260" text-anchor="end" class="small">Private connector · no direct agent access</text>
+
+  <!-- Agent. -->
+  <rect x="64" y="290" width="240" height="286" rx="18" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/>
+  <rect x="84" y="310" width="40" height="40" rx="11" fill="#dbeafe"/>
+  <rect x="94" y="322" width="20" height="15" rx="4" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <path d="M104 317v5m-15 6h5m20 0h5" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="100" cy="329" r="1.6" fill="#2563eb"/>
+  <circle cx="108" cy="329" r="1.6" fill="#2563eb"/>
+  <text x="84" y="385" class="heading">AI agent</text>
+  <text x="84" y="417" class="body">Search and read mail</text>
+  <text x="84" y="445" class="body">Prepare a reply</text>
+  <text x="84" y="473" class="body">Request a send</text>
+  <rect x="84" y="505" width="200" height="47" rx="10" fill="#eff6ff"/>
+  <text x="184" y="525" text-anchor="middle" font-size="15" font-weight="650" fill="#1d4ed8">Scoped gateway token</text>
+  <text x="184" y="544" text-anchor="middle" font-size="13" fill="#475569">No Google / admin credentials</text>
+
+  <!-- Restricted ingress. -->
+  <rect x="362" y="290" width="190" height="286" rx="18" fill="#ffffff" stroke="#dbeafe" filter="url(#shadow)"/>
+  <rect x="382" y="310" width="40" height="40" rx="11" fill="#e0e7ff"/>
+  <path d="M391 322h22m-22 7h22m-22 7h22" stroke="#4f46e5" stroke-width="2"/>
+  <text x="382" y="385" class="heading">MCP ingress</text>
+  <text x="382" y="417" class="body">One agent URL</text>
+  <text x="382" y="449" class="small">Rejects overrides,</text>
+  <text x="382" y="473" class="small">batches and</text>
+  <text x="382" y="497" class="small">alternate routes</text>
+  <text x="382" y="541" class="mono" fill="#4338ca">/mcp-gmail</text>
+
+  <!-- Policy enforcement point. -->
+  <rect x="610" y="290" width="280" height="286" rx="18" fill="#ffffff" stroke="#93c5fd" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="630" y="310" width="40" height="40" rx="11" fill="#dbeafe"/>
+  <path d="M650 317 661 321v8c0 8-11 15-11 15s-11-7-11-15v-8Z" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <path d="m644 329 4 4 8-9" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <text x="630" y="385" class="heading">Agent Gateway</text>
+  <text x="630" y="417" class="body">Identity · delegation · policy</text>
+  <rect x="630" y="439" width="240" height="44" rx="9" fill="#ecfdf5"/>
+  <circle cx="646" cy="461" r="4" fill="#059669"/>
+  <text x="660" y="467" font-size="18" font-weight="650" fill="#047857">Reads → allow</text>
+  <rect x="630" y="495" width="240" height="44" rx="9" fill="#fffbeb"/>
+  <circle cx="646" cy="517" r="4" fill="#d97706"/>
+  <text x="660" y="523" font-size="18" font-weight="650" fill="#b45309">Every send → hold</text>
+  <text x="750" y="562" text-anchor="middle" font-size="14" fill="#64748b">Revocation + audit on every call</text>
+
+  <!-- Credential-holding connector. -->
+  <rect x="948" y="290" width="270" height="286" rx="18" fill="#ffffff" stroke="#dbeafe" filter="url(#shadow)"/>
+  <rect x="968" y="310" width="40" height="40" rx="11" fill="#ede9fe"/>
+  <rect x="979" y="327" width="18" height="15" rx="3" fill="none" stroke="#7c3aed" stroke-width="2"/>
+  <path d="M983 327v-5a5 5 0 0 1 10 0v5" fill="none" stroke="#7c3aed" stroke-width="2"/>
+  <text x="968" y="385" class="heading">Gmail connector</text>
+  <text x="968" y="417" class="body">Executes allowed tools</text>
+  <text x="968" y="449" class="small">Google access + refresh tokens</text>
+  <text x="968" y="473" class="small">stay here, outside the agent</text>
+  <rect x="968" y="505" width="230" height="47" rx="10" fill="#f5f3ff"/>
+  <text x="1083" y="534" text-anchor="middle" font-size="17" font-weight="650" fill="#6d28d9">Durable send ledger</text>
+
+  <!-- Gmail provider. -->
+  <rect x="1276" y="290" width="260" height="286" rx="18" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/>
+  <rect x="1296" y="310" width="40" height="40" rx="11" fill="#fee2e2"/>
+  <rect x="1305" y="322" width="22" height="16" rx="2" fill="none" stroke="#dc2626" stroke-width="2"/>
+  <path d="m1306 323 10 8 10-8" fill="none" stroke="#dc2626" stroke-width="2"/>
+  <text x="1296" y="385" class="heading">Your Gmail</text>
+  <text x="1296" y="417" class="body">Read messages</text>
+  <text x="1296" y="445" class="body">Send approved email</text>
+  <text x="1296" y="485" class="small">Connected account only</text>
+  <text x="1296" y="511" class="mono" fill="#64748b">users/me</text>
+  <text x="1296" y="547" class="small">Gmail message ID on success</text>
+
+  <!-- Tool-call path: every arrow is conditional on gateway authorization. -->
+  <path d="M305 429H350" class="line" stroke="#64748b" marker-end="url(#arrow-slate)"/>
+  <path d="M553 429H598" class="line" stroke="#64748b" marker-end="url(#arrow-slate)"/>
+  <path d="M891 429H936" class="line" stroke="#059669" marker-end="url(#arrow-green)"/>
+  <path d="M1219 429H1264" class="line" stroke="#059669" marker-end="url(#arrow-green)"/>
+  <text x="1083" y="600" text-anchor="middle" font-size="15" font-weight="650" fill="#047857">Allowed reads + approved send retries</text>
+
+  <!-- Held actions go to a human; approval goes back to the gateway. -->
+  <path d="M699 577V703" class="line" stroke="#d97706" marker-end="url(#arrow-amber)"/>
+  <path d="M817 704V589" class="line" stroke="#059669" marker-end="url(#arrow-green)"/>
+  <rect x="526" y="635" width="156" height="29" rx="7" fill="#fffbeb"/>
+  <text x="604" y="655" text-anchor="middle" font-size="16" font-weight="700" fill="#b45309">202 · held for review</text>
+  <text x="835" y="645" font-size="17" font-weight="650" fill="#047857">Approve once</text>
+  <text x="835" y="669" font-size="15" fill="#64748b">Exact-action consent</text>
+
+  <rect x="499" y="716" width="482" height="174" rx="18" fill="#ffffff" stroke="#fcd34d" stroke-width="2" filter="url(#shadow)"/>
+  <circle cx="532" cy="751" r="10" fill="none" stroke="#b45309" stroke-width="2"/>
+  <path d="M518 779v-6c0-12 28-12 28 0v6" fill="none" stroke="#b45309" stroke-width="2"/>
+  <text x="562" y="759" class="heading">You, the delegating human</text>
+  <text x="523" y="804" class="body">Review From, To, Cc, Bcc, subject and full body.</text>
+  <rect x="523" y="829" width="244" height="36" rx="8" fill="#dcfce7"/>
+  <text x="645" y="853" text-anchor="middle" font-size="17" font-weight="700" fill="#166534">SEND · approve once</text>
+  <rect x="781" y="829" width="176" height="36" rx="8" fill="#fee2e2"/>
+  <text x="869" y="853" text-anchor="middle" font-size="17" font-weight="700" fill="#991b1b">DENY · no email sent</text>
+
+  <!-- OAuth is a separate connection, not a per-message approval. -->
+  <path d="M982 820H1105V642H1247V540H1231" class="line" stroke="#7c3aed" stroke-dasharray="7 6" marker-end="url(#arrow-purple)"/>
+  <rect x="1143" y="681" width="352" height="164" rx="14" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="1163" y="712" font-size="18" font-weight="700" fill="#6d28d9">One-time Google connection</text>
+  <text x="1163" y="744" class="body">Browser OAuth consent authorizes</text>
+  <text x="1163" y="771" class="body">the connector to read and send.</text>
+  <text x="1163" y="810" font-size="16" font-weight="650" fill="#6d28d9">The gateway still gates every agent send.</text>
+
+  <!-- The continuation is deliberately explicit. -->
+  <text x="64" y="688" class="label" fill="#2563eb">WHAT HAPPENS AFTER APPROVAL?</text>
+  <text x="64" y="727" class="body">The agent retries the same tool call.</text>
+  <text x="64" y="755" class="body">Only that approved message can pass.</text>
+  <text x="64" y="800" class="small">A decision alone does not send mail.</text>
+  <text x="64" y="825" class="small">Changed content needs fresh consent.</text>
+  <text x="64" y="850" class="small">Denial or expiry never becomes approval.</text>
+
+  <rect x="64" y="936" width="1472" height="78" rx="14" fill="#e2e8f0"/>
+  <path d="M554 952V998M1045 952V998" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="88" y="966" font-size="17" font-weight="700" fill="#334155">ATTRIBUTED AUDIT TRAIL</text>
+  <text x="88" y="993" font-size="16" fill="#475569">Human + agent + delegation + approval + outcome</text>
+  <text x="578" y="966" font-size="17" font-weight="700" fill="#334155">DUPLICATE-SEND PROTECTION</text>
+  <text x="578" y="993" font-size="16" fill="#475569">Claim before send; uncertain outcomes need review</text>
+  <text x="1069" y="966" font-size="17" font-weight="700" fill="#334155">ONE POLICY, TWO DEMO MODES</text>
+  <text x="1069" y="993" font-size="16" fill="#475569">Simulated mailbox first · live Gmail through OAuth</text>
+  <text x="1536" y="1040" text-anchor="end" font-size="13" fill="#64748b">Agent Gateway · Gmail approval demo · conceptual architecture</text>
+</svg>

@@ -1,0 +1,97 @@
+# From the repo root (only the Gmail demo and its core dependencies start):
+# python3 demo/gmail/demo.py --init
+# docker compose -f demo/docker-compose.yml -f demo/docker-compose.gmail.yml \
+#   up -d --build --wait tokensvc gmail-ingress
+services:
+  gmail-mcp:
+    build:
+      context: ./gmail
+      args:
+        GMAIL_UID: ${GMAIL_UID:-1000}
+        GMAIL_GID: ${GMAIL_GID:-1000}
+    image: agent-gateway-gmail-demo:local
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    environment:
+      GMAIL_MODE: ${GMAIL_MODE:-fake}
+      GMAIL_MAILBOX: ${GMAIL_MAILBOX:-}
+      GMAIL_TOKEN_FILE: /credentials/token.json
+    volumes:
+      - gmail-data:/data
+      - ./gmail/credentials:/credentials:ro
+    networks: [gmail-backend]
+    # No published port, no membership of the agent/default network.
+
+  gateway-gmail:
+    image: stevef1uk/agent-gateway-gateway:1.0.33
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    env_file: [./gmail/credentials/operator.env]
+    environment:
+      AUTHZ_URL: http://authz:8081
+      PERSISTENCE: postgres
+      DATABASE_URL: postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: agent-gateway-demo-secret-change-in-prod
+      JWT_ISSUER: agent-gateway
+      APPROVAL_TTL: ${GMAIL_APPROVAL_TTL:-15m}
+      UPSTREAM_URL: http://gmail-mcp:8092
+      APPROVAL_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      APPROVAL_TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      APPROVAL_CONSOLE_URL: ${APPROVAL_CONSOLE_URL:-}
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    networks: [default, gmail-front, gmail-backend]
+    depends_on:
+      authz: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+      gmail-mcp: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No host publication; the agent only reaches gmail-ingress.
+
+  gmail-ingress:
+    build:
+      context: ./gmail
+      args:
+        GMAIL_UID: ${GMAIL_UID:-1000}
+        GMAIL_GID: ${GMAIL_GID:-1000}
+    image: agent-gateway-gmail-demo:local
+    command: ["python", "ingress.py"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    ports: ["${GMAIL_BIND_ADDR:-127.0.0.1}:${GMAIL_HOST_PORT:-8089}:8093"]
+    env_file: [./gmail/credentials/operator.env]
+    environment:
+      GMAIL_MODE: ${GMAIL_MODE:-fake}
+      GMAIL_MAILBOX: ${GMAIL_MAILBOX:-}
+    networks: [gmail-public, gmail-front]
+    depends_on:
+      gateway-gmail: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8093/healthz', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  gmail-data:
+
+networks:
+  gmail-public:
+    # Separate bridge for the published loopback port (Docker does not publish
+    # ports for containers attached exclusively to internal networks).
+  gmail-front:
+    internal: true
+  gmail-backend:
+    # Egress needed for Google OAuth refresh and Gmail HTTPS in live mode.
+    # Only connector + PEP join this network; no agent containers belong here.
