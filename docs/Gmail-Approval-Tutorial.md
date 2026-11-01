@@ -56,20 +56,29 @@ ingress rejects `X-Agent-*` overrides, JSON-RPC batches and alternate routes.
 ### Walk through approval
 
 The runner signs in as Alice using the local Dex fixture, creates a
-30-minute delegation, reads a seed message, then attempts a send:
+30-minute delegation, reads a seed message, then runs **two separate email
+scenarios**, labeled in the terminal:
 
 1. See `HELD: apr-…` and the unchanged send-attempt count.
 2. Review the connected mailbox and **all seven message fields** in the
    terminal. JSON escaping makes control characters visible.
 3. Type **SEND** to approve that exact email once.
-4. The identical retry executes; fake mode prints `message_id: fake-…`.
-5. Review the second, injected-style proposal and type **DENY**.
+4. The identical retry executes; fake mode prints `message_id: fake-…` and
+   **EMAIL 1 COMPLETE**. This is a local simulated record, not a delivered
+   Gmail message.
+5. A new section introduces **Email 2 of 2**, a different injected-style
+   proposal. Review it and type **DENY**. This second scenario is independent
+   of the completed approval/send of Email 1.
 6. Denied retries fail; revocation blocks the still-valid token. The runner
    checks correlated approval/audit events and backend send evidence.
 
 Fake mode also checks every field independently against an unconsumed
-approval, including Bcc and body text. The protocol driver deliberately
-exercises malicious calls; it does not claim an AI model was involved.
+approval, including Bcc and body text, before retrying the approved original.
+These checks and the replay/revocation probes are labeled **AUTOMATIC CHECK**:
+the driver holds/denies test variants and verifies they never reach the
+mail backend. The final summary reports one approved send and one denied
+email. The protocol driver deliberately exercises malicious calls; it does
+not claim an AI model was involved.
 
 For unattended fake-mail verification:
 

@@ -40,26 +40,6 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 | http://localhost:8087 | dedicated Open-Meteo gateway (needs the weather overlay — Demo 13) |
 | http://localhost:8081, :8082, :5556 | authz · tokensvc · SSO (Dex) |
 
-## Demo 14 — Gmail assistant, human-approved sends
-
-An agent reads email automatically and requires the mailbox owner's approval
-for every outgoing message. Start with fake mail and real approvals:
-
-```bash
-make gmail-up
-make gmail-demo
-```
-
-The dedicated MCP ingress listens on `http://localhost:8089/mcp-gmail`.
-The terminal shows the full outgoing message and asks you to type SEND or
-DENY. Use `ARGS=--yes make gmail-demo` for scripted fake-mail decisions.
-Live Gmail uses OAuth and refuses unattended approval. Your own MCP-capable
-agent can use `bash demo/gmail-demo.sh --agent-config demo/gmail/agent-config.json`
-while you run the human approval desk.
-
-Full setup, live Gmail, agent configuration, tests and expiry verification:
-[Gmail approval tutorial](Gmail-Approval-Tutorial.md).
-
 ## `demo/.env` — every variable at a glance
 
 Compose (and every script) reads this file; it is **gitignored** — your
@@ -848,6 +828,33 @@ docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
 
 Full explanations, individual curl commands, configuration boundaries and
 cleanup: [Public API curl tutorial](Public-API-Curl-Tutorial.md).
+
+## Demo 14 — Gmail assistant, human-approved sends
+
+An agent reads email automatically and requires the mailbox owner's approval
+for every outgoing message. Start with fake mail and real approvals:
+
+```bash
+make gmail-up
+make gmail-demo
+```
+
+The dedicated MCP ingress listens on `http://localhost:8089/mcp-gmail`.
+The walkthrough has **two separate email scenarios**: approve the meeting
+reply by typing SEND, then deny a different injected-style request by typing
+DENY. The second prompt is a new scenario; the first approved send has already
+completed. Clearly labeled automatic checks verify message binding, replay
+protection, revocation and audit between and after the decisions.
+
+Fake mode records simulated sends as `fake-N` message IDs and delivers no
+real Gmail email. Use `ARGS=--yes make gmail-demo` for scripted fake-mail
+decisions. Live Gmail uses OAuth and refuses unattended approval. Your own
+MCP-capable agent can use
+`bash demo/gmail-demo.sh --agent-config demo/gmail/agent-config.json`
+while you run the human approval desk.
+
+Full setup, live Gmail, agent configuration, tests and expiry verification:
+[Gmail approval tutorial](Gmail-Approval-Tutorial.md).
 
 ## Real-World Production Example: Fronting Emotion Server MCP for Public Web
 
