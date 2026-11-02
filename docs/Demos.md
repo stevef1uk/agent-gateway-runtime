@@ -12,6 +12,8 @@ docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
 ./demo.sh
 ```
 
+When you are done trying the demos, run `make clean` from the repo root (or `cd demo && docker compose down --remove-orphans`) to tear down all containers — see [Cleaning up](#cleaning-up).
+
 > **Using Podman instead of Docker?** Everywhere below, read `docker compose`
 > as **`podman compose`** — Podman's native compose subcommand (e.g.
 > `podman compose -f docker-compose.yml -f docker-compose.egress.yml up -d`).
@@ -871,6 +873,16 @@ automated token minting, JSON-RPC MCP translation, Traefik CORS preflights, and 
 * **Architecture & Guide**: [Integration-Patterns.md §Pattern E](Integration-Patterns.md#pattern-e--public-web-frontends--backend-proxy-bff)
 * **Frontend Web Repo**: [stevef1uk/emotion-server-api](https://github.com/stevef1uk/emotion-server-api)
 * **Backend & K8s Demo Repo**: [stevef1uk/emotion-server-demo](https://github.com/stevef1uk/emotion-server-demo)
+
+## Cleaning up
+
+When you have finished trying out the demos, tear down the Compose stack and any overlay services (`--remove-orphans` cleans up extra containers started by the egress, OPA, weather or Gmail overlays):
+
+```bash
+make clean
+# or directly from the demo directory:
+cd demo && docker compose down --remove-orphans
+```
 
 ## Troubleshooting
 

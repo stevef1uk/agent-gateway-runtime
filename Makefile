@@ -189,6 +189,10 @@ protected-api-k3s: ## Run the protected-API demo against the k3s node
 pull-images: ## Refresh the published gateway-stack images
 	$(COMPOSE) -f demo/docker-compose.yml -f demo/docker-compose.opa.yml pull
 
+.PHONY: clean
+clean: ## Stop and remove all demo containers and orphan services
+	cd demo && $(COMPOSE) down --remove-orphans
+
 .PHONY: k3s-apply
 k3s-apply: ## Apply k3s/agentgw.yaml (namespace/secret from k3s/README.md must exist)
 	kubectl apply -f k3s/agentgw.yaml && kubectl -n agentgw get pods
