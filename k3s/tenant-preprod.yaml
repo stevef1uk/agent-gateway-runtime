@@ -273,7 +273,9 @@ spec:
   selector: { app: tokensvc }
   ports: [{ port: 8082, targetPort: 8082 }]
 ---
-# web — the tenant's OWN console (sessions in-memory here; single replica)
+# web — main preprod admin console with public signup + platform-admin review.
+# Keep the existing 1.0.67 UI: later tenant UI images omit the signup panel.
+# Sessions are in-memory here; single replica.
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: web, namespace: tenant-preprod }
@@ -292,7 +294,7 @@ spec:
           volumeMounts: [{ name: policies, mountPath: /policies, subPath: policies }]
       containers:
         - name: web
-          image: stevef1uk/agent-gateway-web_m:1.0.69
+          image: stevef1uk/agent-gateway-web_m:1.0.67
           securityContext: { runAsUser: 0 }
           ports: [{ containerPort: 8083 }]
           env:
@@ -304,6 +306,7 @@ spec:
             - { name: OIDC_CONNECTOR_ID, value: "google" }
             - name: GATEWAY_ADMIN_TOKEN
               valueFrom: { secretKeyRef: { name: agentgw-secrets, key: GATEWAY_ADMIN_TOKEN } }
+            - { name: WEB_PUBLIC_CONSOLE, value: "0" }
             - { name: DEMO_UI, value: "1" }
             - { name: WEB_ADMIN_EMAILS, value: "stevef1uk@gmail.com" }
             - { name: PUBLIC_GATEWAY_URL, value: "https://preprod.agw.sjfisher.com" }

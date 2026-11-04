@@ -182,6 +182,14 @@ remain public at `/signup.html`; only the verified, allowlisted operator can
 see or decide them. The app has no password-change API; password and identity
 administration belong to each tenant's own identity provider.
 
+The main preprod site, `https://preprod.agw.sjfisher.com`, uses the full
+administration console in `tenant-preprod.yaml`, pinned to the existing
+`agent-gateway-web_m:1.0.67` image. Logged-out visitors get signup links;
+signup records and review controls are restricted to the verified platform
+administrator, `stevef1uk@gmail.com`. Keep `WEB_PUBLIC_CONSOLE=0` and
+`DEMO_UI=1` there. Later tenant UI images omit the signup-review panel, so
+do not automatically replace this main-site image with the tenant image.
+
 The manifest targets the managed web image and enables this profile, but it
 must not be applied publicly until a real OIDC provider replaces the Dex
 mock/static credentials and `agentgw-web-admin` contains the operator's

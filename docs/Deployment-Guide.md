@@ -4,9 +4,9 @@
 their own infrastructure — from a single laptop node to a highly available
 enterprise deployment.*
 
-For request-correlated JSON logs, trace-linked audit records and optional
-OpenTelemetry traces and metrics, see [Observability](Observability.md), including
-a Docker Compose Collector example and managed-service configuration.
+For request-correlated logs, distributed traces and metrics, see
+[§6.7 Observability](#67-observability) and the detailed
+[Observability guide](Observability.md).
 
 ---
 
@@ -630,6 +630,40 @@ its ingress path + path-scoped delegation, and saves the manifest
 Deployments, Services, Ingress and Dex config. The only cluster-specific items
 are the ingress controller, cert-manager + issuer, DNS, and the secrets listed
 above.*
+
+### 6.7 Observability
+
+Agent Gateway provides operational visibility across the gateway, authorization
+service, token service and web console:
+
+* **Structured logs and request correlation** — JSON logs on stderr include
+  request IDs, methods, route templates, status codes and durations. Responses
+  expose `X-Request-ID`; request-aware logs also include trace and span IDs when
+  tracing is enabled. Collect logs with your existing log shipper.
+* **Distributed tracing** — optional OpenTelemetry instrumentation propagates
+  W3C trace context across inbound HTTP requests and instrumented outgoing calls,
+  including authorization checks, gateway upstream forwarding and console calls.
+  Jaeger can display the resulting multi-service request waterfall.
+* **Trace-linked security audit** — audit records retain their independent,
+  sampling-independent persistence and gain trace and span IDs when tracing is
+  enabled. Use `approval_id` to correlate human decisions and later retries,
+  which are separate requests and traces.
+* **Metrics** — HTTP request counts, request-duration histograms and audit-write
+  attempt counts are exported over OTLP/HTTP to an OpenTelemetry Collector or
+  compatible backend. Health checks are excluded from request telemetry.
+
+To enable export, first use the supported image versions listed in the
+[Observability guide](Observability.md#image-versions), then set
+`OTEL_ENABLED=true` and `OTEL_EXPORTER_OTLP_ENDPOINT` to your Collector's base
+URL on each relevant service. Export is off by default outside the optional
+Compose observability override; JSON logs remain available without a Collector.
+
+See [Observability](Observability.md) for the Compose Collector override,
+Kubernetes and managed-service configuration, authentication, sampling and data
+handling. Follow [Observability with Jaeger](Observability_With_Jaegar.md) for a
+ready-to-run local trace viewer and a real six-span tool-call walkthrough. The
+Jaeger demo uses in-memory trace storage and leaves metrics in Collector log
+summaries; configure persistent tracing and metrics backends for production.
 
 ## 7. Integrating with enterprise systems
 

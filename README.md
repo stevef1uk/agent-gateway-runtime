@@ -175,7 +175,7 @@ Deep dive: [docs/Architecture.md](docs/Architecture.md).
 | [`docs/FreeRide-Setup.md`](docs/FreeRide-Setup.md) | **FreeRide AI Configuration Assistant setup**: configuring `.env`, AI providers (Gemini, OpenRouter, Groq, Cerebras, etc.), models, and health-checked UI enablement |
 | [`docs/Deployment-Guide.md`](docs/Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
 | [`docs/Observability.md`](docs/Observability.md) | Configure JSON logs, trace-linked audit records and optional OpenTelemetry traces/metrics with a ready-to-run Compose Collector override or your own Kubernetes collector |
-| [`docs/Observability_With_Jaegar.md`](docs/Observability_With_Jaegar.md) | Run Jaeger locally, generate a real multi-service trace and capture a LinkedIn-ready waterfall screenshot |
+| [`docs/Observability_With_Jaegar.md`](docs/Observability_With_Jaegar.md) | **Observability with Jaeger**: run the local Compose stack, follow a real multi-service tool-call trace and capture its waterfall |
 | [`docs/Agent-Identity.md`](docs/Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
 | [`docs/Agent-Auth-Basics.md`](docs/Agent-Auth-Basics.md) | How agents actually get a credential — a beginners' guide to the delegation → mint → JWT dance, with copy-paste curl examples and a troubleshooting table |
 | [`docs/Integration-Patterns.md`](docs/Integration-Patterns.md) | Inserting the gateway between existing agents and back ends/MCP servers with zero or one-line changes |
@@ -632,6 +632,21 @@ When you are done playing: [docs/Deployment-Guide.md](docs/Deployment-Guide.md)
 covers production operation of the same images — Postgres/Redis HA, Kubernetes,
 any OIDC IdP, SPIFFE/workload identity (mTLS), licence lifecycle, upgrade
 procedures and a troubleshooting reference.
+
+### Observability
+
+Follow each tool call with **request-correlated JSON logs, trace-linked audit
+records and optional OpenTelemetry traces and metrics** across the web console,
+gateway, authorization and token services. See the
+[Observability guide](docs/Observability.md) for supported image versions,
+Collector configuration, sampling and Kubernetes deployment settings.
+
+The [Observability with Jaeger walkthrough](docs/Observability_With_Jaegar.md)
+adds a local trace viewer and shows how to inspect a real console → gateway →
+authorization → upstream request. The example below shows three instrumented
+services and six spans, including the gateway's upstream client call:
+
+![Jaeger trace waterfall showing a real console-to-upstream request across three services and six spans](images/jaeger-trace-example.png)
 
 ## Pricing
 
