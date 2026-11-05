@@ -49,8 +49,8 @@ A quick way to understand the project is to see it working:
 
 | Video | What it covers |
 |---|---|
-| **Quick Demo** | A short introduction to Agent Gateway and its core control model. [Watch on YouTube](https://youtu.be/0n9V7A_6KZg) |
 | **Introduction to Managed Service** | An introduction to the managed-service proposition. [Watch on YouTube](https://youtu.be/qTvqpE9fqXM) |
+| **Quick Demo** | A short introduction to Agent Gateway and its core control model. [Watch on YouTube](https://youtu.be/0n9V7A_6KZg) |
 | **Console Wizard Demo** | A walkthrough of the console and guided onboarding experience. [Watch on YouTube](https://youtu.be/eHiA4wtHUFk) |
 
 ## How it works
