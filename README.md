@@ -107,6 +107,9 @@ Choose a starting point:
 
 ## Go deeper
 
+- **[Common AI agent concerns](docs/Agent-Concerns.md)** — practical security and governance questions, and how Agent Gateway addresses them.
+- **[Repository guide](docs/Repository-Guide.md)** — a directory of documentation, demo scripts and integration resources.
+
 This README is the introduction. The technical detail lives in the supporting documentation:
 
 - **[Architecture](docs/Architecture.md)** — components, request flow, enforcement and supporting services.
