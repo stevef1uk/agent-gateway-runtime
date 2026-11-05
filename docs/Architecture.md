@@ -1,3 +1,13 @@
+# Agent Gateway Architecture
+
+> **This document is the technical companion to the [project README](../README.md).** The README explains the problem Agent Gateway addresses and how to explore it. This document explains how the system is structured and how its security controls fit together.
+
+Agent Gateway places an enforcement layer between AI agents and the tools, APIs and services they use. Its design separates the human-facing authority and policy decisions from the point that enforces those decisions on incoming requests. The sections below describe the components, request lifecycle, identity and credential model, policy enforcement, and operational considerations.
+
+**New to the project?** Start with the [README](../README.md). To see the system in action, use the [demo catalogue and runbooks](Demos.md).
+
+---
+
 # Architecture
 
 Agent Gateway is four stateless services plus two data stores. The design
