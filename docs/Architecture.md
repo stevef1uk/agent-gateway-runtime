@@ -332,30 +332,3 @@ engine in the codebase):
 6. **Encrypted, licence-gated delivery.** Containers ship encrypted payloads;
    they start only with the customer's private key and a valid, vendor-signed
    licence token — [details](Security-and-Licensing.md).
-
-## Trust boundaries
-
-```
-┌──────────────────────── browser ─────────────────────────┐
-│ human signs in via OIDC; web relays tokens;              │
-│ web never verifies them (authz does) ── the web tier     │
-│ being compromised cannot mint rights for someone else;   │
-│ secrets live in cookies only to power forms in dev       │
-└───────────────────────────────────────────────────────────┘
-┌─ agents ──► gateway: nothing crosses without a delegation ─┐
-│ gateway ──► authz: every decision over the wire            │
-│ gateway ──► upstream: only forwarded when ALLOW            │
-└────────────────────────────────────────────────────────────┘
-```
-
-The web tier is deliberately thin: it relays ID tokens and approval decisions
-but cryptographic verification lives only in `authz`, so there is exactly one
-place that must trust the IdP.
-
-## Scaling & HA
-
-All four services are stateless when `PERSISTENCE=postgres` (state in
-Postgres/Redis), so HA = more replicas behind a load balancer, a managed
-Postgres, and managed Redis. No sticky sessions are needed — the OIDC flow is
-cookie-based state that any replica can validate. See
-[Deployment-Guide.md](Deployment-Guide.md) §6 for the full runbook.
