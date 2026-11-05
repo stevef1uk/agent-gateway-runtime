@@ -128,7 +128,7 @@ Agent Gateway is published so people can run it, test the approach and help shap
 
 ## Pricing and licensing
 
-The project is free to explore, with a non-expiring licence token available by email. Repository documentation and demo assets are MIT licensed; distributed software images are provided under a separate commercial licence. See [Pricing](docs/Pricing.md), [Commercial Licence](docs/Commercial-Licence.md) and [Security and Licensing](docs/Security-and-Licensing.md).
+The project is free to explore, with a non-expiring licence token available to individuals by email request. Repository documentation and demo assets are MIT licensed; distributed software images are provided under a separate commercial licence. See [Pricing](docs/Pricing.md), [Commercial Licence](docs/Commercial-Licence.md) and [Security and Licensing](docs/Security-and-Licensing.md).
 
 ---
 
