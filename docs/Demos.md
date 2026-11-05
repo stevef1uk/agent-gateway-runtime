@@ -1,3 +1,13 @@
+# Agent Gateway Demos
+
+> **This is the hands-on companion to the [project README](../README.md).** The README introduces the problem and the Agent Gateway control model; this guide is the detailed catalogue of demonstrations, prerequisites, commands and the evidence each demo is intended to show.
+
+You do not need to run every demo to understand the project. A good starting point is the local guided walkthrough, followed by the scenarios most relevant to your environment: human approval, MCP protection, egress control, revocation or protocol-level token protection.
+
+For the system design behind these demonstrations, see [Architecture](Architecture.md). For integration guidance, see [Protecting an API](Protecting-Your-API.md) and [Protecting an MCP server](Protecting-Your-MCP.md).
+
+---
+
 # Running the demos
 
 The demos run against the same seven-container stack in [`demo/`](../demo/)
@@ -893,3 +903,55 @@ cd demo && docker compose down --remove-orphans
 | `Customer private key not found` | the images need `demo/keys/` mounted — do not delete that directory |
 | SSO sign-in step fails | ensure Dex is up: `curl http://localhost:5556/dex/.well-known/openid-configuration` |
 | Graphical demo says tokensvc is down | make sure your compose file from this repo is ≥ the version matching `agent-gateway-web:1.0.18` |
+
+
+## Performance benchmarking
+
+The gateway is a policy enforcement point in front of every agent call, so per-request cost matters. The repository includes a benchmark for **allowed** passthrough (HTTP 200, proxied upstream) and **denied** requests (HTTP 403, no upstream), across the built-in and OPA policy engines.
+
+```bash
+# From the repository root
+cd demo && docker compose up -d
+cd ..
+make bench                 # or ./demo/bench-engines.sh
+```
+
+The benchmark reports throughput and p50/p90/p99 latency per path. See [Benchmarking](Benchmarking.md) for options, reference measurements, Kubernetes targets and JSON output.
+
+## Local demo URLs and endpoints
+
+| Service | Local URL | Notes |
+|---|---|---|
+| Web console | http://localhost:8083 | Delegations, approvals and audit |
+| Guided graphical demo | http://localhost:8083/demo.html | Interactive walkthrough |
+| OPA policy playground | http://localhost:8083/policy.html | Requires the OPA Compose override |
+| Protected demo API | http://localhost:8090 | Direct/out-of-band demo endpoint; normal governed traffic goes via gateway |
+| Gateway (PEP) | http://localhost:8080 | Agent-facing gateway |
+| Gateway egress proxy | http://localhost:8088 | Optional, enabled with the egress overlay and `GATEWAY_PROXY_ADDR=:8088` |
+| Authorization service | http://localhost:8081 | Delegation and policy decisions |
+| Token service | http://localhost:8082 | Short-lived agent tokens |
+| Dex OIDC provider | http://localhost:5556 | Local demo identity provider |
+
+These are **local demo defaults**, not public production endpoints.
+
+## OpenShell and OpenClaw quick setup
+
+For a sandboxed OpenClaw agent whose outbound requests are governed by Agent Gateway, start with [OpenClaw and OpenShell](OpenClaw-OpenShell.md) and the detailed [architecture](Architecture.md#openshell--openclaw-integration--agent-egress-through-agent-gateway).
+
+```bash
+# From the repository root: build, create sandbox, configure provider and chat
+make openclaw-demo
+
+# Configure the local gateway as the OpenShell upstream proxy
+cd demo
+./openshell-gateway-setup.sh
+
+# Verify the allow path and approval-gated requests
+./openshell.sh
+```
+
+`demo/openclaw-sandbox.sh` runs the sandbox setup; `demo/openshell-gateway-setup.sh` registers the gateway, prepares proxy authentication and applies sandbox policy; `demo/openshell.sh` exercises the resulting path. Follow the [OpenShell quickstart](https://github.com/stevef/openshell/blob/main/README.md#quickstart) for prerequisites. The default delegation and policy are for demonstrations only; review them before production use.
+
+## Podman and troubleshooting
+
+The demo scripts support Docker and Podman. With Podman, use `podman compose` in place of `docker compose`, and select `CONTAINER_ENGINE=podman` or `ENGINE=podman` where supported. On rootless installations, ensure the Podman socket and Compose provider are available; SELinux systems may require relabeling bind mounts. For broader troubleshooting and platform-specific deployment details, see [Deployment Guide](Deployment-Guide.md).
