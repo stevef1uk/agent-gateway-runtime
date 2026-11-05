@@ -1,3 +1,13 @@
+# Agent Gateway Demos
+
+> **This is the hands-on companion to the [project README](../README.md).** The README introduces the problem and the Agent Gateway control model; this guide is the detailed catalogue of demonstrations, prerequisites, commands and the evidence each demo is intended to show.
+
+You do not need to run every demo to understand the project. A good starting point is the local guided walkthrough, followed by the scenarios most relevant to your environment: human approval, MCP protection, egress control, revocation or protocol-level token protection.
+
+For the system design behind these demonstrations, see [Architecture](Architecture.md). For integration guidance, see [Protecting an API](Protecting-Your-API.md) and [Protecting an MCP server](Protecting-Your-MCP.md).
+
+---
+
 # Running the demos
 
 The demos run against the same seven-container stack in [`demo/`](../demo/)
