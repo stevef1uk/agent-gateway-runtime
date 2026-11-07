@@ -10,3 +10,6 @@
 
 # Never commit the vendor signing key (token-minting capability).
 demo/keys/vendor_private.pem
+
+# Preserve local legacy demo configuration when switching from main.
+/demo/gmail/
