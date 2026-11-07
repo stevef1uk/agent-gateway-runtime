@@ -11,3 +11,8 @@ __pycache__/
 
 # Preserve local configuration left behind when switching from legacy main.
 /demo/gmail/
+
+# Local AWS activation material; never commit keys or key notes.
+keys/
+keys.tmp
+keys.txt
