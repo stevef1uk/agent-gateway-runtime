@@ -5,7 +5,8 @@ For the new encrypted-image path, use the operator
 and `serverless-images.template.json`. The ZIP build steps below describe the earlier
 source-only development prototype and are not a customer installation method.
 Images use the separate `stevef1uk/agent-gateway-{authz,tokensvc,gateway,web}_l` names;
-versioned customer release publication is still pending.
+[initial versioned images are published](releases/0.1.0-aws-c506506.md), while
+AWS acceptance and a complete customer installation bundle remain pending.
 
 For ordinary users, start with the [weather walkthrough](Public-API-Curl-Tutorial.md).
 For customer-owned infrastructure, start with [Self-hosting](Self-Hosting.md).

@@ -1,0 +1,29 @@
+{
+  "version": "0.1.0-aws-c506506",
+  "source_commit": "c506506b9d6169e77382e411b0155479d2a96350",
+  "platform": "linux/arm64",
+  "registry_verified": "2026-11-07",
+  "aws_deployed": false,
+  "images": {
+    "authz": {
+      "image": "stevef1uk/agent-gateway-authz_l:0.1.0-aws-c506506",
+      "digest": "sha256:c7f39f4312c628693a011ba16f8e60e739c8f7794460b9cca297f3981c6f8709",
+      "immutable_image": "stevef1uk/agent-gateway-authz_l@sha256:c7f39f4312c628693a011ba16f8e60e739c8f7794460b9cca297f3981c6f8709"
+    },
+    "tokensvc": {
+      "image": "stevef1uk/agent-gateway-tokensvc_l:0.1.0-aws-c506506",
+      "digest": "sha256:7ebac2d3e316f7c22e9844b45411961a45586e9d45c6c23b68973fd1485cde4d",
+      "immutable_image": "stevef1uk/agent-gateway-tokensvc_l@sha256:7ebac2d3e316f7c22e9844b45411961a45586e9d45c6c23b68973fd1485cde4d"
+    },
+    "gateway": {
+      "image": "stevef1uk/agent-gateway-gateway_l:0.1.0-aws-c506506",
+      "digest": "sha256:6f235c06e0b1ebfe5313d29dc0f1200cf8597e461c725fef92bd2d604a9e85a6",
+      "immutable_image": "stevef1uk/agent-gateway-gateway_l@sha256:6f235c06e0b1ebfe5313d29dc0f1200cf8597e461c725fef92bd2d604a9e85a6"
+    },
+    "web": {
+      "image": "stevef1uk/agent-gateway-web_l:0.1.0-aws-c506506",
+      "digest": "sha256:6086c747416bb9a0f3c8196c4ffb4915c01d826e5d0642f33ade3dc32371c266",
+      "immutable_image": "stevef1uk/agent-gateway-web_l@sha256:6086c747416bb9a0f3c8196c4ffb4915c01d826e5d0642f33ade3dc32371c266"
+    }
+  }
+}

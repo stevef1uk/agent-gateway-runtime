@@ -12,6 +12,9 @@ This is also an intended Marketplace delivery scenario, subject to the supported
 fulfillment route and seller review. See [AWS Marketplace](AWS-Marketplace.md).
 An approved listing and subscription cannot be inferred from the development ZIPs.
 
+[Published image identifiers](releases/0.1.0-aws-c506506.md) are available separately;
+they require matching activation material and are not a complete installer.
+
 ## What you will need
 
 - Your own AWS account, billing notifications and reviewed deployment/cleanup permissions.
@@ -87,4 +90,5 @@ The first local encrypted Gateway benchmark measured a median 508 ms for licence
 verification/decryption across five cold containers; warm health requests did not
 decrypt again. This excludes S3 and real AWS startup and is not an AWS latency
 guarantee. The image launcher and image template exist in the implementation
-branch, but customer images and a complete release bundle remain unpublished.
+branch. [Initial encrypted images are published](releases/0.1.0-aws-c506506.md),
+but a complete AWS-tested release bundle remains unpublished.
