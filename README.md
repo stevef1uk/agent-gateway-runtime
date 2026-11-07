@@ -1,135 +1,91 @@
-# Agent Gateway
+# Agent Gateway AWS demo
 
-## AI agents can act. Humans stay in control.
+Give an AI agent read access to weather data, require human approval for one lookup,
+and revoke access while its token is still valid. This **`aws` branch** starts with
+just the Open-Meteo weather demo.
 
-<p align="center">
-  <img src="images/overview_high_level.jpg"
-       alt="Agent Gateway overview — governing AI agent access to tools, APIs and enterprise systems"
-       width="960">
-</p>
+## Choose how to use it
 
-AI agents are moving beyond chat. They can call APIs, use MCP servers, access enterprise systems, send emails, make payments and take actions on our behalf.
+**Use a hosted demo:** your operator supplies a console URL, public gateway URL and
+Cognito invitation. You need no AWS account, private source code, Docker, SDK or API
+key. Follow the [weather walkthrough](docs/Public-API-Curl-Tutorial.md).
 
-That creates a practical question:
+**Deploy in your own AWS account:** see the separate [Self-hosting guide](docs/Self-Hosting.md).
+That path requires a compatible deployment release; it is not yet published.
 
-> **How do you give an AI agent enough freedom to be useful without giving it unlimited authority?**
+**AWS Marketplace:** planned as a purchase/distribution channel. See the separate
+[Marketplace guide](docs/AWS-Marketplace.md) for hosted and customer-account delivery
+scope. There is no published listing or subscription/entitlement integration yet.
 
-**Agent Gateway is a control layer between AI agents and the systems they can affect.** A human defines what an agent is allowed to do. The agent works autonomously within those boundaries. When an action needs a human decision—or falls outside those boundaries—the gateway intervenes.
+**Availability:** the implementation is locally tested, but the first real AWS
+application deployment/acceptance run is still pending. There is no hosted AWS demo
+URL or third-party deployment bundle published by this branch yet. Ask your operator
+for access when the test deployment is ready. Existing live sites and the `main`
+branch's local demos are not this AWS release.
 
-**The agent gets to work. The human stays in control.**
+## Hosted-demo quick start
 
-## The problem
+Install Git, Bash, curl and Python 3. Then:
 
-When an agent can affect real systems, asking it to “be careful” is not a security control. Organisations need to know:
-
-- Who authorised this agent to act?
-- What is it allowed to do, and for how long?
-- Which actions can happen automatically?
-- Which actions need a human decision?
-- How can access be stopped quickly?
-- Can we show what happened afterwards?
-
-Agent Gateway is designed to enforce those boundaries where an agent tries to use a tool, API or service.
-
-## What does Agent Gateway do?
-
-A human gives an agent a **delegation**: a defined set of permissions, limits and an expiry. The gateway checks each request against that authority and makes one of three decisions:
-
-- **Allow** — the action is within the agent’s authority and can proceed.
-- **Hold for approval** — the action waits for a human decision before it is executed.
-- **Deny** — the agent is not authorised to perform the action.
-
-Decisions are recorded for audit, and a delegation can be revoked so subsequent requests are refused—even if the agent still holds an otherwise valid token.
-
-> **Agent Gateway lets AI agents work autonomously within human-defined boundaries, while keeping people in control of consequential actions.**
-
-## 📺 Watch the videos
-
-A quick way to understand the project is to see it working:
-
-| Video | What it covers |
-|---|---|
-| **Introduction to Managed Service** | An introduction to the managed-service proposition. [Watch on YouTube](https://youtu.be/qTvqpE9fqXM) |
-| **Quick Demo** | A short introduction to Agent Gateway and its core control model. [Watch on YouTube](https://youtu.be/0n9V7A_6KZg) |
-| **Console Wizard Demo** | A walkthrough of the console and guided onboarding experience. [Watch on YouTube](https://youtu.be/eHiA4wtHUFk) |
-
-## How it works
-
-1. **A human defines the authority.** The delegation describes the resources and actions an agent may use, together with applicable limits and expiry.
-2. **The agent gets to work.** Routine, authorised activity can proceed without asking a human to approve every request.
-3. **The gateway checks each request.** It enforces the delegation and applicable policy at the point of access.
-4. **Consequential actions can be held.** A human reviews the proposed action and approves or denies it before it reaches the protected system.
-5. **Access can be revoked.** Operators can cut off a delegation without waiting for an agent token to expire.
-6. **The activity is auditable.** Decisions and approval outcomes are recorded.
-
-The goal is not to put a human in front of every agent action. It is to let routine work remain autonomous while keeping consequential decisions under human control.
-
-## A practical example
-
-Imagine an accounts-payable agent. It can read invoices, look up supplier records and prepare payments automatically. But when it proposes a significant payment, the gateway holds the action for a human decision.
-
-The same pattern applies elsewhere: read data but require approval to delete it; prepare an email but require approval to send it; deploy to test automatically but hold production changes for review.
-
-One of the project's demonstrations explores this under **prompt injection**. The important boundary is not whether the model recognises every malicious instruction: a consequential action is still subject to gateway enforcement and human approval.
-
-## Try it yourself
-
-The repository includes a local demonstration stack. Requirements are Docker Engine 24+ or Podman 4.7+, Compose, and `curl` (`jq` is optional).
-
-```bash
-cd demo
-docker compose up -d
-./demo.sh
+```sh
+git clone --branch aws https://github.com/stevef1uk/agent-gateway-runtime.git
+cd agent-gateway-runtime
 ```
 
-Then open the guided demo at [http://localhost:8083/demo.html](http://localhost:8083/demo.html).
+1. Open the console URL from your operator and sign in through Cognito.
+2. Create the scoped test delegation using the [walkthrough](docs/Public-API-Curl-Tutorial.md#3-create-a-scoped-delegation).
+3. In Bash, use your own public GatewayURL and privately copy the agent token:
 
-The walkthrough covers sign-in, delegation, agent activity, a held action, a human decision, revocation and audit. For the full catalogue—including MCP protection, egress, DPoP/RAR, the kill switch, public API and Gmail examples—see **[the demos guide](docs/Demos.md)**.
+```sh
+export GATEWAY_URL='https://REPLACE.execute-api.eu-west-3.amazonaws.com'
+read -r -s -p 'Agent token: ' AGENT_TOKEN; printf '\n'
+export AGENT_TOKEN
+bash demo/public-weather-tutorial.sh access
+```
 
-You can also explore the live CRM demonstration at [agw.sjfisher.com](https://agw.sjfisher.com) using the [Claude CRM tutorial](docs/Claude-CRM-Tutorial.md). See [Claude integration](docs/Claude-Integration.md) for the wiring details.
+4. Approve the held elevation lookup in the console, then:
 
-## Use it with your own systems
+```sh
+bash demo/public-weather-tutorial.sh approved
+```
 
-Agent Gateway is designed to govern access to systems you already have, including:
+5. Revoke the delegation in the console while the token is still valid, then:
 
-- Internal and external APIs
-- MCP servers and tools
-- Agent egress
-- Enterprise applications and existing agent runtimes
+```sh
+bash demo/public-weather-tutorial.sh revoked
+unset AGENT_TOKEN GATEWAY_URL
+```
 
-Choose a starting point:
+The client reports PASS/FAIL, checks real weather fields, and never makes human
+approval decisions. Tokens expire after five minutes; the walkthrough explains how
+to refresh one before testing revocation. Do not share tokens or browser cookies.
 
-- [Protect an API](docs/Protecting-Your-API.md)
-- [Protect an MCP server](docs/Protecting-Your-MCP.md)
-- [Agent authentication basics](docs/Agent-Auth-Basics.md)
-- [Integration patterns](docs/Integration-Patterns.md)
-- [Public API curl tutorial](docs/Public-API-Curl-Tutorial.md)
+## What to expect
 
-## Go deeper
+| Test | Result |
+| --- | --- |
+| No agent token | 401 |
+| Delegated forecast GET | 200 with real weather JSON |
+| Wrong method/path or forged mapping header | 403 |
+| Elevation before consent | 202, held |
+| Approved elevation retry | 200 once; a further request needs fresh consent |
+| Same valid token after delegation revocation | 403 |
 
-- **[Common AI agent concerns](docs/Agent-Concerns.md)** — practical security and governance questions, and how Agent Gateway addresses them.
-- **[Repository guide](docs/Repository-Guide.md)** — a directory of documentation, demo scripts and integration resources.
+The signed-in human views the audit trail in the console. Open-Meteo stays public;
+this proves control through your gateway, not prevention of all direct Internet
+access. This REST demo does not claim MCP, DPoP-signing, proxy or production HA
+acceptance. See [architecture](docs/Architecture.md) for limits.
 
-This README is the introduction. The technical detail lives in the supporting documentation:
+## Help and checks
 
-- **[Architecture](docs/Architecture.md)** — components, request flow, enforcement and supporting services.
-- **[Security model](docs/Security-Model.md)** — security properties, trust boundaries and threat considerations.
-- **[Agent identity](docs/Agent-Identity.md)** — agent identity and delegated authority.
-- **[DPoP and RAR](docs/DPoP-and-RAR.md)** — sender-constrained tokens and fine-grained permission downscoping.
-- **[Policy and OPA](docs/Policy-and-OPA.md)** — policy-as-code and policy engine details.
-- **[Deployment guide](docs/Deployment-Guide.md)** — deployment and operational configuration.
-- **[Observability](docs/Observability.md)** — logs, audit and tracing.
+- [Full weather walkthrough and troubleshooting](docs/Public-API-Curl-Tutorial.md).
+- [Self-hosting](docs/Self-Hosting.md), [costs](docs/Pricing.md) and [cleanup](docs/Teardown.md).
+- [Operator deployment notes](docs/Deployment-Guide.md) — not required for using a hosted demo.
+- `make check` runs syntax/fake-curl tests without network or AWS calls.
 
-## Project status and feedback
+[Weather data by Open-Meteo.com](https://open-meteo.com/). Review its
+[terms](https://open-meteo.com/en/terms) for evaluation/non-commercial use and limits.
+No paid weather subscription is created by the client.
 
-> 🚧 **Early preview — feedback helps shape the direction.**
-
-Agent Gateway is published so people can run it, test the approach and help shape what comes next. If you try the demos, integrate it with your own agent or have a different view of how agent authority should work, please [open an issue](https://github.com/stevef1uk/agent-gateway-runtime/issues) or get in touch at **steve@sjfisher.com**.
-
-## Pricing and licensing
-
-The project is free to explore, with a non-expiring licence token available to individuals by email request. Repository documentation and demo assets are MIT licensed; distributed software images are provided under a separate commercial licence. See [Pricing](docs/Pricing.md), [Commercial Licence](docs/Commercial-Licence.md) and [Security and Licensing](docs/Security-and-Licensing.md).
-
----
-
-**The challenge isn't simply making AI agents autonomous. It's deciding where autonomy should end and human authority should begin.**
+See [LICENSE](LICENSE) and [SECURITY.md](SECURITY.md). This demo repository's licence
+does not grant rights to private implementation binaries or source.

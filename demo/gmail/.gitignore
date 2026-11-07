@@ -1,6 +1,0 @@
-credentials/*
-!credentials/.gitkeep
-*.sqlite*
-__pycache__/
-.venv/
-agent-config.json

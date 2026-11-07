@@ -1,389 +1,170 @@
-# Protect a public weather API — a curl-only tutorial
+# AWS weather demo: Cognito sign-in and curl probes
 
-In about 10 minutes, put **Agent Gateway in front of Open-Meteo**, give an
-agent limited access, require a human decision for one endpoint, and revoke
-access while its token is still valid. Every API interaction uses `curl`.
-No browser, console, SDK, Python, AI model or API key is needed.
+This is the AWS adaptation of the weather tutorial. The upstream is
+`https://api.open-meteo.com`; the agent calls **your AWS public gateway**, not the
+provider directly. The demo needs a deployed weather-enabled Agent Gateway stack
+and an invited Cognito operator. **That first AWS deployment is still pending.**
 
-**Files:** [runnable script](../demo/public-weather-tutorial.sh) ·
-[Compose configuration](../demo/docker-compose.weather.yml).
+## 1. Get the correct release and URLs
 
-## What you will protect
-
-[Open-Meteo](https://open-meteo.com/) provides weather forecasts useful for
-travel planning, outdoor work and dashboards. We will request London's current
-temperature and wind speed, then its elevation. The public endpoints are:
-
-- `https://api.open-meteo.com/v1/forecast`
-- `https://api.open-meteo.com/v1/elevation`
-
-The tutorial uses its free non-commercial API. Weather data attribution:
-**[Weather data by Open-Meteo.com](https://open-meteo.com/)**. See the provider's
-[documentation](https://open-meteo.com/en/docs),
-[terms](https://open-meteo.com/en/terms) and
-[pricing](https://open-meteo.com/en/pricing) for usage limits and commercial use.
-
-```text
-curl (acting as an agent)
-  │ Authorization: Bearer <short-lived agent token>
-  ▼
-Agent Gateway :8087 ──► authorization service :8081
-  │                    checks the human's delegation
-  ├── deny ──────────► 401 / 403; no upstream request
-  ├── hold ──────────► 202 + approval_id; no upstream request
-  └── allow ────────► HTTPS api.open-meteo.com ──► real JSON response
+```sh
+git switch aws
+git pull --ff-only origin aws
 ```
 
-You are protecting **access through your gateway**. Open-Meteo remains a public
-service; this exercise does not change its security or prevent direct calls to
-it. For an agent that must use the gateway, restrict its network egress. For
-your own private API, make the upstream reachable only from the gateway.
+Your deployment operator supplies:
 
-## 1. Start the small tutorial stack
+- **ConsoleURL**: your stack's HTTPS web console.
+- **GatewayURL**: its public `https://ID.execute-api.eu-west-3.amazonaws.com` gateway.
+- Your Cognito invitation and the operator email included in the console allowlist.
 
-Requirements:
+The [operator deployment notes](Deployment-Guide.md) explain enabling the exact weather routes and
+credential stripping. Your operator must supply a compatible weather-enabled deployment.
+Do not substitute a pre-existing live site, localhost/Dex address, internal API URL,
+shared demo token or older encrypted container image. This is a REST demonstration;
+Open-Meteo is not an MCP server and this is not an MCP connector acceptance test.
 
-- A checkout of this repository; run the commands below from its root.
-- Docker Engine with Docker Compose v2 (`--wait` support), or Podman with a
-  compatible Compose provider.
-- Bash, `curl`, and `jq` on your machine. `jq` builds and reads JSON; all HTTP
-  requests are made with `curl`.
-- Internet access from the containers to `api.open-meteo.com:443` and the
-  image registries. Ports 5556, 8081, 8082 and 8087 available locally.
+## 2. Sign in as the delegating human
 
-```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
-  up -d --wait tokensvc gateway-weather
-```
+Open your own ConsoleURL, sign in through Cognito, change the invitation password
+privately and return to the application. Use an email you control that is included
+in the deployed allowlist. No password grant or fixture Alice/password is used.
 
-This starts only the weather gateway, authorization service, token service,
-Dex identity provider, Postgres and Redis. Published images and the bundled
-demo licence/keys are used; there is nothing to build. The overlay adds a
-dedicated gateway with `UPSTREAM_URL=https://api.open-meteo.com`, published on
-loopback port 8087. It uses the same authorization and token services as the
-other demos. Requests keep their path and query string when forwarded.
+The console retains the verified human token server-side. Your agent needs only
+its own short-lived agent token, not that human token or an IAM/admin credential.
 
-For Podman, substitute `podman compose` for `docker compose` throughout.
+## 3. Create a scoped delegation
 
-### Run the complete script
+The exact non-secret payload is in [demo/weather-delegation.json](../demo/weather-delegation.json).
+It grants read access only to forecast/elevation, expires after 30 minutes and
+requires human approval for elevation. The basic console form does not expose
+arbitrary path approval rules, so open your browser's developer console on **your
+own signed-in ConsoleURL** and run:
 
-```bash
-bash demo/public-weather-tutorial.sh
-```
-
-It pauses before recording Alice's approval. Press Enter to approve or Ctrl-C
-to cancel. Complete the approval promptly: agent tokens last five minutes.
-For a fully unattended demonstration:
-
-```bash
-bash demo/public-weather-tutorial.sh --yes
-```
-
-`--yes` **simulates the human decision** using the demo operator credential.
-It is not an agent approving itself. The script asserts HTTP statuses and real
-weather response fields, checks the audit evidence, and exits nonzero on a
-failure. It revokes its delegation on completion or early exit; temporary
-response data is removed. Each run creates its own delegation.
-
-Expected highlights:
-
-| Request | Expected result |
-|---|---|
-| Forecast without a token | **401** |
-| Forecast with a delegated agent token | **200**, real weather JSON |
-| POST with a read-only delegation | **403** |
-| A path outside the delegation | **403** |
-| Elevation lookup before approval | **202**, approval ID |
-| Operator records Alice's approval | **200**, decision recorded |
-| Identical elevation lookup after approval | **200**, elevation JSON |
-| Another elevation lookup | **202**, fresh approval needed |
-| Forecast after revocation, same token | **403** |
-| Operator fetches this delegation's audit | **200**, allow/hold/deny events |
-
-The following sections explain the same flow with commands you can run
-individually. They create a separate delegation from the scripted run.
-
-## 2. Set your endpoints and try the public API
-
-Keep using the same Bash session for the walkthrough:
-
-```bash
-GW=http://localhost:8087
-AUTHZ=http://localhost:8081
-TS=http://localhost:8082
-DEX=http://localhost:5556
-ADMIN_TOKEN=agent-gateway-demo-admin
-
-QUERY='latitude=51.5072&longitude=-0.1276'
-FORECAST="$GW/v1/forecast?$QUERY&current=temperature_2m,wind_speed_10m&forecast_days=1"
-ELEVATION="$GW/v1/elevation?$QUERY"
-
-curl --fail --silent --show-error \
-  "https://api.open-meteo.com/v1/forecast?$QUERY&current=temperature_2m,wind_speed_10m&forecast_days=1" \
-  | jq '{current_units, current}'
-```
-
-This direct call establishes what the useful upstream response looks like.
-The temperature and timestamp change with the forecast. Coordinates may be
-rounded to the weather model's grid cell.
-
-## 3. Obtain the human's ID token
-
-A **human** delegates authority to an agent. First, authenticate Alice with
-the bundled development identity provider:
-
-```bash
-ID_TOKEN=$(curl --fail --silent --show-error "$DEX/dex/token" \
-  --data-urlencode grant_type=password \
-  --data-urlencode client_id=agent-gateway \
-  --data-urlencode scope=openid \
-  --data-urlencode username=alice@example.com \
-  --data-urlencode password=password \
-  | jq -er '.id_token')
-```
-
-This password grant is enabled in **local demo Dex** so the entire exercise
-works via curl. In a real deployment, obtain the human's ID token through
-your organization's supported OIDC sign-in flow. The authorization service
-verifies the signed token; the client does not choose the delegating identity.
-
-## 4. Create a narrowly scoped delegation
-
-Allow reads on exactly two paths for 30 minutes. Add a rule requiring approval
-for elevation reads, to demonstrate a hold on a harmless operation:
-
-```bash
-DELEGATION=$(curl --fail --silent --show-error "$AUTHZ/v1/delegations/" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg id_token "$ID_TOKEN" '{
-    id_token: $id_token,
-    agent_id: "weather-tutorial-agent",
-    resources: ["/v1/forecast", "/v1/elevation"],
-    actions: ["read"],
-    expires_in_seconds: 1800,
-    max_depth: 0,
+```javascript
+const response = await fetch('/api/delegations', {
+  method: 'POST', credentials: 'same-origin',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    agent_id: 'aws-weather-test',
+    resources: ['/v1/forecast', '/v1/elevation'],
+    actions: ['read'], expires_in_seconds: 1800, ttl_seconds: 300, max_depth: 0,
     approval_rules: [{
-      when: {resource_pattern: "/v1/elevation", action_pattern: "read"},
-      require: true,
-      rationale: "Elevation lookups need a human decision in this tutorial"
+      when: {resource_pattern: '/v1/elevation', action_pattern: 'read'},
+      require: true, rationale: 'AWS weather demo: elevation needs a human decision'
     }]
-  }')")
-
-DELEGATION_ID=$(jq -er '.delegation.id' <<<"$DELEGATION")
-AGENT_SECRET=$(jq -er '.agent_secret' <<<"$DELEGATION")
-SUBJECT=$(jq -er '.delegation.user_id' <<<"$DELEGATION")
+  })
+});
+if (!response.ok) throw new Error('Delegation creation failed: ' + response.status);
+window.agwWeather = await response.json();
+console.log({delegation_id: window.agwWeather.delegation.id});
 ```
 
-- **Resources** name the permitted paths; avoid a broad `*` grant.
-- **Actions** use the gateway's mapping: GET/HEAD → `read`, POST → `create`,
-  PUT/PATCH → `update`, DELETE → `delete`.
-- **Expiry** ends the delegation even if you forget to revoke it.
-- **Max depth 0** prevents the agent creating child delegations.
-- **Approval rules** turn a matching allowed action into a human hold.
+The response includes `token` and the one-time `agent_secret`. Copy
+`window.agwWeather.token` privately for the next step. Do not post token values,
+passwords, cookies, screenshots containing them or browser HAR files in Git/chat.
+The client cannot choose the delegating human; the server attaches its verified
+session identity to this request.
 
-`SUBJECT` is the verified delegating user's identifier returned by the service.
-It may differ from the email address. The one-time `AGENT_SECRET` and the
-delegation ID are the credentials handed to the agent.
+## 4. Run the access checks
 
-## 5. Mint the agent's short-lived token
+In Bash, set the **public** GatewayURL. The script validates the root AWS API host,
+uses TLS verification and does not follow redirects. It cannot safely send agent
+credentials directly to Open-Meteo or an arbitrary custom URL.
 
-```bash
-AGENT_TOKEN=$(curl --fail --silent --show-error "$TS/token" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg id "$DELEGATION_ID" --arg secret "$AGENT_SECRET" '{
-    delegation_id: $id, agent_secret: $secret, ttl_seconds: 300
-  }')" | jq -er '.access_token')
+```sh
+export GATEWAY_URL='https://REPLACE.execute-api.eu-west-3.amazonaws.com'
+read -r -s -p 'Agent token: ' AGENT_TOKEN; printf '\n'
+export AGENT_TOKEN
+bash demo/public-weather-tutorial.sh access
 ```
 
-There are three different credentials in this exercise:
+Replace the URL, including the lowercase API ID. The checks are:
 
-| Credential | Used by | Purpose |
-|---|---|---|
-| `ID_TOKEN` | Delegating human | Create and revoke their delegation |
-| `AGENT_SECRET` → `AGENT_TOKEN` | Agent | Mint tokens and call delegated APIs |
-| `ADMIN_TOKEN` | Trusted operator | Record approvals and read audit events |
+| Probe | Expected |
+| --- | --- |
+| Forecast without a token | 401 |
+| Forecast with the delegated token | 200, including actual temperature/wind fields |
+| POST with the read-only delegation | 403 |
+| `/v1/marine`, outside the delegation | 403 |
+| POST with a forged `X-Agent-Action: read` | 403; the actual method controls policy |
+| Elevation without human consent | 202 and an approval ID |
 
-The agent does not need the human ID token or operator token. This teaching
-script holds all three because it demonstrates both sides of the exchange.
+The script prints the approval ID, never your token. It sends London's coordinates
+and requests temperature/wind plus elevation. Weather data changes over time. It
+asserts response fields/statuses and exits nonzero on failure; provider errors are
+not treated as success. A 202 means the weather lookup has **not** been executed.
 
-## 6. Prove the access controls
+## 5. Approve and retry
 
-These probes deliberately omit curl's `--fail` so you can inspect the expected
-error bodies. `-w` prints the HTTP status after each response.
+In the signed-in console, find that approval ID and approve it as the same human
+who created the delegation. This records consent; it does not execute the request.
+Then run:
 
-```bash
-# No credential: expect 401.
-curl -sS -w '\nHTTP %{http_code}\n' "$FORECAST"
-
-# Delegated GET: expect 200 and Open-Meteo's current weather data.
-curl -sS -w '\nHTTP %{http_code}\n' "$FORECAST" \
-  -H "Authorization: Bearer $AGENT_TOKEN"
-
-# POST maps to create, which was not delegated: expect 403.
-curl -sS -w '\nHTTP %{http_code}\n' -X POST "$FORECAST" \
-  -H "Authorization: Bearer $AGENT_TOKEN"
-
-# This path was not delegated: expect 403, regardless of upstream support.
-curl -sS -w '\nHTTP %{http_code}\n' "$GW/v1/marine?$QUERY" \
-  -H "Authorization: Bearer $AGENT_TOKEN"
+```sh
+bash demo/public-weather-tutorial.sh approved
 ```
 
-The successful response contains `current.temperature_2m` and
-`current.wind_speed_10m`. The denials come from the gateway; Open-Meteo does
-not need to implement these delegation rules.
+Expected: elevation returns 200 with a real nonempty `elevation` array once. The
+next identical lookup returns 202 because approval was consumed. The script never
+approves on behalf of the user and has no unattended `--yes` mode.
 
-## 7. Hold a request and record the human's decision
+Tokens last five minutes. If you need a fresh token **before revocation**, run this
+in the same signed-in browser console, then privately replace `AGENT_TOKEN` in Bash:
 
-```bash
-# Expect HTTP 202 and an approval_id, not elevation data.
-HELD=$(curl -sS "$ELEVATION" -H "Authorization: Bearer $AGENT_TOKEN")
-jq . <<<"$HELD"
-APPROVAL_ID=$(jq -er '.approval_id' <<<"$HELD")
+```javascript
+const minted = await fetch('/api/tokens', {
+  method: 'POST', credentials: 'same-origin',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({delegation_id: window.agwWeather.delegation.id,
+    agent_secret: window.agwWeather.agent_secret, ttl_seconds: 300})
+});
+if (!minted.ok) throw new Error('Token mint failed: ' + minted.status);
+window.agwWeather.token = (await minted.json()).access_token;
 ```
 
-The gateway holds this request without forwarding it. **202 does not mean the
-API operation ran**. Elevation reads are not inherently risky; this rule is
-deliberately added to teach the approval mechanism.
+## 6. Revoke while the token is still valid
 
-Now act as the trusted operator recording Alice's decision:
+Revoke the delegation in your signed-in console. Do not mint a new token after
+revocation. Retry the previous token promptly:
 
-```bash
-curl --fail --silent --show-error "$GW/v1/approvals/" \
-  -H "X-Admin-Token: $ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d "$(jq -n --arg id "$APPROVAL_ID" --arg subject "$SUBJECT" '{
-    approval_id: $id, approver_id: $subject, approved: true
-  }')"
+```sh
+bash demo/public-weather-tutorial.sh revoked
 ```
 
-The approval endpoint requires the operator token and checks that
-`approver_id` matches the delegating subject. In this demo, the operator
-supplies that identity; the curl approval call itself does not authenticate
-Alice via OIDC. Keep this endpoint behind trusted operator/human-facing
-infrastructure in a real integration.
+Expected: 403. A token-expiry 401 is a failed revocation proof, not a passing result.
+If it expires too early, create a fresh test delegation and repeat the sequence.
+Inspect the console audit for this delegation's allow/hold/deny outcomes, the
+approved elevation's approval ID and the verified approver identity.
 
-Approval records the decision; **it does not execute the request**. Retry:
+## 7. Finish
 
-```bash
-# Expect 200 and {"elevation":[...]} in meters.
-curl -sS -w '\nHTTP %{http_code}\n' "$ELEVATION" \
-  -H "Authorization: Bearer $AGENT_TOKEN"
-
-# Approval was consumed. Another identical lookup needs fresh consent: 202.
-curl -sS -w '\nHTTP %{http_code}\n' "$ELEVATION" \
-  -H "Authorization: Bearer $AGENT_TOKEN"
+```sh
+unset AGENT_TOKEN GATEWAY_URL
 ```
 
-Reuse the identical URL when retrying. This exercise demonstrates single-use
-consent; it does not establish query-parameter restrictions or query-specific
-approval binding. We do not control Open-Meteo's server logs, so the evidence
-here is the gateway's responses/audit and the returned elevation data. For
-upstream execution-counter proof, run the
-[protected API demo](Demos.md#demo-4--the-protected-api-demoapi-scripted).
+Delete `window.agwWeather` in the browser (`delete window.agwWeather`) and sign out.
+A second held request cannot execute under the revoked delegation. The shell client
+does not automatically revoke or tear down anything; these are deliberate human/
+operator actions. If the AWS stack was created only for this test, use [teardown](Teardown.md).
 
-## 8. Revoke access immediately
+## Boundaries and troubleshooting
 
-```bash
-curl --fail --silent --show-error -X DELETE \
-  "$AUTHZ/v1/delegations/$DELEGATION_ID" \
-  -H "Authorization: Bearer $ID_TOKEN"
+- Gateway path scope is not a latitude/longitude filter or query-specific approval binding.
+- This public provider can still be called directly; enforce agent network egress
+  separately if all outbound traffic must use your gateway.
+- Provider-side execution counters are not observable. Audit/status/returned JSON
+  are the evidence here; no claim is made that upstream executions were independently counted.
+- Missing weather routes (404): verify `EnableWeatherDemo=true` and the compatible source release.
+- Unexpected 401: token missing/expired, or wrong service URL.
+- Unexpected 403: check the exact delegation paths/actions, revocation and IAM logs.
+- 429/5xx: stop retries and check provider limits, upstream availability and CloudWatch.
+- Console login/creation failures: operator checks Cognito callbacks, invitation,
+  signed internal hops and server logs; do not make management APIs public to fix them.
 
-# Same agent token, previously working forecast URL: expect 403.
-curl -sS -w '\nHTTP %{http_code}\n' "$FORECAST" \
-  -H "Authorization: Bearer $AGENT_TOKEN"
-```
-
-The gateway checks delegation status on each call. Revocation overrides the
-still-valid token and any outstanding approval. Do this within five minutes of
-minting the agent token to distinguish revocation (**403**) from token expiry
-(**401**). If it expired during the manual walkthrough, repeat step 5 before
-revoking, then verify a forecast succeeds and proceed with revocation.
-
-## 9. Inspect the audit trail with curl
-
-```bash
-curl --fail --silent --show-error \
-  "$GW/v1/audit/?delegation_id=$DELEGATION_ID&limit=100" \
-  -H "X-Admin-Token: $ADMIN_TOKEN" \
-  | jq '.events[] | {
-      ts, user_id, agent_id, delegation_id, resource, action,
-      outcome, status_code, approval_id, approver_id, reason
-    }'
-```
-
-Look for `allow` on the forecast, `deny` for scope violations and revocation,
-and `approval_required` on elevation. The approved elevation execution carries
-its approval ID and approver. Filtering by the delegation ID keeps other demo
-runs out of this view. The no-token rejection has no delegation to attribute
-and is not expected in this filtered result.
-
-## 10. Clean up
-
-The script revokes its delegation automatically; the manual flow does so in
-step 8. If you stop the manual flow early, run the DELETE from that step.
-The second held elevation request cannot execute after revocation.
-
-To stop just the added weather gateway:
-
-```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
-  stop gateway-weather
-```
-
-If this stack was started solely for the tutorial, remove its containers with:
-
-```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml down
-```
-
-`down` stops shared demo services too. Named database volumes are retained,
-including the audit trail. Clear credentials from your shell when finished:
-
-```bash
-unset ID_TOKEN AGENT_SECRET AGENT_TOKEN DELEGATION ADMIN_TOKEN
-```
-
-## Troubleshooting
-
-| Symptom | What to check |
-|---|---|
-| Connection refused | Finish `up -d --wait`; inspect `docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml ps`. |
-| Port 8087 occupied | Prefix the startup command with `WEATHER_HOST_PORT=18087`, and run `WEATHER_HOST_PORT=18087 bash demo/public-weather-tutorial.sh`. For manual calls set `GW=http://localhost:18087` before step 2's URL variables. |
-| Other ports occupied | Stop the conflicting local stack, or reuse the existing compatible demo authz/token/Dex services. |
-| Dex sign-in fails | Use the bundled `demo/dex/config.yaml`; it enables the local password grant and Alice's fixture account. |
-| 401 on an agent call | Token expired or is missing. Re-mint before revocation, or rerun the script; complete its approval pause within five minutes. |
-| 403 on a forecast before revocation | Verify the delegation contains `/v1/forecast` and `read`, and is not expired/revoked. |
-| Approval returns 401 / 403 / 410 | Check the operator token / delegating subject / approval expiry respectively. This gateway uses a 15-minute approval TTL. |
-| 429, 5xx, or weather data unavailable | Check Open-Meteo availability and usage limits, container DNS, HTTPS egress and CA trust. The script fails rather than treating an upstream error as success. |
-| Image licence/decryption error | Check `demo/keys/` and [Security and Licensing](Security-and-Licensing.md). |
-
-Service logs:
-
-```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
-  logs --tail=80 gateway-weather authz tokensvc dex
-```
-
-## Applying this to your own API
-
-Change `UPSTREAM_URL` to your API's origin and choose explicit resources and
-actions that match its routes. Use approval rules for operations that need
-human consent. Keep these implementation boundaries in mind:
-
-- Delegation resources here match **paths**, not latitude, longitude or other
-  query parameters. This configuration is not a location filter or rate limit.
-- The gateway supports caller-supplied `X-Agent-Resource`, `X-Agent-Action`
-  and `X-Agent-Tool` overrides. To enforce path/method rules for untrusted
-  callers, strip or reject those headers at a trusted ingress before the PEP;
-  these tutorial curls do not send them.
-- Treat the upstream as a trusted recipient: the reverse proxy can forward
-  request headers, including `Authorization`. These commands use only local
-  demo credentials. Configure credential stripping/replacement at the upstream
-  hop before routing real credentials to a third party.
-- The shared base Compose stack uses development credentials and publishes
-  its authz/token/Dex ports. Use it locally. Deploy your own identity provider,
-  secrets, TLS and restricted management access for real use.
-
-Next: [Protecting your API](Protecting-Your-API.md) for all delegation fields,
-[Agent authentication basics](Agent-Auth-Basics.md) for the credential flow,
-and [Deployment Guide](Deployment-Guide.md) for deployment configuration.
+[Weather data by Open-Meteo.com](https://open-meteo.com/). Review current
+[terms](https://open-meteo.com/en/terms) and [pricing](https://open-meteo.com/en/pricing).
+The free provider endpoint is for evaluation/non-commercial use within its limits;
+commercial/promotional use needs an appropriate provider arrangement. Keep this
+acceptance run small. The script's offline checks are `make check`; no real AWS
+acceptance run has been completed yet.

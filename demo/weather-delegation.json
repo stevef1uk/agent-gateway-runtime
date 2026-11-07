@@ -1,0 +1,13 @@
+{
+  "agent_id": "aws-weather-test",
+  "resources": ["/v1/forecast", "/v1/elevation"],
+  "actions": ["read"],
+  "expires_in_seconds": 1800,
+  "ttl_seconds": 300,
+  "max_depth": 0,
+  "approval_rules": [{
+    "when": {"resource_pattern": "/v1/elevation", "action_pattern": "read"},
+    "require": true,
+    "rationale": "AWS weather demo: elevation needs a human decision"
+  }]
+}

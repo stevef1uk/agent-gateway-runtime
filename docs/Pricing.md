@@ -1,84 +1,61 @@
-# Pricing
+# AWS weather-demo costs
 
-> French TVA (currently 20%) applies to all prices where applicable.
+These are **modeled infrastructure costs**, not a hosted subscription quote or a
+measured bill. Region Paris (`eu-west-3`), USD/month, rate snapshot 7 November 2026;
+no shared free allowances or credits applied; tax excluded.
 
-## How licensing works
+| Scenario | Estimated monthly infrastructure |
+| --- | ---: |
+| Idle, with small retained data/artifacts | $0.88 |
+| 10,000 external requests | $1.65 |
+| 100,000 external requests | $8.36 |
+| 100,000 external requests, five-second mean invocation time | $19.02 |
 
-Agent Gateway ships as encrypted Docker images. A purchase produces two
-artifacts that activate it:
+The active scenarios assume four billed Lambda/API Gateway calls per external
+request, 512 MiB functions and a one-second mean per invocation except the final
+row. Billed time includes waiting for internal/upstream responses. The model includes
+DynamoDB requests/storage/PITR, logs, two secrets, S3 artifact versions and requests,
+Cognito Lite users and Internet egress. Storage/log/request assumptions vary with
+scenario; these figures are not fixed-price offers or load-tested capacity promises.
 
-1. your **customer key pair** — the public half is baked into your build of
-   the images, the private half decrypts the binaries at runtime (never share,
-   mount at `/keys`);
-2. a vendor-signed **licence token** with an expiry date — mounted at
-   `/licences/<service>.token`, checked at every service start.
+No extra upstream VM, NAT, RDS or Redis is deployed for the weather scenario. The
+three exact weather routes add no fixed monthly compute charge. Actual runtime,
+request fan-out, retries, logs and retained data can raise costs; applicable shared
+free allowances can reduce the bill. No paid support, custom domains, WAF, software
+fees, Marketplace subscription, paid weather service or tax is included.
 
-So a paid licence is literally: two files from the vendor (your private key
-and a licence token), a mount line, and one `docker compose up -d`. Licences
-expire annually **for paid tiers that bill annually**; renewal is a new token
-file from us plus a service restart — an ops step, not an audit. User,
-Developer and other free tiers are issued **non-expiring** vendor-licensed
-tokens by email — the product is free, but it still runs under our key
-material and this licence, which is what keeps the vendor relationship and
-update channel intact.
+## Hosted use versus your own account
 
-## Tiers
+A hosted-demo user does not deploy these resources in their account. Any future
+hosted/Marketplace software price must be published separately; none is quoted or
+available here today. A self-hosting customer pays for their own AWS resources plus
+any software/provider charges agreed with the release. See [Self-hosting](Self-Hosting.md)
+and [Marketplace](AWS-Marketplace.md) for current availability.
 
-### Users & Developers — free
+A $10 AWS Budget is an alerting target, not a hard cap. Check actual and forecast
+notifications; AWS billing/alerts can lag. Stack deletion can retain billable data,
+secrets and artifact versions. Read [cleanup](Teardown.md) before self-hosting.
 
-The product is **free** for individual users, developers and indies: one
-production deployment (a complete four-service stack, any replicas you like),
-unlimited non-production use, and community support. **Email
-steve@sjfisher.com for a non-expiring licence token** — issuance is manual
-so we know who is running what and can warn you about breaking updates.
-The demo stack in this repository can be used as-is today.
+Open-Meteo's [pricing](https://open-meteo.com/en/pricing) supports evaluation/prototyping
+under its current [terms](https://open-meteo.com/en/terms) and limits. Commercial/
+promotional use needs an appropriate arrangement. The client creates no subscription
+and should not load-test the public provider.
 
-### Business — book a week with me
+## Public price sources
 
-Moving to production beyond a pilot, wiring your own IdP, integrating agents
-against internal back ends, SPIFFE/SPIRE enablement, or standing up the
-Postgres/Redis/Kubernetes HA deployment: book the vendor for a **one-week
-engagement** (rates and dates agreed at scoping, travel excluded, invoiced
-up-front). You get implementation and enablement on your environment, and a
-production deployment the team actually understands. Ongoing email support
-remains best-effort, no SLA.
+The model uses current-at-review AWS regional rate dimensions, including ARM Lambda
+compute/requests, HTTP API (not REST API), DynamoDB Standard on-demand requests/PITR,
+CloudWatch Standard logs, Secrets Manager, S3 Standard and Cognito Lite:
 
-### Software Licence (source) — €5,000 one-off
+- [Lambda Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/eu-west-3/index.json).
+- [HTTP API Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/current/eu-west-3/index.json).
+- [DynamoDB Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/current/eu-west-3/index.json).
+- [CloudWatch Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/eu-west-3/index.json).
+- [Secrets Manager Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/current/eu-west-3/index.json).
+- [S3 Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/eu-west-3/index.json).
+- [Cognito Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCognito/current/eu-west-3/index.json).
+- [Data transfer Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/eu-west-3/index.json).
 
-Permanent, royalty-free licence to the full source code: internal
-modifications permitted, no annual renewals, no seat or deployment limits,
-no maintenance commitment of any kind. Updates and fixes after purchase are
-supplied only if the vendor chooses to, and may be quoted separately.
-
-#### Free Evaluation for Security Professionals
-
-Full source code access can be provided free of charge to qualified security
-professionals, security researchers, and enterprise auditors upon request for
-evaluation and verification purposes. Contact **steve@sjfisher.com** with your
-organization details or professional profile to request evaluation access.
-
-## Support levels (current stage)
-
-Support is **by email** (steve@sjfisher.com) at every tier. There is
-**no formal SLA** at this stage:
-
-- **Business / Source** — your request goes to the front of the queue;
-  a named contact; releases and fixes prioritised for you.
-- **Users & Developers (free)** — community only: the public demo repository
-  and the troubleshooting tables in these docs.
-
-Included at Business and above: upgrade guidance, licence renewal swaps,
-integration questions (OIDC, SPIFFE, Postgres/Redis) and bug fixes in
-shipped images.
-
-## The licence itself
-
-Every tier — including free — runs under the same commercial licence:
-AS-IS, no warranty of fitness, liability capped at fees paid (nil when none
-were paid), and human decisions about agent actions stay the licensee's
-responsibility. See [Commercial-Licence.md](Commercial-Licence.md).
-
-## Questions
-
-Licensing questions and token issuance: **steve@sjfisher.com**
-(French VAT number on invoices as applicable).
+A published self-hosting release must ship its exact usage inputs and reproducible
+calculator alongside the deployment/teardown bundle, without requiring private
+source access. That customer release bundle is still pending.

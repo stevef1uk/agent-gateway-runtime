@@ -1,6 +1,0 @@
-credentials
-.venv
-__pycache__
-*.sqlite*
-agent-config.json
-test_*.py

@@ -1,46 +1,32 @@
-# Repository Guide
+# What the runtime `aws` branch contains
 
-| Path | What it is |
-|---|---|
-| [`demo/`](../demo/) | One-command demo stack: `docker-compose.yml`, Dex config, demo keys, scripted walkthrough (`demo.sh`), the default OPA policy (`policies/`) with a policy-engine override (`docker-compose.opa.yml`), and the performance benchmark (`bench/`, `bench-engines.sh`) |
-| [`demo/api/`](../demo/api/) · [`demo/mcp/`](../demo/mcp/) | The demo protected API (Demos 4/8) and, new in Demo 9, the demo MCP server (mcpsrv) — both buildable from this repo |
-| [`docs/UI-Walkthrough.md`](./UI-Walkthrough.md) | **Admin Console UI Walk-Through**: Comprehensive visual tour of delegations, human-in-the-loop approvals, disaster recovery, AI configuration assistant, 5-step onboarding wizard, live endpoint tester, and audit explorer |
-| [`docs/FreeRide-Setup.md`](./FreeRide-Setup.md) | **FreeRide AI Configuration Assistant setup**: configuring `.env`, AI providers (Gemini, OpenRouter, Groq, Cerebras, etc.), models, and health-checked UI enablement |
-| [`docs/Deployment-Guide.md`](./Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
-| [`docs/Observability.md`](./Observability.md) | Configure JSON logs, trace-linked audit records and optional OpenTelemetry traces/metrics with a ready-to-run Compose Collector override or your own Kubernetes collector |
-| [`docs/Observability_With_Jaegar.md`](./Observability_With_Jaegar.md) | **Observability with Jaeger**: run the local Compose stack, follow a real multi-service tool-call trace and capture its waterfall |
-| [`docs/Agent-Identity.md`](./Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |
-| [`docs/Agent-Auth-Basics.md`](./Agent-Auth-Basics.md) | How agents actually get a credential — a beginners' guide to the delegation → mint → JWT dance, with copy-paste curl examples and a troubleshooting table |
-| [`docs/Integration-Patterns.md`](./Integration-Patterns.md) | Inserting the gateway between existing agents and back ends/MCP servers with zero or one-line changes |
-| [`docs/Go-Proxy-Integration.md`](./Go-Proxy-Integration.md) | Put the Go forward proxy between an existing API consumer and its upstream API: delegation, proxy authentication, optional credential helper, HTTPS boundaries, and approval handling |
-| [`docs/Claude-Integration.md`](./Claude-Integration.md) | **Claude as a custom remote connector**: the MCP One Ring OAuth path (DCR + PKCE against your IdP), per-tool enforcement, human-approved deletes, instant revocation — scripts: `demo/mcp-oauth-demo.sh`, `demo/oauth-tunnel.sh` |
-| [`docs/Claude-CRM-Tutorial.md`](./Claude-CRM-Tutorial.md) | **Screenshot tutorial** (end-user): run the CRM demo from claude.ai against the k3s instance — connect, add, delete-held/Telegram/console-approval, retry-executes-once |
-| [`docs/Local-Agents.md`](./Local-Agents.md) | Personal/local agent runtimes (OpenClaw, Hermes, your own) — per-skill delegations, MCP adapter, spend caps, phone-side revoke |
-| [`docs/Architecture.md`](./Architecture.md) | How the pieces fit, the policy model, security properties |
-| [`docs/Security-Model.md`](./Security-Model.md) | **Security Model**: How Agent Gateway answers the 12 standard agent-security questions (identification, delegated authority, blast radius control, single-use action-hash replay protection, immediate revocation) |
-| [`docs/DPoP-and-RAR.md`](./DPoP-and-RAR.md) | **DPoP (RFC 9449) & RAR (RFC 9396)**: Sender-constrained cryptographic key-bound agent tokens and structured fine-grained permission downscoping with full backwards compatibility |
-| [`docs/Policy-and-OPA.md`](./Policy-and-OPA.md) | Policy as code: the OPA/Rego engine — decision contract, authoring, testing, hot reload |
-| [`docs/Protecting-Your-API.md`](./Protecting-Your-API.md) | Hands-on guide for new users: every constraint you can configure on a delegation, what the built-in engine enforces directly, what needs OPA, and the limitations to design around |
-| [`docs/Public-API-Curl-Tutorial.md`](./Public-API-Curl-Tutorial.md) | Beginner curl-only tutorial: protect Open-Meteo forecasts and elevation lookups; runnable script: [`demo/public-weather-tutorial.sh`](../demo/public-weather-tutorial.sh) |
-| [`docs/Protecting-Your-MCP.md`](./Protecting-Your-MCP.md) | The MCP twin: put the gateway in front of agents' MCP servers with zero server/agent code — dedicated gateway instance, delegation JSON, approval-gated risky operations (Demo 9 Part D's delete pattern), revocation + audit, and today's granularity limits |
-| [`docs/Benchmarking.md`](./Benchmarking.md) | Measuring gateway performance — allowed vs denied passthroughs, built-in vs OPA engine, how to run and read it |
-| [`docs/Demos.md`](./Demos.md) | Runbook for the demos and what each step proves |
-| [`demo/protected-api-demo.sh`](../demo/protected-api-demo.sh) | Demo 4 — the protected-API demo: an approval rule holds calls to `demoapi` until the delegating user approves; works on compose and k3s |
-| [`demo/egress-demo.sh`](../demo/egress-demo.sh) | Demo 5 — all outbound traffic through the gateway's egress proxy: destination host = one authorization decision per call, human approval on each one (needs images ≥ gateway 1.0.22 with `GATEWAY_PROXY_ADDR=:8088`); the OpenShell/OpenClaw integration guide lives in the main repo |
-| [`demo/openclaw-sandbox.sh`](../demo/openclaw-sandbox.sh) | Demo 6 — the full agent (OpenClaw) inside an OpenShell sandbox: `make openclaw-demo` builds → sandbox → configure → one chat turn |
-| [`demo/openclaw-egress-test.sh`](../demo/openclaw-egress-test.sh) | Demo 7 — proves the sandbox's egress rules from inside the sandbox (`--gateway` adds the Agent-Gateway checks: allow/deny/CONNECT-hold/approved-retry; `--no-human` auto-approves holds for unattended runs) |
-| [`demo/human-delegation-demo.sh`](../demo/human-delegation-demo.sh) | Demo 8 — **Human Delegation under prompt injection**: OpenClaw reviews and pays a supplier invoice through the gateway (one invoice carries injected "change the beneficiary" instructions); reads auto-allowed, every payment held, the human sees supplier record vs proposed beneficiary and decides — denial sticks (403), approval executes exactly once |
-| [`demo/mcp-demo.sh`](../demo/mcp-demo.sh) | Demo 9 — **MCP under the gateway**: a CRM MCP server (`demo/mcp/`, mcpsrv) shown unprotected (anonymous writes, no audit), then behind a dedicated gateway instance (`gateway-mcp`, :8085) — 401 unauthenticated, delegated + audited MCP calls, instant revocation — then **OpenClaw itself** adding a customer through vanilla MCP with zero agent-side code, and a **customer deletion held for a human decision** (202 → approve ⇒ gone once / deny ⇒ 403, customer stays) |
-| [`demo/dpop-rar-demo.sh`](../demo/dpop-rar-demo.sh) | Demo 10 — **DPoP (RFC 9449) & RAR (RFC 9396)**: Ephemeral asymmetric EC P-256 key pair generation, sender-constrained token minting, token theft defense, cryptographic proof verification, replay protection (`jti` cache), least-privilege RAR downscoping, and combined DPoP+RAR PEP enforcement |
-| [`demo/kill-switch-demo.sh`](../demo/kill-switch-demo.sh) | Demo 11 — **the kill switch**: revoke one agent's delegation to an upstream API (that agent's still-valid token → 403), then revoke every delegation to that same upstream (all agents → 403). demoapi's call counter proves nothing reaches the upstream after revocation |
-| [`demo/approval-edge-cases-demo.sh`](../demo/approval-edge-cases-demo.sh) | Demo 12 — **approval edge cases**: real short-TTL expiry, changed-action binding, single-use consent, denial, revocation and delegation-scoped audit/upstream evidence |
-| [`demo/public-weather-tutorial.sh`](../demo/public-weather-tutorial.sh) | Demo 13 — **protect a public API with curl**: real Open-Meteo weather, read/path restrictions, human approval, single-use consent, revocation and audit |
-| [`demo/gmail-demo.sh`](../demo/gmail-demo.sh) | Demo 14 — **Gmail assistant, human-approved sends**: fake/live Gmail MCP connector, exact-message approvals, operator decision desk, OAuth credentials outside the agent, and a durable duplicate-send ledger |
-| [`demo/kill-switch-remote.sh`](../demo/kill-switch-remote.sh) | **Kill switch against a remote tenant** (preprod / k3s / cloud): same two kill-switch levels (one agent, all agents) but takes `GW`/`AUTHZ`/`TS`/`ID_TOKEN`/`ADMIN_TOKEN` as env or flags instead of running the local Dex SSO flow |
-| [`demo/obtain-id-token.sh`](../demo/obtain-id-token.sh) | **ID token helper**: automates OIDC authorization-code flow (or Dex password grant) to obtain a verified ID token for a remote tenant — output is the raw JWT on stdout, safe to capture in a variable |
-| [`docs/Security-and-Licensing.md`](./Security-and-Licensing.md) | How image encryption + vendor licence + your keys work at runtime |
-| [`docs/Commercial-Licence.md`](./Commercial-Licence.md) | Licence terms: what you get, what is not warranted, liability limits, indemnity |
-| [`docs/Pricing.md`](./Pricing.md) | Licensing tiers and buying path |
-| [`LICENSE`](../LICENSE) | MIT for this repository's documentation and demo assets |
+This branch starts with **one** scenario: Cognito-authenticated human delegation
+and curl probes against the public weather API through your AWS gateway.
 
-Start with the [README](../README.md), then follow the [Demos](Demos.md) or [Architecture](Architecture.md) guide according to your needs.
+| Path | Purpose |
+| --- | --- |
+| `README.md` | Entry point and current implementation/deployment status |
+| `docs/Public-API-Curl-Tutorial.md` | AWS-specific human/agent walkthrough |
+| `demo/weather-delegation.json` | Non-secret scoped delegation payload |
+| `demo/public-weather-tutorial.sh` | Three manual client phases: access, approved, revoked |
+| `docs/AWS-Marketplace.md` | Planned Marketplace procurement/fulfillment and explicit availability status |
+| `docs/Self-Hosting.md` | Separate customer self-hosting prerequisites/release status |
+| `docs/Deployment-Guide.md` | Source release/settings and operator provisioning links |
+| `docs/Architecture.md` | Trust boundaries and limitations |
+| `docs/Pricing.md` | Source cost model and provider/budget scope |
+| `docs/Teardown.md` | Source cleanup commands and retained-data warning |
+| `scripts/test_weather_client.py` | Offline fake-curl tests; no network/AWS calls |
+| `SECURITY.md`, `LICENSE` | Credential guidance and repository licence |
+
+The old Compose/Dex/image keys, Kubernetes manifests, unrelated tutorials,
+recorded scans and live-demo advertising have been removed from this branch's
+working tree. The `main` branch retains its separate history and local demos.
+They are not AWS instructions. There are no unattended human approvals, embedded
+credentials or automatic deployments in the AWS weather client.
+
+Hosted-demo users need only their operator's URLs/invitation. A customer
+self-hosting release bundle is still pending publication; the internal evaluation
+operator currently provisions from an authorized source checkout. This branch does not copy proprietary implementation code into a demo
+repository, provide a Marketplace installer or assert that every previous demo is
+ported. Subsequent AWS scenarios can be added after their code and real acceptance
+behavior are established.

@@ -1,170 +1,63 @@
 #!/usr/bin/env bash
-# Protect Open-Meteo using only curl for HTTP and jq for JSON.
-# Setup and individual commands: ../docs/Public-API-Curl-Tutorial.md
+# AWS public-client probes only. Human decisions happen in the signed-in console.
 set -euo pipefail
-
-YES=0
-case "${1:-}" in
-  --yes) YES=1; shift ;;
-  --help|-h)
-    printf 'Usage: bash %s [--yes]\n' "$0"
-    printf 'Default: pause before the operator approval. --yes: scripted approval.\n'
-    printf 'Environment: GW AUTHZ TS DEX ADMIN_TOKEN WEATHER_HOST_PORT\n'
-    exit 0 ;;
+phase="${1:-access}"
+case "$phase" in access|approved|revoked) ;; -h|--help)
+ echo 'Usage: GATEWAY_URL=https://ID.execute-api.REGION.amazonaws.com bash demo/public-weather-tutorial.sh [access|approved|revoked]'
+ echo 'AGENT_TOKEN is read privately if absent. This script never approves or revokes.'
+ exit 0;; *) echo 'Unknown phase: use access, approved or revoked.' >&2;exit 2;; esac
+[[ $# -le 1 ]] || { echo 'Too many arguments.' >&2;exit 2; }
+for tool in curl python3; do command -v "$tool" >/dev/null || { echo "Missing $tool" >&2;exit 1; };done
+gateway="${GATEWAY_URL:-}"
+# The current deployment uses root execute-api URLs. Do not send agent tokens to
+# the public weather provider, localhost, an HTTP URL or an unreviewed redirect.
+[[ "$gateway" =~ ^https://[a-z0-9]+\.execute-api\.[a-z0-9-]+\.amazonaws\.com/?$ ]] || { echo 'Set GATEWAY_URL to your public AWS GatewayURL output (HTTPS, no path).' >&2;exit 2; }
+gateway="${gateway%/}"
+token="${AGENT_TOKEN:-}"
+if [[ -z "$token" ]];then read -r -s -p 'Agent token: ' token;printf '\n';fi
+[[ -n "$token" ]] || { echo 'Agent token is required.' >&2;exit 2; }
+work="$(mktemp -d)";trap 'rm -rf "$work"' EXIT
+query='latitude=51.5072&longitude=-0.1276'
+forecast="/v1/forecast?$query&current=temperature_2m,wind_speed_10m&forecast_days=1"
+elevation="/v1/elevation?$query"
+probe(){
+ local label="$1" expected="$2" method="$3" path="$4" authenticated="$5"
+ shift 5
+ local status
+ local curl_args=(--silent --show-error --max-time 20 --output "$work/response.json" --write-out '%{http_code}' -X "$method")
+ if [[ "$authenticated" == yes ]];then curl_args+=(-H "Authorization: Bearer $token");fi
+ status="$(curl -q "${curl_args[@]}" "$@" "$gateway$path")"
+ [[ "$status" == "$expected" ]] || { echo "FAIL $label: expected $expected, got $status. Check token expiry, deployment and provider availability." >&2;exit 1; }
+ python3 - "$work/response.json" "$expected" "$label" <<'PY'
+import json,sys
+path,status,label=sys.argv[1:]
+if status in ['200','202']:
+ data=json.load(open(path))
+ if status=='202':
+  assert data.get('approval_id'), 'Missing approval_id'
+  print('Approval ID:',data['approval_id'])
+ elif label=='forecast':
+  assert 'temperature_2m' in data.get('current',{}) and 'wind_speed_10m' in data.get('current',{}), 'Missing real weather fields'
+ elif label=='approved-elevation':
+  assert isinstance(data.get('elevation'),list) and data['elevation'], 'Missing elevation array'
+PY
+ printf 'PASS %s: HTTP %s\n' "$label" "$status"
+}
+printf 'Weather data by Open-Meteo.com — https://open-meteo.com/\n'
+case "$phase" in
+ access)
+  probe no-token 401 GET "$forecast" no
+  probe forecast 200 GET "$forecast" yes
+  probe forbidden-method 403 POST "$forecast" yes
+  probe forbidden-path 403 GET "/v1/marine?$query" yes
+  probe mapping-override-refused 403 POST "$forecast" yes -H 'X-Agent-Action: read'
+  probe elevation-held 202 GET "$elevation" yes
+  echo 'Approve that elevation request in your signed-in console, then run the approved phase.';;
+ approved)
+  probe approved-elevation 200 GET "$elevation" yes
+  probe approval-consumed 202 GET "$elevation" yes
+  echo 'Revoke the delegation in your console, then run the revoked phase before token expiry.';;
+ revoked)
+  probe revoked-token 403 GET "$forecast" yes
+  echo 'Revocation checked. Review the audit trail and clean up the disposable AWS stack if finished.';;
 esac
-if [ "$#" -ne 0 ]; then
-  printf 'Unknown argument: %s\n' "$1" >&2
-  exit 2
-fi
-for tool in curl jq mktemp; do
-  command -v "$tool" >/dev/null || { printf 'Required command missing: %s\n' "$tool" >&2; exit 1; }
-done
-
-GW=${GW:-http://localhost:${WEATHER_HOST_PORT:-8087}}
-AUTHZ=${AUTHZ:-http://localhost:8081}
-TS=${TS:-http://localhost:8082}
-DEX=${DEX:-http://localhost:5556}
-ADMIN_TOKEN=${ADMIN_TOKEN:-agent-gateway-demo-admin}
-QUERY='latitude=51.5072&longitude=-0.1276'
-FORECAST="$GW/v1/forecast?$QUERY&current=temperature_2m,wind_speed_10m&forecast_days=1"
-ELEVATION="$GW/v1/elevation?$QUERY"
-ID_TOKEN=''
-DELEGATION_ID=''
-REVOKED=0
-umask 077
-RESPONSE=$(mktemp)
-
-cleanup() {
-  local status=$?
-  trap - EXIT
-  if [ -n "$DELEGATION_ID" ] && [ "$REVOKED" = 0 ]; then
-    if ! curl --fail --silent --show-error --connect-timeout 5 --max-time 15 \
-      -X DELETE "$AUTHZ/v1/delegations/$DELEGATION_ID" \
-      -H "Authorization: Bearer $ID_TOKEN" >/dev/null; then
-      printf 'Cleanup could not revoke delegation %s; revoke it manually (or wait for its 30-minute expiry).\n' "$DELEGATION_ID" >&2
-    fi
-  fi
-  rm -f "$RESPONSE"
-  exit "$status"
-}
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
-step() { printf '\n== %s\n' "$*"; }
-fail() { printf 'FAILED: %s\n' "$*" >&2; exit 1; }
-# Expected denials are assertions, not curl failures. Transport errors still fail.
-request() {
-  local expected=$1
-  shift
-  HTTP=$(curl --silent --show-error --connect-timeout 5 --max-time 30 \
-    -o "$RESPONSE" -w '%{http_code}' "$@") || fail 'curl transport error'
-  case " $expected " in
-    *" $HTTP "*) printf '   HTTP %s (expected)\n' "$HTTP" ;;
-    *)
-      printf '   Expected HTTP %s; received HTTP %s.\n' "$expected" "$HTTP" >&2
-      # Print only error fields: credential responses are never dumped.
-      jq -c '{error, reason, message}' "$RESPONSE" >&2 2>/dev/null || true
-      fail 'unexpected HTTP status; see the tutorial troubleshooting section' ;;
-  esac
-}
-
-step '1. Check the running services'
-for endpoint in "$GW/healthz" "$AUTHZ/healthz" "$TS/healthz" "$DEX/dex/.well-known/openid-configuration"; do
-  request 200 "$endpoint"
-done
-
-step '2. Sign in as Alice using the local Dex demo password grant'
-request 200 "$DEX/dex/token" \
-  --data-urlencode grant_type=password \
-  --data-urlencode client_id=agent-gateway \
-  --data-urlencode scope=openid \
-  --data-urlencode username=alice@example.com \
-  --data-urlencode password=password
-ID_TOKEN=$(jq -er '.id_token | strings | select(length > 0)' "$RESPONSE")
-
-step '3. Delegate weather reads; elevation requires approval'
-PAYLOAD=$(jq -n --arg id_token "$ID_TOKEN" '{
-  id_token: $id_token, agent_id: "weather-tutorial-agent",
-  resources: ["/v1/forecast", "/v1/elevation"], actions: ["read"],
-  expires_in_seconds: 1800, max_depth: 0,
-  approval_rules: [{when: {resource_pattern: "/v1/elevation", action_pattern: "read"},
-    require: true, rationale: "Elevation lookups need a human decision in this tutorial"}]
-}')
-request '200 201' "$AUTHZ/v1/delegations/" \
-  -H 'Content-Type: application/json' -d "$PAYLOAD"
-DELEGATION_ID=$(jq -er '.delegation.id | strings | select(length > 0)' "$RESPONSE")
-AGENT_SECRET=$(jq -er '.agent_secret | strings | select(length > 0)' "$RESPONSE")
-SUBJECT=$(jq -er '.delegation.user_id | strings | select(length > 0)' "$RESPONSE")
-printf '   Delegation: %s\n   Verified delegating subject: %s\n' "$DELEGATION_ID" "$SUBJECT"
-
-step '4. Agent exchanges its delegation ID and secret for a five-minute token'
-PAYLOAD=$(jq -n --arg id "$DELEGATION_ID" --arg secret "$AGENT_SECRET" \
-  '{delegation_id: $id, agent_secret: $secret, ttl_seconds: 300}')
-request 200 "$TS/token" -H 'Content-Type: application/json' -d "$PAYLOAD"
-AGENT_TOKEN=$(jq -er '.access_token | strings | select(length > 0)' "$RESPONSE")
-unset AGENT_SECRET PAYLOAD
-
-step '5. No token: the forecast is refused'
-request 401 "$FORECAST"
-
-step '6. Authorized forecast: get real London weather'
-request 200 "$FORECAST" -H "Authorization: Bearer $AGENT_TOKEN"
-jq -e '.current.temperature_2m != null and .current.wind_speed_10m != null' "$RESPONSE" >/dev/null \
-  || fail 'expected an Open-Meteo forecast, not a synthetic gateway response'
-jq '{latitude, longitude, current_units, current}' "$RESPONSE"
-
-step '7. Read-only scope: a POST is refused'
-request 403 -X POST "$FORECAST" -H "Authorization: Bearer $AGENT_TOKEN"
-
-step '8. Resource scope: an undelegated path is refused'
-request 403 "$GW/v1/marine?$QUERY" -H "Authorization: Bearer $AGENT_TOKEN"
-
-step '9. Elevation lookup: held for approval'
-request 202 "$ELEVATION" -H "Authorization: Bearer $AGENT_TOKEN"
-APPROVAL_ID=$(jq -er '.approval_id | strings | select(length > 0)' "$RESPONSE")
-printf '   Approval: %s\n' "$APPROVAL_ID"
-
-step '10. Operator records the delegating human’s approval'
-printf '   This step uses the operator credential, never the agent token.\n'
-if [ "$YES" = 0 ]; then
-  [ -t 0 ] || fail 'interactive approval needs a terminal; use --yes for a scripted run'
-  read -r -p 'Press Enter to approve this elevation lookup as Alice (Ctrl-C cancels): ' _
-else
-  printf '   --yes: recording a scripted demo approval as Alice.\n'
-fi
-PAYLOAD=$(jq -n --arg id "$APPROVAL_ID" --arg subject "$SUBJECT" \
-  '{approval_id: $id, approver_id: $subject, approved: true}')
-request 200 "$GW/v1/approvals/" -H "X-Admin-Token: $ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' -d "$PAYLOAD"
-
-step '11. Retry the identical lookup: the real elevation is returned'
-request 200 "$ELEVATION" -H "Authorization: Bearer $AGENT_TOKEN"
-jq -e '.elevation | type == "array" and length > 0' "$RESPONSE" >/dev/null \
-  || fail 'expected an Open-Meteo elevation response'
-jq . "$RESPONSE"
-
-step '12. Approval is single-use: another lookup is held again'
-request 202 "$ELEVATION" -H "Authorization: Bearer $AGENT_TOKEN"
-jq -e --arg old "$APPROVAL_ID" '.approval_id != null and .approval_id != $old' "$RESPONSE" >/dev/null \
-  || fail 'expected a fresh approval ID'
-
-step '13. Revoke the delegation, then reuse the same agent token'
-request '200 204' -X DELETE "$AUTHZ/v1/delegations/$DELEGATION_ID" \
-  -H "Authorization: Bearer $ID_TOKEN"
-REVOKED=1
-request 403 "$FORECAST" -H "Authorization: Bearer $AGENT_TOKEN"
-
-step '14. Read the audit trail for this delegation'
-request 200 "$GW/v1/audit/?delegation_id=$DELEGATION_ID&limit=100" \
-  -H "X-Admin-Token: $ADMIN_TOKEN"
-jq -e --arg id "$DELEGATION_ID" --arg approval "$APPROVAL_ID" '
-  .events | length > 0 and all(.[]; .delegation_id == $id)
-  and any(.[]; .outcome == "allow" and .resource == "/v1/forecast")
-  and any(.[]; .outcome == "allow" and .approval_id == $approval)
-  and any(.[]; .outcome == "approval_required")
-  and any(.[]; .outcome == "deny")
-' "$RESPONSE" >/dev/null || fail 'expected allow, approved execution, hold and deny audit evidence'
-jq '.events[] | {ts, agent_id, user_id, resource, action, outcome, status_code, approval_id, approver_id, reason}' "$RESPONSE"
-
-printf '\nPASS: real forecast, read/path denials, approval, single-use consent, revocation and audit.\n'
