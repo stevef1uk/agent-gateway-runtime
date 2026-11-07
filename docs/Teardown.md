@@ -18,4 +18,3 @@ use broad account-wide deletion or the `main` branch's Docker cleanup commands.
 A billing budget is not a hard spending cap. Retained secrets/data/artifact versions
 can keep costing money; stop load generators before cleaning up. No automatic
 budget-triggered deletion is installed by this repository.
-
