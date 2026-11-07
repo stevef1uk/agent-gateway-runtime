@@ -1,5 +1,12 @@
 # Internal operator notes: AWS weather deployment
 
+For the new encrypted-image path, use the operator
+[image deployment guide](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/encrypted-lambda-images.md)
+and `serverless-images.template.json`. The ZIP build steps below describe the earlier
+source-only development prototype and are not a customer installation method.
+Images use the separate `stevef1uk/agent-gateway-{authz,tokensvc,gateway,web}_l` names;
+versioned customer release publication is still pending.
+
 For ordinary users, start with the [weather walkthrough](Public-API-Curl-Tutorial.md).
 For customer-owned infrastructure, start with [Self-hosting](Self-Hosting.md).
 Marketplace delivery is covered in the separate [Marketplace guide](AWS-Marketplace.md).

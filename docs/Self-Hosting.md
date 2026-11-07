@@ -15,8 +15,10 @@ An approved listing and subscription cannot be inferred from the development ZIP
 ## What you will need
 
 - Your own AWS account, billing notifications and reviewed deployment/cleanup permissions.
-- A compatible operator-supplied release: four ARM64 Lambda ZIPs, CloudFormation
-  templates, release checksums, deployment instructions and a scoped teardown tool.
+- A compatible operator-supplied release: four encrypted ARM64 Lambda container images,
+  image digests, CloudFormation templates, deployment instructions and a scoped teardown tool.
+- A customer decryption key and signed service licences, stored as private versioned
+  S3 objects. The vendor signing private key is never supplied to your account.
 - A unique Cognito login-domain prefix and an operator email you control.
 - The weather upstream `https://api.open-meteo.com` for this personal evaluation.
 - The software rights/licence supplied with that release. This demo repository's
@@ -33,9 +35,13 @@ operator for a compatible evaluation release rather than guessing download URLs.
    permissions before creating anything.
 2. Check the AWS CLI identity is your intended account and region. A validation-only
    profile is not enough; do not bypass permission errors with an unrelated root session.
-3. Review/deploy the private artifact-store template, then upload ZIPs under an
-   immutable release prefix. Never overwrite a release key.
-4. Prepare/review the application change set with weather mode enabled. The upstream
+3. Import the supplied images into private ECR repositories in your Lambda region
+   (Paris for the current preview), and verify their immutable digests. Upload your
+   activation key and service licences to a private versioned, encrypted S3 bucket.
+   Record object VersionIds; never put key/token contents into template parameters.
+4. Prepare/review the image application change set with exact ECR digests, S3 object
+   names/VersionIds and weather mode enabled. Each execution role reads only its
+   activation objects. The upstream
    must be exactly `https://api.open-meteo.com`; only three exact weather routes are added.
 5. Deploy the approved change set, invite your Cognito operator and complete sign-in.
 6. Save the release's teardown inventory. Verify public health/discovery, unsigned
@@ -47,7 +53,7 @@ operator for a compatible evaluation release rather than guessing download URLs.
 
 The development design is four buffered ARM64 Lambda services, five HTTP APIs,
 DynamoDB shared state, Cognito, generated-secret references, logs and a versioned
-private S3 artifact bucket. It has no always-on VM, NAT, RDS or Redis baseline.
+private S3 activation bucket and private ECR image storage. It has no always-on VM, NAT, RDS or Redis baseline.
 It is not full-feature production HA: see [architecture limitations](Architecture.md).
 
 ## Costs and teardown
@@ -68,3 +74,17 @@ requirement for hosted-demo users. Before releasing self-hosting publicly, compl
 real AWS deployment/cleanup acceptance and publish an appropriately licensed,
 versioned artifact/template/checksum/teardown bundle. No bundle availability or
 managed-service acceptance is implied by the local test results in this repository.
+
+## Encrypted images or source licence
+
+Encrypted container images are the standard distribution path. Customers may
+separately purchase a source licence and build images without encryption, subject
+to that agreement; this demo repository does not supply or license the source.
+Unencrypted builds must still implement the Go Lambda runtime and retain the same
+application authentication and authorization controls.
+
+The first local encrypted Gateway benchmark measured a median 508 ms for licence
+verification/decryption across five cold containers; warm health requests did not
+decrypt again. This excludes S3 and real AWS startup and is not an AWS latency
+guarantee. The image launcher and image template exist in the implementation
+branch, but customer images and a complete release bundle remain unpublished.

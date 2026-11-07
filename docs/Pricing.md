@@ -59,3 +59,9 @@ CloudWatch Standard logs, Secrets Manager, S3 Standard and Cognito Lite:
 A published self-hosting release must ship its exact usage inputs and reproducible
 calculator alongside the deployment/teardown bundle, without requiring private
 source access. That customer release bundle is still pending.
+
+The existing infrastructure examples were modeled for development ZIPs. Customer
+image deployment also incurs private ECR storage and activation S3 GET/storage
+charges. Licence verification/decryption consumes billed cold-start duration; the
+local 508 ms median is not an AWS measurement. A complete image release quote must
+include these items, retained image versions and any software/source licence fee.

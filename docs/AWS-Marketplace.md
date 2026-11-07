@@ -28,7 +28,7 @@ login or existing image licence alone does not implement this.
 ## Self-hosted offer
 
 The current core is a buffered Lambda/DynamoDB development stack. Its CloudFormation
-and Lambda ZIP format is a technical installation format, not proof of an accepted
+and Lambda image format is a technical installation format, not proof of an accepted
 Marketplace product/delivery type. The seller must validate the supported fulfillment
 arrangement with AWS before advertising a one-click listing or download.
 
@@ -64,3 +64,8 @@ Official references: [SaaS products](https://docs.aws.amazon.com/marketplace/lat
 [SaaS Quick Launch](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-product-settings.html),
 [container delivery](https://docs.aws.amazon.com/marketplace/latest/userguide/container-based-products.html),
 [metering/entitlement](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-integration-metering-and-entitlement-apis.html).
+
+The intended standard distribution is encrypted Lambda container images with private
+S3 activation material. A separately purchased source licence can allow customers
+to build without encryption; it does not imply a Marketplace source listing exists.
+Neither path bypasses Marketplace subscription/entitlement requirements.
