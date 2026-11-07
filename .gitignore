@@ -1,15 +1,13 @@
-# Local runtime credentials — never commit, at any depth.
-# demo/keys/ ships the public demo fixtures at HEAD so fresh clones can run:
-#   customer_private.pem — decrypts the encrypted demo images at runtime
-#   license.token        — pre-issued demo licence (run-only, cannot mint)
-# The vendor private key is the ONLY file that could mint new tokens and it
-# is never committed anywhere.
+# This AWS demo branch ships no passwords, tokens or deployment keys.
 .env
 **/.env
 !**/.env.example
+*.pem
+*.key
+*.token
+__pycache__/
+.DS_Store
+/dist/
 
-# Never commit the vendor signing key (token-minting capability).
-demo/keys/vendor_private.pem
-
-# Preserve local legacy demo configuration when switching from main.
+# Preserve local configuration left behind when switching from legacy main.
 /demo/gmail/
