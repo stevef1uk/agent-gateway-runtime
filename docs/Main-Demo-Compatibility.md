@@ -1,5 +1,7 @@
 # Main-branch demo compatibility on AWS
 
+Additional OpenClaw/OpenShell and backend hosts are customer-managed; supplied scripts do not provision them. Follow [customer-managed demo host setup](Customer-Managed-Demos.md) when you choose to run those integrations.
+
 The AWS presets have [dedicated runners](AWS-Demos.md). This matrix describes prerequisites for the numbered `main` workflows. It does not claim the original scripts, with local Docker/Dex/admin assumptions, run unchanged against AWS.
 
 | Main demo | Start proxy VM first? | AWS path and other prerequisites |

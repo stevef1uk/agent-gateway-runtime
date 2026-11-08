@@ -3,6 +3,7 @@
 This `aws` branch contains customer-facing clients for the single-region Lambda deployment and its optional EC2 forward proxy.
 
 * [Demo commands and proxy prerequisites](docs/AWS-Demos.md): weather, geocoding, users, refunds simulation, Emotion and forward-proxy probes.
+* [Customer-managed OpenClaw and advanced demo hosts](docs/Customer-Managed-Demos.md).
 * [Selected architecture and availability limits](docs/Architecture.md).
 * [Baseline weather approval tutorial](docs/Public-API-Curl-Tutorial.md).
 * [Operator deployment guide](docs/Deployment-Guide.md).

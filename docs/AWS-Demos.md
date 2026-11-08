@@ -1,5 +1,7 @@
 # Running demos against AWS
 
+Additional OpenClaw/OpenShell and backend hosts are customer-managed; supplied scripts do not provision them. Follow [customer-managed demo host setup](Customer-Managed-Demos.md) when you choose to run those integrations.
+
 The selected design uses a single-region serverless control plane and dedicated Lambda policy enforcement gateways for API/MCP demos. A separate EC2 forward proxy is optional. Creating a demo in the AI Wizard does not start that VM.
 
 ## Which demos need the proxy?
