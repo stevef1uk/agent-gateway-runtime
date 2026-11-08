@@ -43,25 +43,21 @@ Use your actual profile name if different. **Expected:** your intended 12-digit 
 
 ## 3. Obtain the current release and activation files
 
-Obtain these from the vendor/release operator:
-
-| Input | What to do with it |
-|---|---|
-| Current AWS release manifest (`current.json` or versioned JSON) | Save as `releases/current.json`, or set `RELEASE_MANIFEST` to its actual path |
-| Customer decryption private key compatible with those images | Save privately; set `CUSTOMER_KEY_FILE` to its actual path |
-| Four valid vendor-signed service licences | Put `authz.token`, `tokensvc.token`, `gateway.token`, `web.token` in a private directory; set `LICENCE_DIR` |
-
-The current manifest must include all four encrypted Docker Hub `_l` image digests and the prebuilt Emotion Lambda wrapper. The deployment script validates the manifest and copies those immutable images into **your own private Paris ECR**, preserving digests. Customers never compile these binaries. A vendor image release and compatible activation material are required even if the repository is public.
-
-**Release availability:** the repository's older `0.1.0-aws-c506506` manifest predates the complete Wizard workflow and is deliberately rejected. A compatible new manifest must be published/supplied before a first deployment of this updated workflow. Do not invent a download URL, use `latest`, or remove validation to reuse an older release. The vendor builds/publishes the release separately; cloning this branch does not publish it.
+The `releases/current.json` vendor manifest is included in this repository's `aws` branch. If you cloned on `aws`, it is already present:
 
 ```bash
-mkdir -p releases
-# Save the actual vendor manifest as releases/current.json, then:
+ls releases/current.json
+```
+
+**Expected:** the file exists with schema version 2.
+
+If you need to update the manifest (e.g. for a new release), obtain a schema-2 manifest from the vendor and save it to `releases/current.json`. The manifest must target `linux/arm64` and include all four encrypted product image digests plus the Emotion wrapper.
+
+```bash
 make aws-release-check
 ```
 
-**Expected:** `Valid AWS release: ... (four encrypted product images + Emotion wrapper)`. Missing/old-manifest errors mean you need the current release, not access to application source.
+**Expected:** `Valid AWS release: ... (four encrypted product images + Emotion wrapper)`. If the manifest is stale or invalid, obtain a current release from the vendor.
 
 Keep activation files out of Git. The script uploads the customer key and signed service licences to your private versioned S3 bucket; only object identifiers/versions go into CloudFormation parameters. Never supply a vendor signing private key. These product licences are separate from Emotion's native licence: an optional purchased Emotion token is not required to deploy or test gateway approval/error forwarding.
 
