@@ -15,6 +15,10 @@ AWS_DEFAULT_REGION="$AWS_REGION"
 export AWS_PROFILE AWS_REGION AWS_DEFAULT_REGION AWS_PAGER=""
 
 AGW_ACCOUNT="${AGW_ACCOUNT:-}"
+# Auto-detect AWS account ID from CLI profile if not explicitly set
+if [ -z "$AGW_ACCOUNT" ]; then
+  AGW_ACCOUNT=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query Account --output text 2>/dev/null || echo "unknown")
+fi
 AGW_ARTIFACT_STACK="${AGW_ARTIFACT_STACK:-agent-gateway-artifacts-dev}"
 AGW_APP_STACK="${AGW_APP_STACK:-agent-gateway-dev}"
 AGW_UPSTREAM="${AGW_UPSTREAM:-https://api.open-meteo.com}"

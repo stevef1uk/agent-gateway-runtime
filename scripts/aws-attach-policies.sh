@@ -8,7 +8,7 @@
 #
 # Prerequisites:
 #   - AWS CLI configured with root or AdministratorAccess credentials as default
-#   - AgentGatewayDev role exists in account 857710215813
+#   - AgentGatewayDev role exists in account 111111111111
 #   - This repo checked out on aws branch
 # ==============================================================================
 
@@ -16,7 +16,7 @@ set -euo pipefail
 
 # --- Configuration ---
 DEFAULT_ROLE_NAME="AgentGatewayDev"
-DEFAULT_ACCOUNT="857710215813"
+DEFAULT_ACCOUNT="111111111111"
 REGION="eu-west-3"
 
 # --- Helpers ---

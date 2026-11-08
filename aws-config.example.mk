@@ -11,7 +11,7 @@ AWS_PROFILE = agent-gateway-dev
 
 # Your own 12-digit AWS account ID (not the vendor's).
 # Required: replace with your actual account number before running make aws-identity.
-AWS_ACCOUNT =
+AWS_ACCOUNT = YOUR_AWS_ACCOUNT_ID    # e.g. 111111111111 (replace with your actual account)
 
 # Existing IAM role name assumed by AWS_PROFILE.
 # Default: AgentGatewayDev  (admin: create this role with trust policy before deployment)

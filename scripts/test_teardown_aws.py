@@ -16,7 +16,7 @@ sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("teardown", Path(__file__).with_name("teardown-aws-deployment.py"))
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
-ACCOUNT = "857710215813"
+ACCOUNT = "111111111111"
 APP, ARTIFACT = "agent-gateway-dev", "agent-gateway-artifacts-dev"
 
 
