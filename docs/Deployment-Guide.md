@@ -273,6 +273,8 @@ make aws-demo DEMO=emotion PHASE=revoked
 
 **Expected:** HTTP 403. [All demos](AWS-Demos.md) explains weather/geocoding/refunds, optional-token delivery and baseline weather routes.
 
+For paid Emotion inference, follow [Paid Emotion activation](AWS-Demos.md#paid-emotion-activation). Gateway evaluation licences do not grant an Emotion licence.
+
 ## 11. Optional infrastructure is a separate decision
 
 No proxy is required for these five Lambda API/MCP presets. If you deliberately want a forward-proxy/CONNECT demo, read [Proxy VM](Proxy-VM.md) first: it has explicit create/connect/delete commands and ongoing EC2/storage/IPv4 costs. Do not run create merely to test Users or Emotion.

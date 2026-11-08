@@ -24,7 +24,7 @@ PROXY_INSTANCE_TYPE ?= t4g.small
 PROXY_LOCAL_PORT ?= 8088
 PROXY_CONFIG ?= deploy/aws/demo-config.example.json
 CFN_LINT_BIN ?= cfn-lint
-.PHONY: help check demo aws-identity aws-release-check aws-preflight aws-access-deploy aws-access-outputs aws-deploy aws-outputs aws-demo aws-demo-url aws-demo-list aws-demo-delete aws-demo-delete-all aws-emotion-token-upload aws-proxy-plan aws-proxy-create aws-proxy-connect aws-proxy-status aws-proxy-delete aws-cleanup aws-ecr-cleanup aws-access-delete aws-validate
+.PHONY: help check demo aws-identity aws-release-check aws-preflight aws-access-deploy aws-access-outputs aws-deploy aws-outputs aws-demo aws-demo-url aws-demo-list aws-demo-delete aws-demo-delete-all aws-emotion-token-upload aws-emotion-activate aws-proxy-plan aws-proxy-create aws-proxy-connect aws-proxy-status aws-proxy-delete aws-cleanup aws-ecr-cleanup aws-access-delete aws-validate
 help:
 	@echo 'Start with docs/Deployment-Guide.md (customer deployment and testing).'
 	@echo 'make check: offline checks; creates no AWS resources'
@@ -43,6 +43,7 @@ check:
 	python3 -B scripts/test_prepare_aws_images.py
 	python3 -B scripts/test_teardown_aws.py
 	python3 -B scripts/test_aws_customer.py
+	python3 -B scripts/test_emotion_activation.py
 	python3 -B scripts/test_aws_proxy_vm.py
 
 demo:
@@ -80,6 +81,9 @@ aws-demo-delete:
 	python3 -B scripts/aws-demo-stacks.py delete --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --name "$(DEMO)" --kind "$(DEMO_KIND)" --confirm-account "$(CONFIRM_ACCOUNT)"
 aws-demo-delete-all:
 	python3 -B scripts/aws-demo-stacks.py delete-all --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --confirm-account "$(CONFIRM_ACCOUNT)"
+aws-emotion-activate:
+	@test -n "$(EMOTION_TOKEN_FILE)" -a -n "$(EMOTION_KEY_FILE)" || { echo 'Set EMOTION_TOKEN_FILE and EMOTION_KEY_FILE to your vendor-issued files.' >&2; exit 2; }
+	python3 -B scripts/aws-emotion-activate.py --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --token "$(EMOTION_TOKEN_FILE)" --key "$(EMOTION_KEY_FILE)"
 aws-emotion-token-upload:
 	AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AWS_STACK="$(AWS_STACK)" TOKEN_FILE="$(TOKEN_FILE)" bash scripts/aws-licence-upload.sh
 aws-proxy-plan:

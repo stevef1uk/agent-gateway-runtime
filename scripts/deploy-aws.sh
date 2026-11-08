@@ -246,6 +246,11 @@ for svc in authz tokensvc gateway web emotion; do
     fi
   fi
 
+  if ! aws ecr describe-images --repository-name "$ecr_repo" --image-ids "imageDigest=$expected_digest" >/dev/null 2>&1; then
+    python3 -B scripts/preserve-ecr-manifest.py --source "$source_image" --repository "$ecr_repo" \
+      --digest "$expected_digest" --profile "$AWS_PROFILE" --region "$AWS_REGION"
+  fi
+
   actual_digest="$(aws ecr describe-images \
     --repository-name "$ecr_repo" \
     --image-ids "imageDigest=$expected_digest" \
