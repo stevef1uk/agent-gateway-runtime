@@ -198,7 +198,7 @@ If deployment fails, inspect the named stack's CloudFormation **Events** for the
 make aws-outputs
 ```
 
-This read-only command prints parent stack outputs. Open the **ConsoleURL** value. Do not type an example API ID, append `/api` to it, or confuse it with the gateway.
+This read-only command prints the stack status and short, labelled **Console**, **Baseline gateway** and **Cognito login** URLs. Open **Console** and sign in using your invitation. Do not type an example API ID, append `/api` to it, or confuse it with the gateway.
 
 ## 8. Open your console and sign in
 
