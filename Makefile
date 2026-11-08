@@ -55,6 +55,7 @@ aws-preflight: aws-release-check
 	@test -n "$(AWS_ACCOUNT)" -a -n "$(DOMAIN_PREFIX)" -a -n "$(ADMIN_EMAILS)" || { echo 'Fill AWS_ACCOUNT, DOMAIN_PREFIX and ADMIN_EMAILS in aws-config.mk; see docs/Deployment-Guide.md.' >&2; exit 2; }
 	@test -s "$(CUSTOMER_KEY_FILE)" || { echo 'Missing customer activation key; check CUSTOMER_KEY_FILE.' >&2; exit 2; }
 	@for service in authz tokensvc gateway web; do test -s "$(LICENCE_DIR)/$$service.token" || { echo "Missing $$service.token in LICENCE_DIR." >&2; exit 2; }; done
+	python3 -B scripts/check-aws-activation.py --key "$(CUSTOMER_KEY_FILE)" --licences "$(LICENCE_DIR)"
 	@echo 'Local release/config/file checks passed. No AWS resources created; licence validity is checked by the containers at startup.'
 aws-access-deploy:
 	@test -n "$(AWS_ADMIN_PROFILE)" -a -n "$(AWS_ACCOUNT)" || { echo 'Set AWS_ADMIN_PROFILE and AWS_ACCOUNT explicitly in aws-config.mk.' >&2; exit 2; }

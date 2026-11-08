@@ -8,7 +8,7 @@ This guide uses only the public **agent-gateway-runtime** repository, branch **a
 
 ## 1. Install workstation tools and get this branch
 
-You need Git, Make, Python 3, Node.js, curl, AWS CLI v2 and Docker (including Buildx). Docker must be running and able to pull/tag/push ARM64 images. You do **not** build application images; Docker transfers the vendor images into your account's ECR. cfn-lint/cfn-guard are optional extra local template validators.
+You need Git, Make, Python 3, Node.js, curl, OpenSSL, AWS CLI v2 and Docker (including Buildx). Docker must be running and able to pull/tag/push ARM64 images. You do **not** build application images; Docker transfers the vendor images into your account's ECR. cfn-lint/cfn-guard are optional extra local template validators.
 
 ```bash
 git clone --branch aws https://github.com/stevef1uk/agent-gateway-runtime.git
@@ -71,7 +71,7 @@ make aws-release-check
 
 **Expected:** `Valid AWS release: ... (four encrypted product images + Emotion wrapper)`. If the manifest is stale or invalid, obtain a current release from the vendor.
 
-Keep activation files out of Git. The script uploads the customer key and signed service licences to your private versioned S3 bucket; only object identifiers/versions go into CloudFormation parameters. Never supply a vendor signing private key. These product licences are separate from Emotion's native licence: an optional purchased Emotion token is not required to deploy or test gateway approval/error forwarding.
+Obtain a genuine customer private key and four signed service licences from the vendor, even for evaluation. Example or placeholder files cannot start the encrypted images. Keep activation files out of Git. The script uploads the customer key and signed service licences to your private versioned S3 bucket; only object identifiers/versions go into CloudFormation parameters. Never supply a vendor signing private key. These product licences are separate from Emotion's native licence: an optional purchased Emotion token is not required to deploy or test gateway approval/error forwarding.
 
 ## 4. Create your local configuration
 
@@ -103,7 +103,7 @@ make aws-identity
 make aws-preflight
 ```
 
-**Expected:** the intended account/role and passing local manifest/config/file checks. Preflight checks file presence and release identifiers; it does not validate licence signatures or create AWS resources. Fix any missing inputs before continuing.
+**Expected:** the intended account/role and passing local manifest/config/file checks. Preflight checks the private-key format, licence envelope/expiry and release identifiers; it rejects placeholder activation files. Vendor signatures and image/key compatibility are verified at runtime. It creates no AWS resources. Fix any missing inputs before continuing.
 
 ## 5. Administrator: create or update deployment access
 
@@ -278,6 +278,5 @@ For your own deployment, use [Teardown](Teardown.md). It distinguishes demo dele
 The encrypted-image web function receives the same JWT signing value and operator
 value as the parent gateway. The wizard supplies these to child stacks as separate
 `NoEcho` parameters. They never enter `DemoConfiguration` outputs or child template
-bodies. The source CLI reads `dist/aws-lambda/plan/secrets.json` for demo deployment
-(`--secrets-file` overrides the path); retain that private local file for updates.
-A rebuilt web image is required for this parameter-based provisioning path.
+bodies. Retain the private local `dist/aws-lambda/plan/secrets.json` file for updates.
+The published web image handles this provisioning path; customers do not rebuild images or use the private source CLI.

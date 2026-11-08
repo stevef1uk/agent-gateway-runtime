@@ -49,8 +49,8 @@ class Customer(unittest.TestCase):
         self.assertFalse(any('delete-stack' in args.args for args in aws.call_args_list))
     def test_customer_preflight_uses_no_source_or_cloud_tools(self):
         with tempfile.TemporaryDirectory() as folder:
-            folder=pathlib.Path(folder);(folder/'release.json').write_text(json.dumps(manifest()));(folder/'customer.key').write_text('fixture, not a real key')
-            for name in release.SERVICES:(folder/(name+'.token')).write_text('fixture, not a real licence')
+            folder=pathlib.Path(folder);(folder/'release.json').write_text(json.dumps(manifest()));subprocess.run(['openssl','genpkey','-algorithm','RSA','-pkeyopt','rsa_keygen_bits:2048','-out',str(folder/'customer.key')],check=True,capture_output=True)
+            for name in release.SERVICES:(folder/(name+'.token')).write_text(base64.urlsafe_b64encode(b'2099-01-01:test:test@example.test:test:test-signature').decode().rstrip('='))
             fake=folder/'aws';fake.write_text('#!/bin/sh\nexit 99\n');fake.chmod(0o700)
             args=['make','-s','aws-preflight','RELEASE_MANIFEST='+str(folder/'release.json'),'CUSTOMER_KEY_FILE='+str(folder/'customer.key'),'LICENCE_DIR='+str(folder),'AWS_ACCOUNT=123456789012','DOMAIN_PREFIX=test-prefix','ADMIN_EMAILS=test@example.test']
             env=dict(os.environ,PATH=str(folder)+os.pathsep+os.environ['PATH'])
