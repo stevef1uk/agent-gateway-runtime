@@ -23,3 +23,6 @@ keys.txt
 /aws-config.mk
 /releases/
 *.token
+
+# Commit current.json for batteries-included workflow
+/releases/current.json!
