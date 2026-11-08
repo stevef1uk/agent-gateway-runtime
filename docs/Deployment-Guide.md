@@ -20,73 +20,39 @@ If already cloned, use your existing checkout on `aws` and pull the latest chang
 
 The supported scripted region is **Paris (`eu-west-3`)**. Keep that value for this workflow. Templates and bounded access policies are not a generic multi-region installer.
 
-## 2. Attach IAM policies & deploy (3 steps)
+## 2. Set up the deployment identity
 
-### You have root access — follow these 3 steps:
+An administrator creates the **`AgentGatewayDev` IAM role** and allows your existing AWS identity to assume it. In IAM → Roles → Create role, configure the trust for your approved identity, name the role `AgentGatewayDev`, and leave application permissions for the access-stack template in step 5. For an existing role, check its **Trust relationships** instead. Follow [AWS role/profile setup](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-role.html) for your identity type and any MFA requirement.
 
-**Step 1: Attach policies to AgentGatewayDev role**
+These names refer to different things:
 
-Go to IAM → Roles → AgentGatewayDev (account 111111111111) → Add permissions → Attach policies directly → Paste this inline policy:
+| Name | Meaning |
+|---|---|
+| IAM user `agent-gateway-dev` | Your source identity; its permissions do not carry into an assumed-role session |
+| CLI profile `agent-gateway-user` | Credentials for that user |
+| IAM role `AgentGatewayDev` | Receives the deployment policies from step 5 |
+| CLI profile `agent-gateway-dev` | Uses the source profile to assume that role |
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "cloudformation:CreateChangeSet",
-        "cloudformation:DescribeStacks",
-        "cloudformation:CreateStack",
-        "cloudformation:UpdateStack",
-        "cloudformation:ValidateTemplate"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:CreateBucket",
-        "s3:PutObject",
-        "s3:GetBucketLocation",
-        "s3:DeleteBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::agent-gateway-artifacts-dev",
-        "arn:aws:s3:::agent-gateway-artifacts-dev/*"
-      ]
-    }
-  ]
-}
+For this IAM-user example, add the following to `~/.aws/config`, replacing `YOUR_ACCOUNT` with your 12-digit account ID. Keep credentials in the existing source profile, not this repository.
+
+```ini
+[profile agent-gateway-dev]
+role_arn = arn:aws:iam::YOUR_ACCOUNT:role/AgentGatewayDev
+source_profile = agent-gateway-user
+region = eu-west-3
 ```
 
-Click **Add permissions**.
-
-**Step 2: Run the access deployment**
+Verify which identity each profile actually uses:
 
 ```bash
-make aws-access-deploy
+aws sts get-caller-identity --profile agent-gateway-user
+aws sts get-caller-identity --profile agent-gateway-dev
 ```
 
-Wait for the CloudFormation stack to reach `CREATE_COMPLETE` status (you may need to click **Execute** on the change set in the Console if it stays in `REVIEW_IN_PROGRESS`).
+**Expected:** the first ARN ends in `user/agent-gateway-dev`; the second contains `assumed-role/AgentGatewayDev/`. Other source identities, such as IAM Identity Center, have different source ARNs. An `AssumeRole` denial requires administrator review of trust, assumption permissions and MFA.
 
-**Step 3: Deploy the application**
+Continue with steps 3–4 before deploying anything. Signing into the administrator Console does not change CLI credentials.
 
-```bash
-make aws-access-outputs    # Copy WorkloadBoundaryArn value into aws-config.mk
-make aws-deploy            # Deploys the application
-```
-
-**Why this works:** The inline policy gives `AgentGatewayDev` the CloudFormation and S3 permissions needed for the access boundary workflow.
-
-**After running `make aws-access-outputs`:**
-- Copy the `WorkloadBoundaryArn` value from the output
-- Add it to `aws-config.mk`: `WORKLOAD_BOUNDARY_ARN = arn:aws:iam::...`
-- Then run `make aws-deploy` to deploy the application
-
-**Why this works:** The inline policy gives `AgentGatewayDev` the CloudFormation and S3 permissions needed for the access boundary workflow. After Step 3, you can run `make aws-deploy` to deploy the application.
-
-**That's it — 3 steps and you're done.** No two-profile complexity, no admin profile setup, no root login required beyond the Console.
 ## 3. Obtain the current release and activation files
 
 The `releases/current.json` vendor manifest is included in this repository's `aws` branch. If you cloned on `aws`, it is already present:
@@ -139,20 +105,40 @@ make aws-preflight
 
 **Expected:** the intended account/role and passing local manifest/config/file checks. Preflight checks file presence and release identifiers; it does not validate licence signatures or create AWS resources. Fix any missing inputs before continuing.
 
-## 5. Administrator: apply bounded deployment access
+## 5. Administrator: create or update deployment access
 
-This step creates IAM policies, a workload permissions boundary and a fixed CloudFormation demo-deployment role. It does not create application compute/database resources. The administrator should review `deploy/aws/deployment-access.template.json` and ensure the configured deployer role already exists.
+Review `deploy/aws/deployment-access.template.json`. It attaches scoped deployment policies to the existing `AgentGatewayDev` role and creates the workload boundary and demo-deployment role. It creates no application compute or databases. **Attach deployment permissions to the role, not just the source IAM user.**
+
+Choose one method:
+
+- **Console:** In CloudFormation, Paris (`eu-west-3`), create `agent-gateway-access-dev` by uploading the template. If that stack already exists, choose **Update stack → Create a change set → Replace existing template → Upload a template file** instead. Keep `DeploymentRole=AgentGatewayDev`, `ApplicationStack=agent-gateway-dev`, and `ArtifactStack=agent-gateway-artifacts-dev` for the default setup. Review the changes, acknowledge named IAM resources, and execute the change set.
+- **CLI:** Use a separately authenticated administrator profile. After configuring step 4, run:
 
 ```bash
-make aws-access-deploy
-make aws-access-outputs
+make aws-access-deploy AWS_ADMIN_PROFILE=YOUR_ADMIN_PROFILE
+make aws-access-outputs AWS_ADMIN_PROFILE=YOUR_ADMIN_PROFILE
 ```
 
-The first command uses only the explicit `AWS_ADMIN_PROFILE`, checks its account matches `AWS_ACCOUNT`, acknowledges the template's named IAM resources, and waits for completion. **Expected:** successful stack creation/update, followed by outputs including **WorkloadBoundaryArn** and **DemoDeploymentRoleArn**.
+The CLI command executes the change set and waits. **Expected:** `CREATE_COMPLETE` or `UPDATE_COMPLETE`. For Console setup, read the same values from the stack's **Outputs** tab.
 
-Copy the complete **WorkloadBoundaryArn** value into `WORKLOAD_BOUNDARY_ARN` in `aws-config.mk`. Verify DemoDeploymentRoleArn matches `arn:aws:iam::YOUR_ACCOUNT:role/YOUR_APPLICATION_STACK-demo-deployer`; Make derives that value for deployment. The ARN identifiers are not secrets. Return to the non-root application profile for step 6.
+Copy **WorkloadBoundaryArn** into `WORKLOAD_BOUNDARY_ARN` in `aws-config.mk`. Check **DemoDeploymentRoleArn** matches `arn:aws:iam::YOUR_ACCOUNT:role/YOUR_APPLICATION_STACK-demo-deployer`; Make derives this identifier automatically. Keep `AWS_PROFILE=agent-gateway-dev` for application deployment. Do not set `AWS_ADMIN_PROFILE` to the restricted deployment role.
 
-If IAM access is denied, ask the administrator to review the missing action/trust; do not attach AdministratorAccess to the application role. Removing the access stack while workload roles remain can make them unusable, so access cleanup is last.
+### Existing stack or AccessDenied?
+
+Pulling a newer template does **not** update live IAM policies. Repeat the administrator update above after permission changes; recreating the application will not repair the access stack.
+
+With your configured account/stack values, check the deployment profile:
+
+```bash
+aws sts get-caller-identity --profile agent-gateway-dev
+aws iam get-policy --profile agent-gateway-dev --policy-arn YOUR_WORKLOAD_BOUNDARY_ARN
+aws iam get-policy-version --profile agent-gateway-dev --policy-arn YOUR_WORKLOAD_BOUNDARY_ARN --version-id VERSION_FROM_GET_POLICY
+aws cloudformation describe-events --profile agent-gateway-dev --region eu-west-3 --stack-name agent-gateway-dev --filters FailedEvents=true
+```
+
+Use `DefaultVersionId` from `get-policy` for the version. The event check applies after an application stack/change set exists. A missing-stack error differs from `AccessDenied`.
+
+If early validation reports `AWS::EarlyValidation::ResourceExistenceCheck`, inspect these events before retrying. The current template grants `cloudformation:DescribeEvents` and read-only `iam:GetPolicy` / `iam:GetPolicyVersion` on the exact workload boundary. An administrator must apply it to make those grants live. Do not give the deployer permission to edit its own policies or attach AdministratorAccess. Remove the access stack only after workload cleanup.
 
 ## 6. Deploy the application (creates billable AWS resources)
 
@@ -269,8 +255,3 @@ bodies. The source CLI reads `dist/aws-lambda/plan/secrets.json` for demo deploy
 (`--secrets-file` overrides the path); retain that private local file for updates.
 A rebuilt web image is required for this parameter-based provisioning path.
 
-For an existing access stack, an administrator must **update** it from the current
-`deploy/aws/deployment-access.template.json`. The update adds CloudFormation event
-and change-set inspection and read-only `iam:GetPolicy` / `iam:GetPolicyVersion`
-access to the exact workload boundary. Recreating the application does not refresh
-the deployment role's policies.
