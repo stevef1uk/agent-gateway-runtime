@@ -48,8 +48,8 @@ RELEASE_MANIFEST = releases/current.json
 
 # Existing local activation material compatible with the published images.
 # Create keys/ directory and place your customer private key and licence .token files there.
-CUSTOMER_KEY_FILE = keys/customer_private.pem
-LICENCE_DIR = keys/licences
+CUSTOMER_KEY_FILE = keys/local-activation/customer_private.pem
+LICENCE_DIR = keys/local-activation/licences
 
 # Choose a unique lowercase Cognito domain prefix.
 # Must be globally unique across all of AWS. Format: your-org-name-random-suffix

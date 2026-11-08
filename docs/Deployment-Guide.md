@@ -71,7 +71,7 @@ make aws-release-check
 
 **Expected:** `Valid AWS release: ... (four encrypted product images + Emotion wrapper)`. If the manifest is stale or invalid, obtain a current release from the vendor.
 
-Obtain a genuine customer private key and four signed service licences from the vendor, even for evaluation. Example or placeholder files cannot start the encrypted images. Keep activation files out of Git. The script uploads the customer key and signed service licences to your private versioned S3 bucket; only object identifiers/versions go into CloudFormation parameters. Never supply a vendor signing private key. These product licences are separate from Emotion's native licence: an optional purchased Emotion token is not required to deploy or test gateway approval/error forwarding.
+Obtain a genuine customer private key and four signed service licences from the vendor, even for evaluation. Place the key at `keys/local-activation/customer_private.pem` and the four `.token` files under `keys/local-activation/licences/` (the configuration defaults). This directory is Git-ignored. Existing tracked key/token examples are placeholders; leave them unchanged. Example or placeholder files cannot start the encrypted images. Keep activation files out of Git. The script uploads the customer key and signed service licences to your private versioned S3 bucket; only object identifiers/versions go into CloudFormation parameters. Never supply a vendor signing private key. These product licences are separate from Emotion's native licence: an optional purchased Emotion token is not required to deploy or test gateway approval/error forwarding.
 
 ## 4. Create your local configuration
 
