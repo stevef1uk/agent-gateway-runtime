@@ -204,7 +204,7 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup, including read-only validation of the exact workload boundary. Regional read-only event discovery is separate because the stack-scoped grant did not authorize diagnostic requests.",
+          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup, including read-only validation of the exact workload boundary. Regional read-only event discovery is separate because the stack-scoped grant did not authorize diagnostic requests. HTTP API stage provisioning requires explicit API Gateway tag actions in addition to HTTP method permissions.",
           "must": [
             "Administrator reviews and applies this stack separately.",
             "No ability to edit this policy, the workload boundary, or the developer role.",
@@ -384,7 +384,9 @@
                 "apigateway:POST",
                 "apigateway:PUT",
                 "apigateway:PATCH",
-                "apigateway:DELETE"
+                "apigateway:DELETE",
+                "apigateway:TagResource",
+                "apigateway:UntagResource"
               ],
               "Resource": [
                 {
@@ -782,7 +784,7 @@
       "Type": "AWS::IAM::Role",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "CloudFormation provisions wizard child PEP/backend stacks without giving web direct Lambda/IAM mutation permissions. Regional index-policy discovery is required by CloudFormation log-group validation and cannot be scoped to a log-group ARN.",
+          "why": "CloudFormation provisions wizard child PEP/backend stacks without giving web direct Lambda/IAM mutation permissions. Regional index-policy discovery is required by CloudFormation log-group validation and cannot be scoped to a log-group ARN. HTTP API stage provisioning requires explicit API Gateway tag actions in addition to HTTP method permissions.",
           "must": [
             "Only demo-prefixed functions/logs and regional HTTP APIs.",
             "Pass only existing application GatewayRole and EmotionBackendRole to Lambda.",
@@ -864,7 +866,9 @@
                     "apigateway:POST",
                     "apigateway:PUT",
                     "apigateway:PATCH",
-                    "apigateway:DELETE"
+                    "apigateway:DELETE",
+                    "apigateway:TagResource",
+                    "apigateway:UntagResource"
                   ],
                   "Resource": [
                     {
