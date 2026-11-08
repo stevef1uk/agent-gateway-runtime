@@ -20,83 +20,242 @@ If already cloned, use your existing checkout on `aws` and pull the latest chang
 
 The supported scripted region is **Paris (`eu-west-3`)**. Keep that value for this workflow. Templates and bounded access policies are not a generic multi-region installer.
 
-## 2. Arrange AWS profiles with your administrator
+## 2. Arrange AWS profiles — step by step
 
-**This is the most common source of errors.** You need two distinct CLI profiles:
+Answer **one question** to choose your path:
 
-### 1. Deployer profile (`AWS_PROFILE`)
-- Your existing non-root profile that assumes the deployment role
-- Used for: `make aws-deploy`, running demos, accessing the console
-- Example: `agent-gateway-dev` (already configured; confirmed by `make aws-identity`)
-- **Does NOT** need CloudFormation stack-create or IAM attach-policy permissions
+### Q: Do you have root access to the AWS account (can you sign in as root, or does your CLI profile have AdministratorAccess)?
 
-### 2. Administrator profile (`AWS_ADMIN_PROFILE`)
-- A **separate** profile with IAM and CloudFormation permissions
-- Used ONLY for: `make aws-access-deploy` and `make aws-access-outputs`
-- **Must have these IAM actions:**
-  - `cloudformation:CreateStack`, `cloudformation:UpdateStack`, `cloudformation:DescribeStacks`
-  - `iam:AttachRolePolicy`, `iam:PutRolePolicy`, `iam:DeleteRolePolicy`
-  - `s3:CreateBucket`, `s3:PutObject`, `s3:GetBucket*`, `s3:DeleteBucket` (for activation storage)
-  - `cloudformation:ValidateTemplate`, `secretsmanager:GetRandomPassword`
-- **Do NOT** use the deployer profile as the admin profile, and do NOT attach `AdministratorAccess` to the application role.
-- Example profile in `~/.aws/credentials`:
-  ```ini
-  [admin-gateway-dev]
-  source_profile = your-personal-profile
-  # or with assumed role:
-  # role_arn = arn:aws:iam::857710215813:role/AgentGatewayDev
-  # source_profile = your-personal-profile
-  ```
+--- PATH 1: YES — you have root access (one profile, simplest) ---
 
-### How to configure:
+If you have root access or AdministratorAccess, you can deploy everything with **one CLI profile**. Root can create all the resources the guide needs.
 
-**Step A: Create the admin profile**
-Add a new section to `~/.aws/credentials` (or your preferred AWS config location):
+**1. Set your CLI profile** (in `~/.aws/credentials` or exported):
 
 ```ini
-[admin-gateway-dev]
-source_profile = AGENT_GATEWAY_PERSONAL_PROFILE
+[agent-gateway-dev]
+role_arn = arn:aws:iam::YOUR_ACCOUNT_ID:role/AgentGatewayDev
+source_profile = root     # Or your personal profile with broad permissions
 ```
 
-**OR** if using a role directly:
+Or simply use a profile that already has AdministratorAccess.
+
+**2. Set `aws-config.mk`** — fill these values (replace `YOUR_ACCOUNT_ID`):
+
+```makefile
+AWS_REGION = eu-west-3
+AWS_PROFILE = agent-gateway-dev
+AWS_ACCOUNT = YOUR_ACCOUNT_ID    # e.g. 857710215813
+AWS_DEPLOYMENT_ROLE_NAME = AgentGatewayDev
+AWS_ADMIN_PROFILE = agent-gateway-dev   # Same as deployer — OK with root
+AWS_STACK = agent-gateway-dev
+AWS_ARTIFACT_STACK = agent-gateway-artifacts-dev
+AWS_ACCESS_STACK = agent-gateway-access-dev
+RELEASE_MANIFEST = releases/current.json
+CUSTOMER_KEY_FILE = keys/customer_private.pem
+LICENCE_DIR = keys/licences
+DOMAIN_PREFIX = agent-gateway-demo
+ADMIN_EMAILS = admin@example.com
+```
+
+**3. Run the workflow** — no separate admin profile needed:
+
+```bash
+make aws-identity          # Confirms your account/role
+make aws-preflight         # Checks manifest, config, licences (local)
+make aws-access-deploy     # Root: creates IAM policies + bounded role
+make aws-deploy            # Deploys the application
+make aws-outputs           # Prints ConsoleURL, GatewayURL, etc.
+```
+
+**Why this works:** Root (or AdministratorAccess) can create IAM roles, CloudFormation stacks, S3 buckets, and all other resources the guide needs. You don't need the two-profile separation unless your organization requires it.
+
+---
+
+--- PATH 2: NO — you do NOT have root access (two-profile design) ---
+
+You have a non-root IAM role (e.g. `AgentGatewayDev`) and need **two** CLI profiles. This is common in corporate environments where root is tightly controlled.
+
+**You need two things already in place:**
+1. A **non-root IAM role** already created in your AWS account (e.g. `AgentGatewayDev`)
+2. An **administrator profile** with specific IAM/CloudFormation permissions
+
+**1. Set your deployer profile** (you already have this — confirmed by `make aws-identity`):
+
+```ini
+# in ~/.aws/credentials
+[agent-gateway-dev]
+role_arn = arn:aws:iam::857710215813:role/AgentGatewayDev
+source_profile = YOUR_PERSONAL_PROFILE
+```
+
+**2. Set your admin profile** — add to `~/.aws/credentials`:
+
+**Option A: Using a role ARN** (recommended, no personal credentials for the admin profile):
 
 ```ini
 [admin-gateway-dev]
 role_arn = arn:aws:iam::857710215813:role/AgentGatewayDev
-source_profile = AGENT_GATEWAY_PERSONAL_PROFILE
+source_profile = YOUR_PERSONAL_PROFILE
 ```
 
-**Step B: Set `AWS_ADMIN_PROFILE` in `aws-config.mk`**
+This profile, when used, assumes `AgentGatewayDev` in your account. It needs the IAM actions below attached to that role.
+
+**Option B: Using source_profile** (if the admin has their own IAM user):
+
+```ini
+[admin-gateway-dev]
+source_profile = admin-personal-profile
+```
+
+This inherits permissions from `admin-personal-profile`, which must have the required IAM/CloudFormation actions.
+
+**3. Set `aws-config.mk`**:
+
 ```makefile
-AWS_ADMIN_PROFILE = admin-gateway-dev
+AWS_PROFILE = agent-gateway-dev          # Your deployer profile (already works)
+AWS_ADMIN_PROFILE = admin-gateway-dev    # Separate admin profile
+AWS_ACCOUNT = 857710215813               # Your account (from make aws-identity)
 ```
 
-**Step C: Verify account match**
-The admin profile's account (via `aws sts get-caller-identity`) must match `AWS_ACCOUNT` in your config (default: your account, not the vendor's).
+**4. Attach IAM policies to `AgentGatewayDev` role** (required before `make aws-access-deploy`):
 
-**Step C: Run the admin commands**
+The `make aws-access-deploy` command requires the `AgentGatewayDev` role to have two inline policies attached. Choose **ONE** of these three options:
+
+**Option 1: AWS Console (recommended — visual, no CLI)**
+
+1. Go to **IAM → Roles** in the AWS Console
+2. Find and select **`AgentGatewayDev`** (account 857710215813)
+3. Click **Add permissions** → **Attach policies directly**
+4. Add this inline policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:ValidateTemplate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:PutObject",
+        "s3:GetBucketLocation",
+        "s3:DeleteBucket"
+      ],
+      "Resource": "arn:aws:s3:::agent-gateway-artifacts-dev-*"
+    }
+  ]
+}
+```
+
+5. Click **Next: Review**, then **Add permissions**
+
+6. Run: `make aws-access-deploy`
+
+---
+
+**Option 2: AWS CLI** (if you have root/Admin credentials)
+
+1. `aws configure` (with root/Admin keys)
+2. Run these commands:
+
 ```bash
-make aws-access-deploy    # Admin: creates IAM policies + bounded deployment role
-make aws-access-outputs   # Admin: reads back WorkloadBoundaryArn etc.
+# a. Attach CloudFormation policy:
+aws iam put-role-policy   --role-name AgentGatewayDev   --policy-name AgentGateway-CF-Policy   --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "cloudformation:CreateStack",
+          "cloudformation:UpdateStack",
+          "cloudformation:DescribeStacks",
+          "cloudformation:ValidateTemplate"
+        ],
+        "Resource": "*"
+      }
+    ]
+  }'
+
+# b. Attach S3/Artifacts policy:
+aws iam put-role-policy   --role-name AgentGatewayDev   --policy-name AgentGateway-S3-Artifacts-Policy   --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "s3:CreateBucket",
+          "s3:PutObject",
+          "s3:GetBucketLocation",
+          "s3:DeleteBucket"
+        ],
+        "Resource": "arn:aws:s3:::agent-gateway-artifacts-dev-*"
+      }
+    ]
+  }'
+
+# c. Verify:
+aws iam list-role-policies --role-name AgentGatewayDev
+# Should show: AGENTGATEWAY-CF-POLICY, AGENTGATE-S3-ARTIFACTS-POLICY
 ```
 
-**Why two profiles?**
-- The deployer profile runs the application deployment (`make aws-deploy`) with bounded access
-- The administrator profile applies the access boundary separately (step 5), then cleanup is done later
-- This separation follows the principle of least privilege: the application role never has AdministratorAccess
+**d. Run the deployment:**
 
-**Your current setup** (from `make aws-identity`):
+```bash
+make aws-access-deploy
+```
+
+---
+
+**Option 3: Single script** (automation)
+
+```bash
+bash /Users/stevef/dev/agent-gateway-runtime/scripts/aws-attach-policies.sh
+```
+
+⚠️ **This script requires** your AWS CLI configured with root/Admin credentials. It will:
+1. Attach both IAM policies to `AgentGatewayDev`
+2. Run `make aws-access-deploy`
+
+**To use:** `aws configure` with root keys → run script → optionally reconfigure CLI back to your non-root profile.
+
+---
+
+**5. Continue the workflow** (after policies are attached):
+
+```bash
+make aws-access-outputs    # Copy WorkloadBoundaryArn into aws-config.mk
+make aws-deploy            # Deploy the application
+make aws-outputs           # Print ConsoleURL, GatewayURL, etc.
+```
+
+---
+
+### Summary — which path should you choose?
+
+| Your situation | Use this path |
+|---|---|
+| Have root access or AdministratorAccess | **PATH 1** — one profile, skip admin separation |
+| Have non-root role only (corporate env) | **PATH 2** — two profiles, attach policies via Console/CLI/Script |
+| Can use AWS Console easily | **Option 1** (Console) |
+| Have root CLI credentials | **Option 2** (CLI) |
+| Want single-command automation | **Option 3** (Script) |
+
+---
+
+**Your current status** (from `make aws-identity`):
 - Account: `857710215813`
-- Deployer profile: `agent-gateway-dev` (assumes `AgentGatewayDev` role)
-- **Missing:** `AWS_ADMIN_PROFILE` set in `aws-config.mk` with a profile that has CloudFormation/IAM permissions
-
-**After setting up the admin profile:**
-```bash
-make aws-access-deploy    # Creates the access boundary stack
-make aws-access-outputs   # Reads back WorkloadBoundaryArn, etc.
-```
-
-## 3. Obtain the current release and activation files
+- Profile: `agent-gateway-dev` (assumes `AgentGatewayDev` role)
+- **Next:** Choose a path above and attach the required IAM policies, then run `make aws-access-deploy`## 3. Obtain the current release and activation files
 
 The `releases/current.json` vendor manifest is included in this repository's `aws` branch. If you cloned on `aws`, it is already present:
 
