@@ -443,7 +443,7 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup.",
+          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup. Regional index-policy discovery is required by CloudFormation log-group validation and cannot be scoped to a log-group ARN.",
           "must": [
             "Administrator reviews and applies this stack separately.",
             "No ability to edit this policy, the workload boundary, or the developer role.",
@@ -723,7 +723,8 @@
                 "logs:GetLogDelivery",
                 "logs:UpdateLogDelivery",
                 "logs:DeleteLogDelivery",
-                "logs:ListLogDeliveries"
+                "logs:ListLogDeliveries",
+                "logs:DescribeIndexPolicies"
               ],
               "Resource": "*",
               "Condition": {
@@ -769,7 +770,7 @@
       "Type": "AWS::IAM::Role",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "CloudFormation provisions wizard child PEP/backend stacks without giving web direct Lambda/IAM mutation permissions.",
+          "why": "CloudFormation provisions wizard child PEP/backend stacks without giving web direct Lambda/IAM mutation permissions. Regional index-policy discovery is required by CloudFormation log-group validation and cannot be scoped to a log-group ARN.",
           "must": [
             "Only demo-prefixed functions/logs and regional HTTP APIs.",
             "Pass only existing application GatewayRole and EmotionBackendRole to Lambda.",
@@ -904,7 +905,8 @@
                   "Sid": "DiscoverLogGroupsInDeploymentRegion",
                   "Effect": "Allow",
                   "Action": [
-                    "logs:DescribeLogGroups"
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeIndexPolicies"
                   ],
                   "Resource": "*",
                   "Condition": {

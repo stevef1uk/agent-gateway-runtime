@@ -161,6 +161,10 @@ These copyable checks use the default profile and stack names from this guide. I
 
 The event check applies after an application stack/change set exists. A missing-stack error differs from `AccessDenied`. These checks read configuration only; they do not grant permissions.
 
+If early validation reports `AWS::EarlyValidation::ResourceExistenceCheck`, open the failed change set's **Deployment validations** tab in the administrator Console if CLI event access is denied. `logs:DescribeIndexPolicies` is a required read-only discovery permission; the access template grants it with regional scope because AWS does not support log-group resource scoping for that action.
+
+Deleting a stack does not delete resources marked `Retain`. Existing `agent-gateway-dev-domain` / `agent-gateway-dev-security` tables and named log groups will conflict with a fresh create. Preserve their data: import the retained resources into the replacement stack before deploying the rest, or deliberately choose a separate deployment name and access configuration. Do not delete tables merely to clear validation errors.
+
 If early validation reports `AWS::EarlyValidation::ResourceExistenceCheck`, inspect these events before retrying. The current template grants `cloudformation:DescribeEvents` and read-only `iam:GetPolicy` / `iam:GetPolicyVersion` on the exact workload boundary. An administrator must apply it to make those grants live. Do not give the deployer permission to edit its own policies or attach AdministratorAccess. Remove the access stack only after workload cleanup.
 
 ## 6. Deploy the application (creates billable AWS resources)
