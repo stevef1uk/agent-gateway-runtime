@@ -23,7 +23,7 @@ For the numbered main-branch demos (purchasing, OPA, OpenClaw/OpenShell, invoice
 
 ## Provision API/MCP demos
 
-Open your deployed console, sign in, select the desired preset in the AI Wizard, click **Generate Configuration (Bedrock)**, review the generated configuration and choose **Deploy Demo & Create Delegation**. Wait for the demo deployment to succeed before running a client. The parent installation must already include the deployment role and image configuration supplied by its owner.
+Open your deployed console and sign in. For the documented API/MCP presets, open **Protected APIs & MCP Servers**, click **AI Config Assistant (Freeride)**, select the desired preset (for example **Users REST API**), and click **Ask Freeride AI to Generate**. Review the generated configuration, then choose **Open in 5-Step Wizard to Customize** or deploy directly if offered, followed by **Deploy Demo & Create Delegation**. This is different from the separate **Delegation Wizard**, which does not list every guided AWS preset. Wait for the demo deployment to succeed before running a client. The parent installation must already include the deployment role and image configuration supplied by its owner.
 
 After changing presets, generate a fresh configuration before deploying. Selecting a preset alone only fills the prompt. Weather and Geocoding need no paid Emotion licence or proxy VM.
 
@@ -72,7 +72,7 @@ unset AGENT_TOKEN
 make aws-demo DEMO=users
 ```
 
-The script asks privately for the **agent token from your Users delegation**. Create/review that delegation in the signed-in console first, allowing read access to `/api-users/users*`, and mint/copy its agent token. Do not supply AWS access keys, the Cognito sign-in token, or a token for another demo. `unset AGENT_TOKEN` makes the client prompt rather than reuse a token left in your shell.
+The script asks privately for the **agent token from your Users delegation**. Create/review that delegation in the signed-in console first, allowing read access to `/api-users/users*`, and mint/copy its agent token. Paste that token at the `Agent token:` prompt and press Enter; the terminal intentionally does not echo it. Do not supply AWS access keys, your Cognito password or sign-in token, Alice/Bob development-user data, or a token for another demo. `unset AGENT_TOKEN` makes the client prompt rather than reuse a token left in your shell.
 
 If AWS reports that the stack does not exist, deploy that demo using the Wizard, and wait for success. If AWS reports AccessDenied or an expired session, resolve access for the selected profile; this lookup does not grant permissions or create resources. A missing GatewayURL after creation means deployment needs inspection before testing.
 

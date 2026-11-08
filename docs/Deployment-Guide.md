@@ -220,7 +220,7 @@ For an existing hosted deployment, get ConsoleURL and the invitation from its ow
 
 ## 9. Create the Users demo and its delegation
 
-In the AI Wizard select **Users**, review the public JSONPlaceholder upstream, permit read access to `/api-users/users*`, and choose **Deploy Demo & Create Delegation**. Wait for successful demo deployment. Mint/copy an agent token for that delegation using the console's token controls. Keep it private.
+In the signed-in console, open **Protected APIs & MCP Servers**, then click **AI Config Assistant (Freeride)**. Select the **Users REST API** preset, click **Ask Freeride AI to Generate**, review the generated configuration, and choose **Open in 5-Step Wizard to Customize** (or deploy directly if offered). This is the AI Config Assistant, not the separate **Delegation Wizard**. Review the public JSONPlaceholder upstream, permit read access to `/api-users/users*`, and choose **Deploy Demo & Create Delegation**. Wait for successful demo deployment. Mint/copy an agent token for that Users delegation using the console's token controls. Keep it private.
 
 From this runtime checkout:
 
@@ -231,7 +231,7 @@ unset AGENT_TOKEN
 make aws-demo DEMO=users
 ```
 
-The first command prints the complete child URL; the export uses that exact value. The client privately prompts for the **Users agent token**. **Expected:** `PASS users access: HTTP 200`.
+The first command prints the complete child URL; the export uses that exact value. When the client prompts for `Agent token:`, paste the token minted in the console for the **Users REST API delegation** and press Enter. The terminal does not display the token while it is entered. Do not use your Cognito password, AWS access keys, AWS session token, or Alice/Bob development-user data. **Expected:** `PASS users access: HTTP 200`.
 
 The child is `AWS_STACK-demo-api-users`; a missing-stack error means Users has not been deployed under your selected account/region/name. AccessDenied/expired-session errors need profile inspection/sign-in fixes. You can also copy the child's **GatewayURL** from CloudFormation **Outputs**. Without AWS inspection access, ask the operator for that complete URL and enter it:
 
