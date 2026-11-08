@@ -38,15 +38,66 @@ Alternatively, use **Deploy Demo & Create Delegation** in the AI Wizard. CLI pro
 
 ## Run API/MCP probes
 
-From **agent-gateway-runtime**, set `GATEWAY_URL` to that demo's public **GatewayURL** from `make aws-demo-list` or the child stack outputs. Use the HTTPS execute-api origin without a path. The runner prompts privately for the agent token if `AGENT_TOKEN` is absent.
+From **agent-gateway-runtime** on branch `aws`, first retrieve the selected child demo's complete public **GatewayURL**. Each demo has a different API Gateway ID. Copy the whole URL; do not construct it by editing an API ID, use the console URL, append a route, or reuse another demo's URL.
+
+### Find the URL with Make (recommended)
+
+Prerequisites: AWS CLI authenticated with permission to describe the selected child stack, plus that demo already deployed successfully. Defaults are profile `agent-gateway-dev`, region `eu-west-3`, parent stack `agent-gateway-dev`.
 
 ```bash
-export GATEWAY_URL='https://REPLACE.execute-api.eu-west-3.amazonaws.com'
-make aws-demo DEMO=weather
-make aws-demo DEMO=geocoding
+# Print the actual Users endpoint (read-only; does not deploy anything).
+make -s aws-demo-url DEMO=users
+# Capture the same complete URL for the client.
+export GATEWAY_URL="$(make -s aws-demo-url DEMO=users)"
+unset AGENT_TOKEN
 make aws-demo DEMO=users
+```
+
+The script asks privately for the **agent token from your Users delegation**. Create/review that delegation in the signed-in console first, allowing read access to `/api-users/users*`, and mint/copy its agent token. Do not supply AWS access keys, the Cognito sign-in token, or a token for another demo. `unset AGENT_TOKEN` makes the client prompt rather than reuse a token left in your shell.
+
+If AWS reports that the stack does not exist, deploy that demo using the Wizard or the source repository's `make aws-demo-deploy DEMO=users`, and wait for success. If AWS reports AccessDenied or an expired session, resolve access for the selected profile; this lookup does not grant permissions or create resources. A missing GatewayURL after creation means deployment needs inspection before testing.
+
+For another environment, apply the same settings to every lookup:
+
+```bash
+export AWS_PROFILE=your-profile AWS_REGION=your-region AWS_STACK=your-parent-stack
+make -s aws-demo-url DEMO=users
+```
+
+### Find the URL in the AWS console
+
+Open **CloudFormation** in the deployment region, select the child stack, open **Outputs**, and copy the value beside **GatewayURL**. With the default parent name, the stacks are:
+
+| Demo | Child stack |
+|---|---|
+| Users | `agent-gateway-dev-demo-api-users` |
+| Weather | `agent-gateway-dev-demo-api-weather` |
+| Geocoding | `agent-gateway-dev-demo-api-geocoding` |
+| Refunds | `agent-gateway-dev-demo-api-refunds` |
+| Emotion | `agent-gateway-dev-demo-mcp-emotion` |
+
+For a different parent name or service slug, use the stack listed by `make aws-demo-list` in the source repository. Its JSON field `gateway_url` is the same URL. Select a completed child deployment, rather than the parent's baseline gateway or public web console.
+
+### Switch demos explicitly
+
+Retrieve the URL again and use the matching delegation token each time:
+
+```bash
+export GATEWAY_URL="$(make -s aws-demo-url DEMO=weather)"
+unset AGENT_TOKEN
+make aws-demo DEMO=weather
+
+export GATEWAY_URL="$(make -s aws-demo-url DEMO=geocoding)"
+unset AGENT_TOKEN
+make aws-demo DEMO=geocoding
+
+export GATEWAY_URL="$(make -s aws-demo-url DEMO=refunds)"
+unset AGENT_TOKEN
 make aws-demo DEMO=refunds
-make aws-demo DEMO=emotion
+
+export GATEWAY_URL="$(make -s aws-demo-url DEMO=emotion)"
+unset AGENT_TOKEN
+make aws-demo DEMO=emotion PHASE=access
 ```
 
 Run each command against its own demo URL and matching delegation. Default paths are `/api-weather/v1/forecast`, `/api-geocoding/v1/search`, `/api-users/users/1`, `/api-refunds/posts` and `/mcp-emotion`. Refunds sends a simulated amount of 25 and expects HTTP 201 from JSONPlaceholder; choose approval rules to match the phase you run. The runner fails on unexpected statuses rather than treating all responses as success.
