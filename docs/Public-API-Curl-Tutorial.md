@@ -1,11 +1,12 @@
 # AWS Weather Demo Walkthrough: Console, Playwright & cURL
 
-> Recovery status (8 November 2026): console build **1.0.93** is repaired in source and still requires a new encrypted image release and live acceptance testing. Endpoint identifiers below are recorded deployment values; confirm current CloudFormation outputs before using them.
+Endpoint examples use placeholders: replace them with your CloudFormation `ConsoleURL` and `GatewayURL` outputs.
+
 
 This walkthrough demonstrates the **Agent Gateway AWS Serverless Edition** governing access to `https://api.open-meteo.com` through the live stack in **Paris (`eu-west-3`)**:
 
-- **ConsoleURL (`WebAPI`)**: `https://0b7565mq7j.execute-api.eu-west-3.amazonaws.com`
-- **GatewayURL (`GatewayAPI`)**: `https://p2ye0fbw36.execute-api.eu-west-3.amazonaws.com`
+- **ConsoleURL (`WebAPI`)**: `https://CONSOLE_API_ID.execute-api.eu-west-3.amazonaws.com`
+- **GatewayURL (`GatewayAPI`)**: `https://GATEWAY_API_ID.execute-api.eu-west-3.amazonaws.com`
 
 You do **not** need to open Chrome DevTools or paste JavaScript snippets. Choose any of the three workflows below.
 
@@ -14,7 +15,7 @@ You do **not** need to open Chrome DevTools or paste JavaScript snippets. Choose
 ## Workflow 1: Interactive Web Console (Recommended First Test)
 
 1. **Sign In via Cognito**:
-   - Open `https://0b7565mq7j.execute-api.eu-west-3.amazonaws.com` and click **Sign in with Cognito**.
+   - Open `https://CONSOLE_API_ID.execute-api.eu-west-3.amazonaws.com` and click **Sign in with Cognito**.
 2. **Create One or More Delegations**:
    - Click **`🌤️ Quick Weather Delegation`** in the **Delegations** section to create the `aws-weather-test` delegation (`read` on `/v1/forecast` and `/v1/elevation`, with human approval required for `/v1/elevation`) and load its Bearer token into the **Interactive Endpoint Tester**.
    - **Create additional delegations anytime**:
@@ -43,7 +44,7 @@ bash demo/run-aws-weather-demo.sh
 ```
 
 1. **Step 1 (`create-delegation`)**: Opens Chrome (`scripts/playwright_weather_demo.js`) using a persistent profile `/tmp/agw-weather-playwright-profile`. If you are not signed in yet, sign in via Cognito in the opened Chrome window; Playwright automatically detects the signed-in session, creates the `aws-weather-test` delegation, and captures `AGENT_TOKEN` in memory.
-2. **Step 2 (`access` probes)**: Runs `bash demo/public-weather-tutorial.sh access` against `https://p2ye0fbw36.execute-api.eu-west-3.amazonaws.com` and captures the held `APPROVAL_ID`:
+2. **Step 2 (`access` probes)**: Runs `bash demo/public-weather-tutorial.sh access` against `https://GATEWAY_API_ID.execute-api.eu-west-3.amazonaws.com` and captures the held `APPROVAL_ID`:
    - `PASS no-token: HTTP 401`
    - `PASS forecast: HTTP 200`
    - `PASS post-denied: HTTP 403`
@@ -63,7 +64,7 @@ bash demo/run-aws-weather-demo.sh
 If you want to run the shell probes manually using a Bearer token copied from the Console's Endpoint Tester (`Copy Token` button):
 
 ```sh
-export GATEWAY_URL='https://p2ye0fbw36.execute-api.eu-west-3.amazonaws.com'
+export GATEWAY_URL='https://GATEWAY_API_ID.execute-api.eu-west-3.amazonaws.com'
 read -r -s -p 'Agent token: ' AGENT_TOKEN; printf '\n'
 export AGENT_TOKEN
 
@@ -88,3 +89,7 @@ unset AGENT_TOKEN GATEWAY_URL
 - **Unexpected `403 Forbidden`**: Verify the delegation covers `/v1/forecast` and `/v1/elevation` with `read` action and has not been revoked.
 
 [Weather data by Open-Meteo.com](https://open-meteo.com/).
+
+## Additional AWS demos and optional proxy
+
+See [AWS demos and proxy prerequisites](AWS-Demos.md). API/MCP Lambda demos do not require the proxy VM; forward-proxy clients require the VM and an open SSM tunnel. Backend/OAuth dependencies are separate. The [source Make workflow](../../agent-gateway/docs/aws/make-workflow.md) describes build/deploy/cleanup.

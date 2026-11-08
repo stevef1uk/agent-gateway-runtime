@@ -1,6 +1,5 @@
 # Self-Hosting Agent Gateway on AWS
 
-> Recovery status (8 November 2026): console build **1.0.93** is repaired in source and still requires a new encrypted image release and live acceptance testing. Endpoint identifiers below are recorded deployment values; confirm current CloudFormation outputs before using them.
 
 This guide explains what is required to deploy the **Agent Gateway AWS Serverless Edition** into your own AWS account, matching the reference deployment in **Paris (`eu-west-3`)**.
 
@@ -56,3 +55,7 @@ In an authorized checkout with the release templates and scripts:
    - Open `ConsoleURL`, sign in via Cognito, and test `/v1/forecast` (`200 OK`), `/v1/elevation` (`202 Held` -> Approve -> `200 OK`), and revocation (`403 Forbidden`) using either the Console's **Interactive Endpoint Tester** or `bash demo/run-aws-weather-demo.sh`.
 4. **Cleanup / Teardown**:
    - Use [Teardown.md](Teardown.md) (`scripts/teardown-aws-deployment.py`) when finished to remove the stacks and choose whether to retain or permanently purge DynamoDB tables, Cognito users, Secrets Manager secrets, CloudWatch logs, and S3 versions.
+
+## Additional AWS demos and optional proxy
+
+See [AWS demos and proxy prerequisites](AWS-Demos.md). API/MCP Lambda demos do not require the proxy VM; forward-proxy clients require the VM and an open SSM tunnel. Backend/OAuth dependencies are separate. The [source Make workflow](../../agent-gateway/docs/aws/make-workflow.md) describes build/deploy/cleanup.
