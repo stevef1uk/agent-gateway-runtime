@@ -202,7 +202,19 @@ This read-only command prints the stack status and short, labelled **Console**, 
 
 ## 8. Open your console and sign in
 
-Use your emailed Cognito invitation and configured email address. Choose Cognito sign-in and complete the temporary-password/reset flow as prompted. If no invitation arrives, check spam and ask the deployment owner to inspect/resend it for the correct pool/email. Do not use a local-demo password or AWS access key as a login.
+Use your emailed Cognito invitation and configured email address. Choose Cognito sign-in, enter the invitation's temporary password, then set your own password when prompted. The initial account status is `FORCE_CHANGE_PASSWORD`; use the invitation flow to finish setup. **Forgot password is not a replacement for a missing first invitation.** Do not use a local-demo password or AWS access key as a login.
+
+If the invitation is missing or expired, check spam, then the deployment operator can request a fresh invitation with these commands (default deployment profile/region):
+
+```bash
+source dist/aws-lambda/plan/deployment-outputs.env
+aws cognito-idp admin-create-user --profile agent-gateway-dev --region eu-west-3 \
+  --user-pool-id "$USER_POOL_ID" --username "$OPERATOR_EMAIL" \
+  --message-action RESEND --desired-delivery-mediums EMAIL \
+  --query 'User.UserStatus' --output text
+```
+
+Use the **newest** invitation's temporary password. A successful API response means Cognito accepted the resend; it does not confirm delivery to your inbox. For a confirmed account that has already completed setup, use **Forgot password** instead. See [AWS administrator-created account guidance](https://docs.aws.amazon.com/cognito/latest/developerguide/how-to-create-user-accounts.html).
 
 For an existing hosted deployment, get ConsoleURL and the invitation from its owner; skip all provisioning steps above.
 
