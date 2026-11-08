@@ -8,6 +8,8 @@ Revoke disposable delegations, clear exported agent tokens, and sign out. Ask th
 
 Run from your runtime `aws` checkout with the same `aws-config.mk` used to deploy. Stop generating calls and stop others from provisioning new demos while cleanup runs. Keep the local `dist/aws-lambda/teardown/` inventory for partial-run recovery. The account confirmation must be your actual 12-digit account from `make aws-identity`.
 
+The cleanup ownership check reads the parent DynamoDB catalogue and passes the fixed demo-deployer role to CloudFormation when deleting child stacks. If cleanup reports `dynamodb:GetItem` or `iam:PassRole` `AccessDenied`, the administrator must update `agent-gateway-access-dev` with the current `deploy/aws/deployment-access.template.json` before retrying. Use a genuinely privileged administrator profile for that update; do not set `AWS_ADMIN_PROFILE` to the restricted `AWS_PROFILE` and do not grant the deployment role permissions manually.
+
 1. If you created an optional proxy, delete it **before** shared services:
    ```bash
    make aws-proxy-delete

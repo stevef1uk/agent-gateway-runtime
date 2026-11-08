@@ -290,6 +290,23 @@
               }
             },
             {
+              "Sid": "PassDemoCloudFormationRole",
+              "Effect": "Allow",
+              "Action": [
+                "iam:PassRole"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStack}-demo-deployer"
+                }
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": "cloudformation.amazonaws.com"
+                }
+              }
+            },
+            {
               "Sid": "LambdaLifecycle",
               "Effect": "Allow",
               "Action": [
@@ -327,6 +344,7 @@
                 "dynamodb:DescribeTable",
                 "dynamodb:UpdateTable",
                 "dynamodb:DeleteTable",
+                "dynamodb:GetItem",
                 "dynamodb:DescribeTimeToLive",
                 "dynamodb:UpdateTimeToLive",
                 "dynamodb:DescribeContinuousBackups",

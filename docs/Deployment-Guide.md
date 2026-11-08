@@ -121,7 +121,7 @@ make aws-access-outputs AWS_ADMIN_PROFILE=YOUR_ADMIN_PROFILE
 
 The CLI command executes the change set and waits. **Expected:** `CREATE_COMPLETE` or `UPDATE_COMPLETE`. For Console setup, read the same values from the stack's **Outputs** tab.
 
-Copy **WorkloadBoundaryArn** into `WORKLOAD_BOUNDARY_ARN` in `aws-config.mk`. Check **DemoDeploymentRoleArn** matches `arn:aws:iam::YOUR_ACCOUNT:role/YOUR_APPLICATION_STACK-demo-deployer`; Make derives this identifier automatically. Keep `AWS_PROFILE=agent-gateway-dev` for application deployment. Do not set `AWS_ADMIN_PROFILE` to the restricted deployment role.
+Copy **WorkloadBoundaryArn** into `WORKLOAD_BOUNDARY_ARN` in `aws-config.mk`. Check **DemoDeploymentRoleArn** matches `arn:aws:iam::YOUR_ACCOUNT:role/YOUR_APPLICATION_STACK-demo-deployer`; Make derives this identifier automatically. Keep `AWS_PROFILE=agent-gateway-dev` for application deployment. Keep `AWS_ADMIN_PROFILE` as a separate genuinely privileged administrator profile; do not set it to the restricted deployment role.
 
 ### Existing stack or AccessDenied?
 
