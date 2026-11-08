@@ -73,9 +73,16 @@ Wait for the CloudFormation stack to reach `CREATE_COMPLETE` status (you may nee
 **Step 3: Deploy the application**
 
 ```bash
-make aws-access-outputs    # Copy WorkloadBoundaryArn value
+make aws-access-outputs    # Copy WorkloadBoundaryArn value into aws-config.mk
 make aws-deploy            # Deploys the application
 ```
+
+**Why this works:** The inline policy gives `AgentGatewayDev` the CloudFormation and S3 permissions needed for the access boundary workflow.
+
+**After running `make aws-access-outputs`:**
+- Copy the `WorkloadBoundaryArn` value from the output
+- Add it to `aws-config.mk`: `WORKLOAD_BOUNDARY_ARN = arn:aws:iam::...`
+- Then run `make aws-deploy` to deploy the application
 
 **Why this works:** The inline policy gives `AgentGatewayDev` the CloudFormation and S3 permissions needed for the access boundary workflow. After Step 3, you can run `make aws-deploy` to deploy the application.
 
