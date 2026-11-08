@@ -92,4 +92,4 @@ unset AGENT_TOKEN GATEWAY_URL
 
 ## Additional AWS demos and optional proxy
 
-See [AWS demos and proxy prerequisites](AWS-Demos.md). API/MCP Lambda demos do not require the proxy VM; forward-proxy clients require the VM and an open SSM tunnel. Backend/OAuth dependencies are separate. The [source Make workflow](../../agent-gateway/docs/aws/make-workflow.md) describes build/deploy/cleanup.
+See [AWS demos and proxy prerequisites](AWS-Demos.md). API/MCP Lambda demos do not require the proxy VM; forward-proxy clients require the VM and an open SSM tunnel. Backend/OAuth dependencies are separate. The [source Make workflow](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/make-workflow.md) describes build/deploy/cleanup.

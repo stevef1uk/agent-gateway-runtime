@@ -10,7 +10,7 @@ This `aws` branch contains customer-facing clients for the single-region Lambda 
 
 ## Quick start
 
-Deploy the parent and selected demo with the [source Make workflow](../agent-gateway/docs/aws/make-workflow.md), or use the signed-in AI Wizard. Copy the selected child demo's GatewayURL and create a matching delegation. The runner prompts privately for its token.
+Deploy the parent and selected demo with the [source Make workflow](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/make-workflow.md), or use the signed-in AI Wizard. Copy the selected child demo's GatewayURL and create a matching delegation. The runner prompts privately for its token.
 
 ```bash
 make check
