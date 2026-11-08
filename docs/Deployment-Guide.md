@@ -198,11 +198,11 @@ If deployment fails, inspect the named stack's CloudFormation **Events** for the
 make aws-outputs
 ```
 
-This read-only command prints the stack status and short, labelled **Console**, **Baseline gateway** and **Cognito login** URLs. Open **Console** and sign in using your invitation. Do not type an example API ID, append `/api` to it, or confuse it with the gateway.
+This read-only command prints the stack status and short, labelled **Console**, **Baseline gateway** and **Sign in** URLs. Open **Console** and sign in using your invitation. Do not type an example API ID, append `/api` to it, or confuse it with the gateway.
 
 ## 8. Open your console and sign in
 
-Use your emailed Cognito invitation and configured email address. Choose Cognito sign-in, enter the invitation's temporary password, then set your own password when prompted. The initial account status is `FORCE_CHANGE_PASSWORD`; use the invitation flow to finish setup. **Forgot password is not a replacement for a missing first invitation.** Do not use a local-demo password or AWS access key as a login.
+Open the **Sign in** URL printed by `make aws-outputs` (the console URL followed by `/oidc/login?prompt=login`). The bare `*.auth.*.amazoncognito.com` domain is not the application login link. Use your configured email address and invitation, enter the invitation's temporary password, then set your own password when prompted. The initial account status is `FORCE_CHANGE_PASSWORD`; use the invitation flow to finish setup. **Forgot password is not a replacement for a missing first invitation.** Do not use a local-demo password or AWS access key as a login.
 
 If the invitation is missing or expired, check spam, then the deployment operator can request a fresh invitation with these commands (default deployment profile/region):
 
