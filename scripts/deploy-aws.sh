@@ -283,6 +283,37 @@ python3 -B scripts/prepare-aws-image-deployment.py \
   "$PLAN_DIR/release-config.json" \
   "$PLAN_DIR/parameters.json"
 
+say "4b/6 Preparing deploy-time secrets (NoEcho, no Secrets Manager)"
+secrets_file="$PLAN_DIR/secrets.json"
+python3 - "$secrets_file" "$PLAN_DIR/parameters.json" <<'PYSECRETS'
+import json, os, secrets, sys
+path, params_path = sys.argv[1], sys.argv[2]
+if os.path.exists(path):
+    with open(path) as f:
+        data = json.load(f)
+else:
+    alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    data = {
+        'jwt': ''.join(secrets.choice(alphabet) for _ in range(64)),
+        'admin': ''.join(secrets.choice(alphabet) for _ in range(64)),
+    }
+    tmp = path + '.tmp'
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
+        json.dump(data, f, indent=2)
+        f.write('\n')
+    os.replace(tmp, path)
+with open(params_path) as f:
+    params = json.load(f)
+params = [p for p in params if p.get('ParameterKey') not in ('JWTSecretValue', 'AdminSecretValue')]
+params.append({'ParameterKey': 'JWTSecretValue', 'ParameterValue': data['jwt']})
+params.append({'ParameterKey': 'AdminSecretValue', 'ParameterValue': data['admin']})
+os.chmod(params_path, 0o600)
+with open(params_path, 'w') as f:
+    json.dump(params, f, indent=2)
+    f.write('\n')
+PYSECRETS
+
 # ---------------------------------------------------------------------------
 # 5. Deploy Application Stack (deploy/aws/serverless-images.template.json)
 # ---------------------------------------------------------------------------

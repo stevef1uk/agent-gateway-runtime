@@ -45,13 +45,12 @@ and should not load-test the public provider.
 
 The model uses current-at-review AWS regional rate dimensions, including ARM Lambda
 compute/requests, HTTP API (not REST API), DynamoDB Standard on-demand requests/PITR,
-CloudWatch Standard logs, Secrets Manager, S3 Standard and Cognito Lite:
+CloudWatch Standard logs, S3 Standard and Cognito Lite. AWS Secrets Manager is not used by this demo (JWT/operator tokens are deploy-time `NoEcho` parameters); it is recommended for production at about $0.40 per secret per month:
 
 - [Lambda Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/eu-west-3/index.json).
 - [HTTP API Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/current/eu-west-3/index.json).
 - [DynamoDB Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/current/eu-west-3/index.json).
 - [CloudWatch Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/eu-west-3/index.json).
-- [Secrets Manager Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSSecretsManager/current/eu-west-3/index.json).
 - [S3 Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/eu-west-3/index.json).
 - [Cognito Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCognito/current/eu-west-3/index.json).
 - [Data transfer Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSDataTransfer/current/eu-west-3/index.json).

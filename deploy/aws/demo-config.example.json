@@ -12,8 +12,6 @@
   "key_version": "example-key-version",
   "gateway_licence_object": "activation/gateway.token",
   "gateway_licence_version": "example-gateway-licence-version",
-  "jwt_secret_arn": "arn:aws:secretsmanager:eu-west-3:123456789012:secret:agent-gateway-dev-jwt-example",
-  "admin_secret_arn": "arn:aws:secretsmanager:eu-west-3:123456789012:secret:agent-gateway-dev-admin-example",
   "authz_url": "https://example.execute-api.eu-west-3.amazonaws.com",
   "table": "agent-gateway-dev-domain",
   "security_table": "agent-gateway-dev-security",

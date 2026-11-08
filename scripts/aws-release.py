@@ -15,7 +15,7 @@ def load_release(path):
     for name in [*SERVICES,'emotion']:
         item=manifest.get('emotion') if name=='emotion' else images[name]
         if not isinstance(item,dict):raise ValueError('Release needs the prebuilt Emotion Lambda wrapper image.')
-        repo='stevef1uk/agent-gateway-emotion-lambda' if name=='emotion' else f'stevef1uk/agent-gateway-{name}_l'
+        repo='stevef1uk/agent-gateway-emotion_l' if name=='emotion' else f'stevef1uk/agent-gateway-{name}_l'
         digest=item.get('digest','')
         if not re.fullmatch(r'sha256:[0-9a-f]{64}',digest) or item.get('immutable_image')!=repo+'@'+digest:raise ValueError(f'Invalid immutable vendor image for {name}.')
     return manifest

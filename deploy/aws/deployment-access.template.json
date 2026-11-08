@@ -204,7 +204,7 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup.",
+          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup, including read-only validation of the exact workload boundary.",
           "must": [
             "Administrator reviews and applies this stack separately.",
             "No ability to edit this policy, the workload boundary, or the developer role.",
@@ -239,7 +239,8 @@
                 "cloudformation:DescribeStackResource",
                 "cloudformation:DescribeStackResources",
                 "cloudformation:ListStackResources",
-                "cloudformation:GetTemplate"
+                "cloudformation:GetTemplate",
+                "cloudformation:ListChangeSets"
               ],
               "Resource": [
                 {
@@ -264,11 +265,10 @@
               }
             },
             {
-              "Sid": "ValidateAndGenerateRuntimeSecrets",
+              "Sid": "ValidateTemplates",
               "Effect": "Allow",
               "Action": [
                 "cloudformation:ValidateTemplate",
-                "secretsmanager:GetRandomPassword",
                 "cloudformation:GetTemplateSummary"
               ],
               "Resource": [
@@ -378,33 +378,6 @@
               }
             },
             {
-              "Sid": "SecretLifecycle",
-              "Effect": "Allow",
-              "Action": [
-                "secretsmanager:CreateSecret",
-                "secretsmanager:DescribeSecret",
-                "secretsmanager:GetSecretValue",
-                "secretsmanager:PutSecretValue",
-                "secretsmanager:UpdateSecret",
-                "secretsmanager:DeleteSecret",
-                "secretsmanager:TagResource",
-                "secretsmanager:UntagResource",
-                "secretsmanager:GetResourcePolicy"
-              ],
-              "Resource": [
-                {
-                  "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ApplicationStack}-*"
-                }
-              ],
-              "Condition": {
-                "StringEquals": {
-                  "aws:RequestedRegion": {
-                    "Ref": "AWS::Region"
-                  }
-                }
-              }
-            },
-            {
               "Sid": "APIGatewayHTTPResources",
               "Effect": "Allow",
               "Action": [
@@ -449,6 +422,17 @@
                     "Ref": "AWS::Region"
                   }
                 }
+              }
+            },
+            {
+              "Sid": "InspectWorkloadBoundary",
+              "Effect": "Allow",
+              "Action": [
+                "iam:GetPolicy",
+                "iam:GetPolicyVersion"
+              ],
+              "Resource": {
+                "Ref": "WorkloadBoundary"
               }
             }
           ]
@@ -913,18 +897,6 @@
                   "Resource": [
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ApplicationStack}/*"
-                    }
-                  ]
-                },
-                {
-                  "Sid": "OnlyApplicationSecretsForGateway",
-                  "Effect": "Allow",
-                  "Action": [
-                    "secretsmanager:GetSecretValue"
-                  ],
-                  "Resource": [
-                    {
-                      "Fn::Sub": "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ApplicationStack}-*"
                     }
                   ]
                 },

@@ -4,7 +4,7 @@ import json,os,pathlib,subprocess
 config=json.loads(pathlib.Path('/etc/agent-gateway-proxy/config.json').read_text())
 def aws(*args):
  return subprocess.check_output(['aws','--region',config['region'],*args],text=True).strip()
-secret=json.loads(aws('secretsmanager','get-secret-value','--secret-id',config['jwt_secret_arn'],'--query','SecretString','--output','text'))['value']
+secret=config['jwt_secret']
 if '\n' in secret or '\r' in secret:raise SystemExit('JWT secret is not a valid environment value')
 env={
  'JWT_SECRET':secret,'JWT_ISSUER':'agent-gateway','PERSISTENCE':'dynamodb',

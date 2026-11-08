@@ -7,14 +7,22 @@ def call(profile,region,*args):
  if p.returncode:raise RuntimeError(p.stderr.strip())
  return json.loads(p.stdout or '{}')
 def parameters(config,instance_type):
- values=dict(ApplicationStack=config['stack'],GatewayImageUri=config['gateway_image'],AuthzURL=config['authz_url'],ConsoleURL=config['console_url'],DomainTable=config['table'],SecurityTable=config['security_table'],JWTSecretArn=config['jwt_secret_arn'],ActivationBucket=config['bucket'],CustomerKeyObject=config['key_object'],CustomerKeyVersion=config['key_version'],GatewayLicenceObject=config['gateway_licence_object'],GatewayLicenceVersion=config['gateway_licence_version'],InstanceType=instance_type,AuthzAPIId=config['authz_url'].split('://',1)[1].split('.',1)[0])
+ values=dict(ApplicationStack=config['stack'],GatewayImageUri=config['gateway_image'],AuthzURL=config['authz_url'],ConsoleURL=config['console_url'],DomainTable=config['table'],SecurityTable=config['security_table'],JwtSecretValue=config['jwt_secret'],ActivationBucket=config['bucket'],CustomerKeyObject=config['key_object'],CustomerKeyVersion=config['key_version'],GatewayLicenceObject=config['gateway_licence_object'],GatewayLicenceVersion=config['gateway_licence_version'],InstanceType=instance_type,AuthzAPIId=config['authz_url'].split('://',1)[1].split('.',1)[0])
  return [{'ParameterKey':k,'ParameterValue':v} for k,v in values.items()]
+def deploy_secrets():
+ path=ROOT/'dist/aws-lambda/plan/secrets.json'
+ if not path.exists():raise RuntimeError('Missing '+str(path)+'; run make aws-deploy once to generate deploy-time secrets.')
+ return json.loads(path.read_text())
 def run(argv=None):
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('action',choices=['create','status','connect','delete','plan']);p.add_argument('--profile',default=os.getenv('AWS_PROFILE','agent-gateway-dev'));p.add_argument('--vm-profile',default=os.getenv('AWS_VM_PROFILE',''));p.add_argument('--region',default=os.getenv('AWS_REGION','eu-west-3'));p.add_argument('--stack',default=os.getenv('AWS_STACK','agent-gateway-dev'));p.add_argument('--instance-type',default='t4g.small',choices=['t4g.small','t4g.medium']);p.add_argument('--local-port',type=int,default=8088);p.add_argument('--config',type=pathlib.Path)
  a=p.parse_args(argv);vm_stack=a.stack+'-proxy'
  if a.action=='plan':
   if not a.config:p.error('plan requires --config with a public deployment-identifier JSON file')
-  print(json.dumps(parameters(json.loads(a.config.read_text()),a.instance_type),indent=2));return
+  config=json.loads(a.config.read_text());config.setdefault('jwt_secret','x'*32)
+  values=parameters(config,a.instance_type)
+  for value in values:
+   if value['ParameterKey']=='JwtSecretValue':value['ParameterValue']='***'
+  print(json.dumps(values,indent=2));return
  if not a.vm_profile:p.error('set AWS_VM_PROFILE or --vm-profile to an explicitly reviewed EC2/CloudFormation/SSM deployment profile')
  identity=call(a.vm_profile,a.region,'sts','get-caller-identity')
  if identity['Arn'].endswith(':root') and a.action in ['create','delete']:raise RuntimeError('Use an approved non-root VM deployment role/profile for resource changes.')
@@ -26,10 +34,14 @@ def run(argv=None):
   if len(configs)!=1:raise RuntimeError('Deploy the wizard-enabled parent stack first; its DemoConfiguration output supplies the exact shared services/images.')
   config=json.loads(configs[0])
   if config['account']!=identity['Account']:raise RuntimeError('VM profile and parent stack must be in the same account.')
+  config['jwt_secret']=deploy_secrets()['jwt']
   folder=ROOT/'dist/aws-lambda/proxy';folder.mkdir(parents=True,exist_ok=True)
   params=folder/'parameters.json';params.write_text(json.dumps(parameters(config,a.instance_type),indent=2)+'\n')
+  overrides=folder/'overrides.txt'
+  fd=os.open(overrides,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+  with os.fdopen(fd,'w') as f:f.write(' '.join(v['ParameterKey']+'='+v['ParameterValue'] for v in parameters(config,a.instance_type))+'\n')
   # aws cloudformation deploy handles create/update/no-change and waits. This is the only billable create path.
-  command=['aws','--profile',a.vm_profile,'--region',a.region,'cloudformation','deploy','--stack-name',vm_stack,'--template-file',str(ROOT/'deploy/aws/proxy-vm.template.json'),'--parameter-overrides',*[v['ParameterKey']+'='+v['ParameterValue'] for v in parameters(config,a.instance_type)],'--capabilities','CAPABILITY_IAM','--no-fail-on-empty-changeset']
+  command=['aws','--profile',a.vm_profile,'--region',a.region,'cloudformation','deploy','--stack-name',vm_stack,'--template-file',str(ROOT/'deploy/aws/proxy-vm.template.json'),'--parameter-overrides','file://'+str(overrides),'--capabilities','CAPABILITY_IAM','--no-fail-on-empty-changeset']
   subprocess.run(command,check=True)
   print(json.dumps({'stack':vm_stack,'outputs':describe().get('Outputs',[])},indent=2));return
  if a.action=='delete':

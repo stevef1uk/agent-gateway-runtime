@@ -167,9 +167,11 @@ The script checks the selected account/profile and current manifest, then:
 1. Creates/reuses private versioned activation storage.
 2. Uploads/pins customer activation material.
 3. Pulls the four encrypted `_l` images and prebuilt Emotion wrapper from Docker Hub into private ECR, checking every digest.
-4. Generates CloudFormation parameters from your configuration and discovered S3 versions.
-5. Creates/updates the Lambda application, HTTP APIs, Cognito, DynamoDB and Secrets Manager through a change set.
+4. Generates CloudFormation parameters from your configuration and discovered S3 versions, including deploy-time JWT/operator secrets passed as `NoEcho` values.
+5. Creates/updates the Lambda application, HTTP APIs, Cognito and DynamoDB through a change set.
 6. Saves a teardown inventory, checks public/internal HTTP boundaries and sends the first configured operator's Cognito invitation if needed.
+
+JWT and operator tokens are generated once and stored in `dist/aws-lambda/plan/secrets.json` (mode 0600, git-ignored), then passed as `NoEcho` parameters. Keep that file to preserve the same tokens across redeploys; deleting it rotates both secrets and invalidates existing tokens and admin sessions. AWS Secrets Manager is the recommended production alternative for rotation and audit, but this demo avoids its per-secret monthly cost.
 
 The parent uses Lambda and managed services; it does not create the optional proxy VM or OpenClaw hosts. [Architecture](Architecture.md) explains single-region availability and limits. Bedrock configuration/permissions for the AI Wizard remain enabled; successful model invocation also depends on account/model availability.
 
@@ -257,3 +259,18 @@ OpenClaw/OpenShell and custom stateful backends are **not** provisioned by these
 For a hosted/shared deployment, revoke your test delegations, run `unset AGENT_TOKEN`, sign out and leave resource cleanup to the owner.
 
 For your own deployment, use [Teardown](Teardown.md). It distinguishes demo deletion, parent removal with retained data, permanent purge, ECR removal and final administrator access cleanup. Closing the console or terminal does not remove billable resources.
+
+### Demo signing secrets
+
+The encrypted-image web function receives the same JWT signing value and operator
+value as the parent gateway. The wizard supplies these to child stacks as separate
+`NoEcho` parameters. They never enter `DemoConfiguration` outputs or child template
+bodies. The source CLI reads `dist/aws-lambda/plan/secrets.json` for demo deployment
+(`--secrets-file` overrides the path); retain that private local file for updates.
+A rebuilt web image is required for this parameter-based provisioning path.
+
+For an existing access stack, an administrator must **update** it from the current
+`deploy/aws/deployment-access.template.json`. The update adds CloudFormation event
+and change-set inspection and read-only `iam:GetPolicy` / `iam:GetPolicyVersion`
+access to the exact workload boundary. Recreating the application does not refresh
+the deployment role's policies.

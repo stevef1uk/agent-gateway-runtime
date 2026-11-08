@@ -125,6 +125,18 @@
       "Default": "",
       "AllowedPattern": "^$|^[0-9]{12}\\.dkr\\.ecr\\.eu-west-3\\.amazonaws\\.com/[a-z0-9/._-]+@sha256:[0-9a-f]{64}$",
       "Description": "Lambda wrapper built from the pinned published Emotion API/MCP images. Licence token is not required to deploy it."
+    },
+    "JWTSecretValue": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 32,
+      "Description": "Deploy-time generated JWT signing secret; supplied by scripts/deploy-aws.sh as a NoEcho parameter."
+    },
+    "AdminSecretValue": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 32,
+      "Description": "Deploy-time generated gateway admin token; supplied by scripts/deploy-aws.sh as a NoEcho parameter."
     }
   },
   "Resources": {
@@ -217,56 +229,6 @@
             "Retain existing data on deletion or replacement.",
             "No full-table access outside this stack workload roles."
           ]
-        }
-      }
-    },
-    "JWTSecret": {
-      "Type": "AWS::SecretsManager::Secret",
-      "DeletionPolicy": "Retain",
-      "UpdateReplacePolicy": "Retain",
-      "Metadata": {
-        "com.aws.cloudformation.Context": {
-          "why": "Generate independent application signing and operator secrets; never store plaintext in the template.",
-          "must": [
-            "Coordinated redeployment required for secret activation; no automatic rotation."
-          ]
-        }
-      },
-      "Properties": {
-        "Name": {
-          "Fn::Sub": "${AWS::StackName}-jwt"
-        },
-        "Description": "Agent Gateway JWTSecret",
-        "GenerateSecretString": {
-          "SecretStringTemplate": "{}",
-          "GenerateStringKey": "value",
-          "PasswordLength": 64,
-          "ExcludePunctuation": true
-        }
-      }
-    },
-    "AdminSecret": {
-      "Type": "AWS::SecretsManager::Secret",
-      "DeletionPolicy": "Retain",
-      "UpdateReplacePolicy": "Retain",
-      "Metadata": {
-        "com.aws.cloudformation.Context": {
-          "why": "Generate independent application signing and operator secrets; never store plaintext in the template.",
-          "must": [
-            "Coordinated redeployment required for secret activation; no automatic rotation."
-          ]
-        }
-      },
-      "Properties": {
-        "Name": {
-          "Fn::Sub": "${AWS::StackName}-admin"
-        },
-        "Description": "Agent Gateway AdminSecret",
-        "GenerateSecretString": {
-          "SecretStringTemplate": "{}",
-          "GenerateStringKey": "value",
-          "PasswordLength": 64,
-          "ExcludePunctuation": true
         }
       }
     },
@@ -1227,11 +1189,11 @@
         "Environment": {
           "Variables": {
             "JWT_SECRET": {
-              "Fn::Sub": "{{resolve:secretsmanager:${JWTSecret}:SecretString:value}}"
+              "Ref": "JWTSecretValue"
             },
             "JWT_ISSUER": "agent-gateway",
             "GATEWAY_ADMIN_TOKEN": {
-              "Fn::Sub": "{{resolve:secretsmanager:${AdminSecret}:SecretString:value}}"
+              "Ref": "AdminSecretValue"
             },
             "PERSISTENCE": "dynamodb",
             "DYNAMODB_TABLE": {
@@ -1420,7 +1382,7 @@
         "Environment": {
           "Variables": {
             "JWT_SECRET": {
-              "Fn::Sub": "{{resolve:secretsmanager:${JWTSecret}:SecretString:value}}"
+              "Ref": "JWTSecretValue"
             },
             "JWT_ISSUER": "agent-gateway",
             "PERSISTENCE": "dynamodb",
@@ -1659,11 +1621,11 @@
         "Environment": {
           "Variables": {
             "JWT_SECRET": {
-              "Fn::Sub": "{{resolve:secretsmanager:${JWTSecret}:SecretString:value}}"
+              "Ref": "JWTSecretValue"
             },
             "JWT_ISSUER": "agent-gateway",
             "GATEWAY_ADMIN_TOKEN": {
-              "Fn::Sub": "{{resolve:secretsmanager:${AdminSecret}:SecretString:value}}"
+              "Ref": "AdminSecretValue"
             },
             "PERSISTENCE": "dynamodb",
             "DYNAMODB_TABLE": {
@@ -1956,7 +1918,8 @@
           "why": "Bounded buffered HTTP on ARM64, no VPC/NAT baseline or always-on compute.",
           "must": [
             "No CONNECT, streaming or mutable local control-plane files.",
-            "Deploy all services together when activating generated secrets."
+            "Deploy all services together when activating generated secrets.",
+            "Pass demo signing/operator values only through child NoEcho parameters, never template bodies or stack outputs."
           ]
         }
       },
@@ -1984,7 +1947,7 @@
           "Variables": {
             "JWT_ISSUER": "agent-gateway",
             "GATEWAY_ADMIN_TOKEN": {
-              "Fn::Sub": "{{resolve:secretsmanager:${AdminSecret}:SecretString:value}}"
+              "Ref": "AdminSecretValue"
             },
             "PERSISTENCE": "dynamodb",
             "DYNAMODB_TABLE": {
@@ -2065,10 +2028,13 @@
               "Fn::If": [
                 "DemoProvisioningEnabled",
                 {
-                  "Fn::Sub": "{\"stack\":\"${AWS::StackName}\",\"region\":\"${AWS::Region}\",\"account\":\"${AWS::AccountId}\",\"deployment_role\":\"${DemoDeploymentRoleArn}\",\"gateway_role\":\"${GatewayRole.Arn}\",\"backend_role\":\"${EmotionBackendRole.Arn}\",\"gateway_image\":\"${GatewayImageUri}\",\"emotion_image\":\"${EmotionImageUri}\",\"bucket\":\"${ActivationBucket}\",\"key_object\":\"${CustomerKeyObject}\",\"key_version\":\"${CustomerKeyVersion}\",\"gateway_licence_object\":\"${GatewayLicenceObject}\",\"gateway_licence_version\":\"${GatewayLicenceVersion}\",\"jwt_secret_arn\":\"${JWTSecret}\",\"admin_secret_arn\":\"${AdminSecret}\",\"authz_url\":\"https://${AuthzAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\",\"table\":\"${DomainState}\",\"security_table\":\"${SecurityState}\",\"console_url\":\"https://${WebAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\"}"
+                  "Fn::Sub": "{\"stack\":\"${AWS::StackName}\",\"region\":\"${AWS::Region}\",\"account\":\"${AWS::AccountId}\",\"deployment_role\":\"${DemoDeploymentRoleArn}\",\"gateway_role\":\"${GatewayRole.Arn}\",\"backend_role\":\"${EmotionBackendRole.Arn}\",\"gateway_image\":\"${GatewayImageUri}\",\"emotion_image\":\"${EmotionImageUri}\",\"bucket\":\"${ActivationBucket}\",\"key_object\":\"${CustomerKeyObject}\",\"key_version\":\"${CustomerKeyVersion}\",\"gateway_licence_object\":\"${GatewayLicenceObject}\",\"gateway_licence_version\":\"${GatewayLicenceVersion}\",\"authz_url\":\"https://${AuthzAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\",\"table\":\"${DomainState}\",\"security_table\":\"${SecurityState}\",\"console_url\":\"https://${WebAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\"}"
                 },
                 ""
               ]
+            },
+            "JWT_SECRET": {
+              "Ref": "JWTSecretValue"
             }
           }
         },
@@ -2173,10 +2139,10 @@
       "Condition": "DemoProvisioningEnabled",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "Private vendor Emotion backend may read only its optional customer token version and write its own logs.",
+          "why": "Private vendor Emotion backend may read only the customer key version and its emotion token version and write its own logs.",
           "must": [
             "No public invocation permission or gateway operator authority.",
-            "Vendor Emotion container exclusively enforces its own licensing."
+            "Vendor Emotion container decrypts its model with the customer key and enforces its own token licensing."
           ]
         }
       },
@@ -2203,7 +2169,7 @@
               "Version": "2012-10-17",
               "Statement": [
                 {
-                  "Sid": "VendorTokenFileDeliveryOnly",
+                  "Sid": "VendorActivationReads",
                   "Effect": "Allow",
                   "Action": [
                     "s3:GetObjectVersion"
@@ -2211,6 +2177,9 @@
                   "Resource": [
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/activation/emotion.token"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${CustomerKeyObject}"
                     }
                   ]
                 },
@@ -2264,7 +2233,7 @@
       "Condition": "DemoProvisioningEnabled",
       "Description": "Public deployment identifiers used by the Make CLI; contains no plaintext secrets or token files.",
       "Value": {
-        "Fn::Sub": "{\"stack\":\"${AWS::StackName}\",\"region\":\"${AWS::Region}\",\"account\":\"${AWS::AccountId}\",\"deployment_role\":\"${DemoDeploymentRoleArn}\",\"gateway_role\":\"${GatewayRole.Arn}\",\"backend_role\":\"${EmotionBackendRole.Arn}\",\"gateway_image\":\"${GatewayImageUri}\",\"emotion_image\":\"${EmotionImageUri}\",\"bucket\":\"${ActivationBucket}\",\"key_object\":\"${CustomerKeyObject}\",\"key_version\":\"${CustomerKeyVersion}\",\"gateway_licence_object\":\"${GatewayLicenceObject}\",\"gateway_licence_version\":\"${GatewayLicenceVersion}\",\"jwt_secret_arn\":\"${JWTSecret}\",\"admin_secret_arn\":\"${AdminSecret}\",\"authz_url\":\"https://${AuthzAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\",\"table\":\"${DomainState}\",\"security_table\":\"${SecurityState}\",\"console_url\":\"https://${WebAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\"}"
+        "Fn::Sub": "{\"stack\":\"${AWS::StackName}\",\"region\":\"${AWS::Region}\",\"account\":\"${AWS::AccountId}\",\"deployment_role\":\"${DemoDeploymentRoleArn}\",\"gateway_role\":\"${GatewayRole.Arn}\",\"backend_role\":\"${EmotionBackendRole.Arn}\",\"gateway_image\":\"${GatewayImageUri}\",\"emotion_image\":\"${EmotionImageUri}\",\"bucket\":\"${ActivationBucket}\",\"key_object\":\"${CustomerKeyObject}\",\"key_version\":\"${CustomerKeyVersion}\",\"gateway_licence_object\":\"${GatewayLicenceObject}\",\"gateway_licence_version\":\"${GatewayLicenceVersion}\",\"authz_url\":\"https://${AuthzAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\",\"table\":\"${DomainState}\",\"security_table\":\"${SecurityState}\",\"console_url\":\"https://${WebAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}\"}"
       }
     }
   },

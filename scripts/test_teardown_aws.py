@@ -116,7 +116,7 @@ class TeardownSafety(unittest.TestCase):
         self.assertTrue(secret["ForceDeleteWithoutRecovery"])
 
     def test_wrong_account_or_missing_execution_confirmation_cannot_mutate(self):
-        for field, value in [("account", "111111111111"), ("confirm_account", None)]:
+        for field, value in [("account", "999999999999"), ("confirm_account", None)]:
             args = arguments(self.path, execute=True, purge=True)
             setattr(args, field, value)
             with self.assertRaises(m.TeardownError):

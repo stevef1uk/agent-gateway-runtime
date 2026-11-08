@@ -16,7 +16,7 @@ class ImageParameters(unittest.TestCase):
     def test_four_service_release_matches_image_template(self):
         template=json.loads((ROOT/'deploy/aws/serverless-images.template.json').read_text())
         params={p['ParameterKey']:p['ParameterValue'] for p in module.prepare(self.config())}
-        self.assertEqual(set(params),set(template['Parameters']))
+        self.assertEqual(set(params) | {'JWTSecretValue', 'AdminSecretValue'}, set(template['Parameters']))
         self.assertEqual(params['EnableWeatherDemo'],'true')
         self.assertEqual(params['EmotionImageUri'], '')
         self.assertEqual(params['DemoDeploymentRoleArn'], '')
@@ -38,4 +38,15 @@ class ImageParameters(unittest.TestCase):
             env=template['Resources']['WebFunction']['Properties']['Environment']['Variables']
             self.assertEqual(env['BEDROCK_MODEL_ID'],'eu.amazon.nova-micro-v1:0')
             self.assertEqual(env['WEATHER_DEMO_ENABLED'],{'Ref':'EnableWeatherDemo'})
+    def test_image_demo_secrets_are_runtime_only(self):
+        template=json.loads((ROOT/'deploy/aws/serverless-images.template.json').read_text())
+        env=template['Resources']['WebFunction']['Properties']['Environment']['Variables']
+        self.assertEqual(env['JWT_SECRET'], {'Ref':'JWTSecretValue'})
+        self.assertEqual(env['GATEWAY_ADMIN_TOKEN'], {'Ref':'AdminSecretValue'})
+        for value in [env['AWS_DEMO_CONFIGURATION']['Fn::If'][1],template['Outputs']['DemoConfiguration']['Value']]:
+            config=json.loads(value['Fn::Sub'])
+            self.assertFalse(any('secret' in key for key in config))
+        for name in ['JWTSecretValue','AdminSecretValue']:
+            self.assertTrue(template['Parameters'][name]['NoEcho'])
+            self.assertNotIn('Default',template['Parameters'][name])
 if __name__=='__main__':unittest.main()

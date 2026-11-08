@@ -8,7 +8,7 @@ def load(name,file):
 release=load('release','aws-release.py');demos=load('demos','aws-demo-stacks.py')
 def manifest():
     images={s:{'digest':'sha256:'+'a'*64,'immutable_image':f'stevef1uk/agent-gateway-{s}_l@sha256:'+'a'*64} for s in release.SERVICES}
-    return dict(release_schema=2,version='1.0.94-test',source_commit='a'*40,console_build='1.0.94',platform='linux/arm64',images=images,emotion={'digest':'sha256:'+'b'*64,'immutable_image':'stevef1uk/agent-gateway-emotion-lambda@sha256:'+'b'*64})
+    return dict(release_schema=2,version='1.0.94-test',source_commit='a'*40,console_build='1.0.94',platform='linux/arm64',images=images,emotion={'digest':'sha256:'+'b'*64,'immutable_image':'stevef1uk/agent-gateway-emotion_l@sha256:'+'b'*64})
 class Customer(unittest.TestCase):
     def validate(self,value):
         with tempfile.TemporaryDirectory() as folder:
