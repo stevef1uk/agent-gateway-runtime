@@ -67,7 +67,7 @@ aws-deploy: aws-preflight
 	@test -n "$(WORKLOAD_BOUNDARY_ARN)" || { echo 'Copy WorkloadBoundaryArn from make aws-access-outputs into aws-config.mk.' >&2; exit 2; }
 	AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AGW_ACCOUNT="$(AWS_ACCOUNT)" AGW_ARTIFACT_STACK="$(AWS_ARTIFACT_STACK)" AGW_APP_STACK="$(AWS_STACK)" AGW_CUSTOMER_KEY_FILE="$(CUSTOMER_KEY_FILE)" AGW_LICENCE_DIR="$(LICENCE_DIR)" AGW_DEMO_DEPLOYMENT_ROLE_ARN="$(DEMO_DEPLOYMENT_ROLE_ARN)" bash scripts/deploy-aws.sh --release-manifest "$(RELEASE_MANIFEST)" --domain-prefix "$(DOMAIN_PREFIX)" --admin-emails "$(ADMIN_EMAILS)" --workload-boundary-arn "$(WORKLOAD_BOUNDARY_ARN)"
 aws-outputs:
-	aws cloudformation describe-stacks --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_STACK)" --query 'Stacks[0].Outputs' --output table --no-cli-pager
+	@cfn_stacks=$$(aws cloudformation describe-stacks --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_STACK)" --query 'Stacks[0].StackName' --output text 2>/dev/null) && 	if [ -n "$$cfn_stacks" ]; then 		aws cloudformation describe-stacks --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_STACK)" --query 'Stacks[0].Outputs' --output table --no-cli-pager; 	else 		echo "Stack $(AWS_STACK) does not exist yet. Run 'make aws-deploy' to create it."; 	fi
 aws-demo:
 	python3 -B demo/aws-demo.py "$(DEMO)" "$(PHASE)"
 aws-demo-url:
