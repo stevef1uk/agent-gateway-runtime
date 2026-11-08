@@ -22,50 +22,79 @@ The supported scripted region is **Paris (`eu-west-3`)**. Keep that value for th
 
 ## 2. Arrange AWS profiles with your administrator
 
-Your AWS administrator supplies an existing non-root IAM role and a named CLI profile that assumes it. The default profile name is `agent-gateway-dev`, but that name is local configuration, not an AWS account automatically created by this project.
+**This is the most common source of errors.** You need two distinct CLI profiles:
 
-**What the administrator must create before deployment:**
+### 1. Deployer profile (`AWS_PROFILE`)
+- Your existing non-root profile that assumes the deployment role
+- Used for: `make aws-deploy`, running demos, accessing the console
+- Example: `agent-gateway-dev` (already configured; confirmed by `make aws-identity`)
+- **Does NOT** need CloudFormation stack-create or IAM attach-policy permissions
 
-1. **IAM Role** - An existing role in the target AWS account (e.g. `AgentGatewayDev` or custom name). This role must exist before `make aws-access-deploy` runs; the CloudFormation template attaches policies to it but does not create the role itself.
+### 2. Administrator profile (`AWS_ADMIN_PROFILE`)
+- A **separate** profile with IAM and CloudFormation permissions
+- Used ONLY for: `make aws-access-deploy` and `make aws-access-outputs`
+- **Must have these IAM actions:**
+  - `cloudformation:CreateStack`, `cloudformation:UpdateStack`, `cloudformation:DescribeStacks`
+  - `iam:AttachRolePolicy`, `iam:PutRolePolicy`, `iam:DeleteRolePolicy`
+  - `s3:CreateBucket`, `s3:PutObject`, `s3:GetBucket*`, `s3:DeleteBucket` (for activation storage)
+  - `cloudformation:ValidateTemplate`, `secretsmanager:GetRandomPassword`
+- **Do NOT** use the deployer profile as the admin profile, and do NOT attach `AdministratorAccess` to the application role.
+- Example profile in `~/.aws/credentials`:
+  ```ini
+  [admin-gateway-dev]
+  source_profile = your-personal-profile
+  # or with assumed role:
+  # role_arn = arn:aws:iam::857710215813:role/AgentGatewayDev
+  # source_profile = your-personal-profile
+  ```
 
-2. **Trust Policy** - The role's trust policy must allow the deployer CLI profile to assume it. Typical trust statement:
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Principal": { "AWS": "arn:aws:iam::YOUR_ACCOUNT:root" },
-         "Action": "sts:AssumeRole"
-       }
-     ]
-   }
-   ```
-   The administrator configures this according to your organization's sign-in method (IAM user, IdP federation, etc.).
+### How to configure:
 
-3. **CLI Profile** - A named profile in `~/.aws/credentials` (or environment) that uses the role, e.g:
-   ```ini
-   [agent-gateway-dev]
-   role_arn = arn:aws:iam::123456789012:role/AgentGatewayDev
-   source_profile = your-personal-profile
-   ```
+**Step A: Create the admin profile**
+Add a new section to `~/.aws/credentials` (or your preferred AWS config location):
 
-You need two separate responsibilities (one person may perform both):
-
-| Responsibility | Profile/configuration | Used for |
-|---|---|---|
-| Application deployer | `AWS_PROFILE` and its existing IAM role name, `AWS_DEPLOYMENT_ROLE_NAME` | Application/ECR/S3 deployment after bounded access is applied |
-| Account administrator | Explicit `AWS_ADMIN_PROFILE` | Reviewing/applying IAM access and boundary template, then removing it after cleanup |
-
-Ask the administrator to configure the deployer role's trust/assumption according to your organization's sign-in method. The access template attaches policies to that **existing role**; it does not create the human identity or fix profile trust. The deployer cannot grant itself these permissions. **Do not use root** as the application deployment profile.
-
-Run the read-only identity check once the profile is configured:
-
-```bash
-aws sts get-caller-identity --profile agent-gateway-dev
+```ini
+[admin-gateway-dev]
+source_profile = AGENT_GATEWAY_PERSONAL_PROFILE
 ```
 
-Use your actual profile name if different. **Expected:** your intended 12-digit account and a non-root assumed-role ARN. Record the account number and role name. If authentication fails, resolve it with your administrator before deployment.
+**OR** if using a role directly:
+
+```ini
+[admin-gateway-dev]
+role_arn = arn:aws:iam::857710215813:role/AgentGatewayDev
+source_profile = AGENT_GATEWAY_PERSONAL_PROFILE
+```
+
+**Step B: Set `AWS_ADMIN_PROFILE` in `aws-config.mk`**
+```makefile
+AWS_ADMIN_PROFILE = admin-gateway-dev
+```
+
+**Step C: Verify account match**
+The admin profile's account (via `aws sts get-caller-identity`) must match `AWS_ACCOUNT` in your config (default: your account, not the vendor's).
+
+**Step C: Run the admin commands**
+```bash
+make aws-access-deploy    # Admin: creates IAM policies + bounded deployment role
+make aws-access-outputs   # Admin: reads back WorkloadBoundaryArn etc.
+```
+
+**Why two profiles?**
+- The deployer profile runs the application deployment (`make aws-deploy`) with bounded access
+- The administrator profile applies the access boundary separately (step 5), then cleanup is done later
+- This separation follows the principle of least privilege: the application role never has AdministratorAccess
+
+**Your current setup** (from `make aws-identity`):
+- Account: `857710215813`
+- Deployer profile: `agent-gateway-dev` (assumes `AgentGatewayDev` role)
+- **Missing:** `AWS_ADMIN_PROFILE` set in `aws-config.mk` with a profile that has CloudFormation/IAM permissions
+
+**After setting up the admin profile:**
+```bash
+make aws-access-deploy    # Creates the access boundary stack
+make aws-access-outputs   # Reads back WorkloadBoundaryArn, etc.
+```
 
 ## 3. Obtain the current release and activation files
 

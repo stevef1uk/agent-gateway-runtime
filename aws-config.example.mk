@@ -18,8 +18,22 @@ AWS_ACCOUNT =
 AWS_DEPLOYMENT_ROLE_NAME = AgentGatewayDev
 
 # Separate administrator profile used ONLY for access setup/deletion.
-# Create a non-admin profile with iam:AttachPolicy, iam:PutRolePolicy, cloudformation:CreateStack etc.
-# Default: leave blank and set via AWS_ADMIN_PROFILE env var, or set a name like admin-gateway-dev
+# This profile must have IAM attach-policy and CloudFormation stack creation
+# permissions in your AWS account. It is strictly separate from the deployer
+# profile (AWS_PROFILE) and should not have AdministratorAccess attached to
+# the application role.
+#
+# Create in ~/.aws/credentials (or your AWS config directory):
+#
+#   [admin-gateway-dev]
+#   source_profile = your-personal-or-admin-profile
+#
+#   # Or with assumed role (if the profile itself is not an IAM user):
+#   # role_arn = arn:aws:iam::YOUR_ACCOUNT:role/AgentGatewayDev
+#   # source_profile = your-personal-or-admin-profile
+#
+# Default: leave blank, set via AWS_ADMIN_PROFILE env var, or set a name
+# like 'admin-gateway-dev' that maps to a profile with sufficient permissions.
 AWS_ADMIN_PROFILE =
 
 # Stack names for your isolated deployment.
