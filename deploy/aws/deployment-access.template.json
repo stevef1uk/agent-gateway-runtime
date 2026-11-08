@@ -204,7 +204,7 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup, including read-only validation of the exact workload boundary.",
+          "why": "Extends the existing assumed developer role for evaluation deployment and cleanup, including read-only validation of the exact workload boundary. Regional read-only event discovery is separate because the stack-scoped grant did not authorize diagnostic requests.",
           "must": [
             "Administrator reviews and applies this stack separately.",
             "No ability to edit this policy, the workload boundary, or the developer role.",
@@ -235,7 +235,6 @@
                 "cloudformation:DeleteStack",
                 "cloudformation:DescribeStacks",
                 "cloudformation:DescribeStackEvents",
-                "cloudformation:DescribeEvents",
                 "cloudformation:DescribeStackResource",
                 "cloudformation:DescribeStackResources",
                 "cloudformation:ListStackResources",
@@ -433,6 +432,19 @@
               ],
               "Resource": {
                 "Ref": "WorkloadBoundary"
+              }
+            },
+            {
+              "Sid": "ReadRegionalDeploymentEvents",
+              "Effect": "Allow",
+              "Action": "cloudformation:DescribeEvents",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
               }
             }
           ]

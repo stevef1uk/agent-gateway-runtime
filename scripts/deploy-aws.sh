@@ -125,6 +125,11 @@ fi
 
 [[ -n "${AGW_DEMO_DEPLOYMENT_ROLE_ARN:-}" ]] || die "Set DEMO_DEPLOYMENT_ROLE_ARN from access-stack outputs"
 
+say "Checking live IAM prerequisites before deployment writes"
+python3 -B scripts/check-aws-deployment-access.py \
+  --profile "$AWS_PROFILE" --region "$AWS_REGION" \
+  --stack "$AGW_APP_STACK" --boundary "$AGW_WORKLOAD_BOUNDARY_ARN"
+
 PLAN_DIR="$REPO_ROOT/dist/aws-lambda/plan"
 mkdir -p "$PLAN_DIR"
 RELEASE_TAG="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_commit"][:12])' "$AGW_RELEASE_MANIFEST")"

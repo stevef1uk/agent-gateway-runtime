@@ -175,7 +175,7 @@ Keep Docker running, then:
 make aws-deploy
 ```
 
-The script checks the selected account/profile and current manifest, then:
+The script checks the selected account/profile, current manifest, and live IAM prerequisites before any deployment writes. Missing boundary reads, log-index discovery or event diagnostics stop immediately with the administrator recovery step. It then:
 
 1. Creates/reuses private versioned activation storage.
 2. Uploads/pins customer activation material.
