@@ -23,7 +23,9 @@ For the numbered main-branch demos (purchasing, OPA, OpenClaw/OpenShell, invoice
 
 ## Provision API/MCP demos
 
-Open your deployed console, sign in, select the desired preset in the AI Wizard, review its configuration and choose **Deploy Demo & Create Delegation**. Wait for the demo deployment to succeed before running a client. The parent installation must already include the deployment role and image configuration supplied by its owner.
+Open your deployed console, sign in, select the desired preset in the AI Wizard, click **Generate Configuration (Bedrock)**, review the generated configuration and choose **Deploy Demo & Create Delegation**. Wait for the demo deployment to succeed before running a client. The parent installation must already include the deployment role and image configuration supplied by its owner.
+
+After changing presets, generate a fresh configuration before deploying. Selecting a preset alone only fills the prompt. Weather and Geocoding need no paid Emotion licence or proxy VM.
 
 Create/review the matching delegation and mint its agent token in the console. API resources use `/api-NAME/...`; MCP resources use `/mcp-NAME`. Do not reuse the baseline weather gateway URL for a different child demo. Customers use prebuilt vendor images; image publication belongs to the vendor release process.
 
