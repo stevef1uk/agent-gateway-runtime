@@ -254,4 +254,3 @@ value as the parent gateway. The wizard supplies these to child stacks as separa
 bodies. The source CLI reads `dist/aws-lambda/plan/secrets.json` for demo deployment
 (`--secrets-file` overrides the path); retain that private local file for updates.
 A rebuilt web image is required for this parameter-based provisioning path.
-
