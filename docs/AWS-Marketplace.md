@@ -10,7 +10,7 @@ product or infer a subscription from this repository's demo access.
 | Deployment choice | Intended buyer experience | Current status |
 | --- | --- | --- |
 | Hosted service | Subscribe through an approved SaaS listing, complete account/tenant onboarding, receive a console/gateway endpoint and run the weather demo | Proposed; no published listing, billing/entitlement integration or hosted AWS acceptance yet |
-| Customer's own AWS account | Receive the approved fulfillment instructions/artifacts, review IAM/cost/change sets, deploy and run the same weather demo | Technical development templates exist; customer bundle and Marketplace fulfillment route are not released/validated |
+| Customer's own AWS account | Receive the approved fulfillment instructions/artifacts, review IAM/cost/change sets, deploy and run the same weather demo | Public runtime templates/scripts exist; a current vendor image manifest is required; Marketplace fulfillment is not released/validated |
 
 The same weather walkthrough should work after either deployment supplies compatible
 ConsoleURL/GatewayURL values and a Cognito invitation. Marketplace billing and

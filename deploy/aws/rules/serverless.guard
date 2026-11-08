@@ -1,0 +1,37 @@
+# Application-specific security boundaries; complementary to AWS registry rules.
+rule internal_ingress_requires_iam when Resources.AuthzAPIRoute exists {
+ Resources.AuthzAPIRoute.Properties.AuthorizationType == 'AWS_IAM'
+ Resources.TokensvcAPIRoute.Properties.AuthorizationType == 'AWS_IAM'
+ Resources.GatewayInternalAPIRoute.Properties.AuthorizationType == 'AWS_IAM'
+ Resources.GatewayAPI.Properties.ProtocolType == 'HTTP'
+ Resources.GatewayAPIRoute not exists
+}
+rule public_gateway_has_no_operator_routes when Resources.GatewayAPI exists {
+ let public_routes = Resources.*[ Type == 'AWS::ApiGatewayV2::Route' Properties.ApiId.Ref == 'GatewayAPI' ]
+ %public_routes.Properties.RouteKey IN ['ANY /mcp', 'ANY /mcp/{proxy+}', 'ANY /tools/{proxy+}', 'ANY /t/{proxy+}', 'ANY /oauth/{proxy+}', 'GET /.well-known/oauth-authorization-server', 'GET /.well-known/oauth-protected-resource', 'GET /healthz', 'ANY /v1/forecast', 'ANY /v1/elevation', 'ANY /v1/marine']
+}
+rule durable_state_retained when Resources.DomainState exists {
+ Resources.DomainState.DeletionPolicy == 'Retain'
+ Resources.DomainState.Properties.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled == true
+}
+rule console_is_locked when Resources.WebFunction exists {
+ Resources.WebFunction.Properties.Environment.Variables.WEB_ADMIN_EMAILS.Ref == 'AdminEmails'
+ Resources.WebFunction.Properties.Environment.Variables.INTERNAL_IAM_REGION.Ref == 'AWS::Region'
+ Resources.WebFunction.Properties.Environment.Variables.SERVERLESS_PROFILE == '1'
+}
+
+rule security_state_retained when Resources.SecurityState exists {
+ Resources.SecurityState.DeletionPolicy == 'Retain'
+ Resources.SecurityState.Properties.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled == true
+}
+
+rule weather_routes_are_conditional when Resources.GatewayWeatherForecastRoute exists {
+ let weather = Resources.*[ Type == 'AWS::ApiGatewayV2::Route' Properties.ApiId.Ref == 'GatewayAPI' Properties.RouteKey IN ['ANY /v1/forecast','ANY /v1/elevation','ANY /v1/marine'] ]
+ %weather.Condition == 'WeatherDemoEnabled'
+ Resources.GatewayFunction.Properties.Environment.Variables.UPSTREAM_STRIP_CREDENTIALS exists
+}
+
+rule image_execution_roles_require_boundary when Resources.GatewayFunction.Properties.PackageType exists {
+ let roles = Resources.*[ Type == 'AWS::IAM::Role' ]
+ %roles.Properties.PermissionsBoundary.Ref == 'WorkloadBoundaryArn'
+}

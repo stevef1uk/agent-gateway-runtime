@@ -58,7 +58,7 @@ CloudWatch Standard logs, Secrets Manager, S3 Standard and Cognito Lite:
 
 A published self-hosting release must ship its exact usage inputs and reproducible
 calculator alongside the deployment/teardown bundle, without requiring private
-source access. That customer release bundle is still pending.
+source access. The public runtime now contains deployment templates and lifecycle scripts; use a compatible current vendor image manifest and activation material, as explained in [Deployment-Guide.md](Deployment-Guide.md).
 
 The existing infrastructure examples were modeled for development ZIPs. Customer
 image deployment also incurs private ECR storage and activation S3 GET/storage
@@ -76,4 +76,4 @@ idle is $1.08/month, 10,000 external actions $1.91 and 100,000 actions $9.12.
 If base invocations average five seconds rather than one, 100,000 actions become
 $19.79/month. These are assumptions before tax/software fees, not measured AWS
 charges or a $10 cap. A short acceptance run has different storage/log usage.
-See the [reproducible model and all assumptions](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/serverless-pricing.md#encrypted-image-deployment-preflight-7-november-2026).
+Ask the deployment owner for the matching release cost assumptions. The historical estimates above are not a current AWS quote; review your selected region and provisioned resources before deployment.

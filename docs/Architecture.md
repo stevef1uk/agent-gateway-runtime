@@ -49,4 +49,4 @@ HTTPS CONNECT authorizes the destination when establishing the tunnel. It cannot
 
 ## Operations
 
-Start with [repeatable Make workflow](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/make-workflow.md), then use the [demo prerequisite matrix and runners](AWS-Demos.md). The [optional proxy lifecycle](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/proxy-vm.md) explains billing and deletion. Application teardown must delete owned demo children and the optional proxy before shared services; retaining data/images is separate from retaining compute.
+Start with [customer setup and testing](Deployment-Guide.md), then use the [demo prerequisite matrix and runners](AWS-Demos.md). The [optional proxy lifecycle](Proxy-VM.md) explains billing and deletion. Application teardown must delete owned demo children and the optional proxy before shared services; retaining data/images is separate from retaining compute.

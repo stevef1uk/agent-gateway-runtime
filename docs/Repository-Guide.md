@@ -1,32 +1,19 @@
-# What the runtime `aws` branch contains
+# What this aws branch contains
 
-This branch starts with **one** scenario: Cognito-authenticated human delegation
-and curl probes against the public weather API through your AWS gateway.
+This public repository provides customer deployment and demo clients for prebuilt Agent Gateway images. It contains no proprietary application source and requires no Go compiler.
 
 | Path | Purpose |
-| --- | --- |
-| `README.md` | Entry point and current implementation/deployment status |
-| `docs/Public-API-Curl-Tutorial.md` | AWS-specific human/agent walkthrough |
-| `demo/weather-delegation.json` | Non-secret scoped delegation payload |
-| `demo/public-weather-tutorial.sh` | Three manual client phases: access, approved, revoked |
-| `docs/AWS-Marketplace.md` | Planned Marketplace procurement/fulfillment and explicit availability status |
-| `docs/Self-Hosting.md` | Separate customer self-hosting prerequisites/release status |
-| `docs/Deployment-Guide.md` | Source release/settings and operator provisioning links |
-| `docs/Architecture.md` | Trust boundaries and limitations |
-| `docs/Pricing.md` | Source cost model and provider/budget scope |
-| `docs/Teardown.md` | Source cleanup commands and retained-data warning |
-| `scripts/test_weather_client.py` | Offline fake-curl tests; no network/AWS calls |
-| `SECURITY.md`, `LICENSE` | Credential guidance and repository licence |
+|---|---|
+| `Makefile`, `aws-config.example.mk` | Public customer deployment, lookup, test and cleanup commands; local ignored configuration |
+| `deploy/aws/` | Reviewed CloudFormation activation/access/application/proxy templates and validation rules |
+| `scripts/deploy-aws.sh`, `scripts/aws-release.py` | Validate a current vendor manifest, import Docker Hub images to private ECR, deploy and save outputs/inventory |
+| `scripts/teardown-aws-deployment.py`, `scripts/aws-demo-stacks.py` | Account/ownership-checked cleanup and owned-demo inspection |
+| `scripts/aws-proxy-vm.py` | Explicit optional proxy lifecycle; never creates OpenClaw/backend hosts |
+| `demo/aws-demo.py` | REST/MCP/HTTP proxy client phases |
+| `demo/public-weather-tutorial.sh` | Baseline weather allow/approval/revocation client |
+| `docs/Deployment-Guide.md` | Customer starting point |
+| `docs/Customer-Managed-Demos.md` | Customer-owned advanced host prerequisites |
 
-The old Compose/Dex/image keys, Kubernetes manifests, unrelated tutorials,
-recorded scans and live-demo advertising have been removed from this branch's
-working tree. The `main` branch retains its separate history and local demos.
-They are not AWS instructions. There are no unattended human approvals, embedded
-credentials or automatic deployments in the AWS weather client.
+Vendor image builds and source-level tests stay in the private source repository. Customers receive published `_l` images, the prebuilt Emotion wrapper, a compatible release manifest and activation material. A current manifest is required; historical recorded releases are not promoted automatically.
 
-Hosted-demo users need only their operator's URLs/invitation. A customer
-self-hosting release bundle is still pending publication; the internal evaluation
-operator currently provisions from an authorized source checkout. This branch does not copy proprietary implementation code into a demo
-repository, provide a Marketplace installer or assert that every previous demo is
-ported. Subsequent AWS scenarios can be added after their code and real acceptance
-behavior are established.
+`make check` is offline. `make aws-demo-url` reads a deployed child's URL. `make aws-deploy` explicitly creates billable application resources, and `make aws-proxy-create` separately opts into a billable VM. The main branch retains its different local Compose/Dex/sandbox workflows.

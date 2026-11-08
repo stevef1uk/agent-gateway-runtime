@@ -16,3 +16,8 @@ __pycache__/
 keys/
 keys.tmp
 keys.txt
+
+# Customer-local deployment identifiers, release downloads and activation material.
+/aws-config.mk
+/releases/
+*.token

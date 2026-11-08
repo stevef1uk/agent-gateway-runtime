@@ -1,0 +1,555 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Optional single-instance ARM64 egress proxy demo VM: private SSM access, shared AWS authorization/state and explicit cost-controlled deletion.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    },
+    "com.aws.cloudformation.Context": {
+      "ref": [
+        "../../docs/Deployment-Guide.md"
+      ]
+    }
+  },
+  "Parameters": {
+    "ApplicationStack": {
+      "Type": "String",
+      "Default": "agent-gateway-dev",
+      "AllowedPattern": "^agent-gateway-[a-z0-9-]+$"
+    },
+    "GatewayImageUri": {
+      "Type": "String",
+      "AllowedPattern": "^[0-9]{12}\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9/._-]+@sha256:[0-9a-f]{64}$"
+    },
+    "AuthzURL": {
+      "Type": "String",
+      "AllowedPattern": "^https://[a-z0-9]+\\.execute-api\\.[a-z0-9-]+\\.amazonaws\\.com$"
+    },
+    "ConsoleURL": {
+      "Type": "String",
+      "AllowedPattern": "^https://[a-z0-9]+\\.execute-api\\.[a-z0-9-]+\\.amazonaws\\.com$"
+    },
+    "DomainTable": {
+      "Type": "String",
+      "AllowedPattern": "^agent-gateway-[A-Za-z0-9_-]+$"
+    },
+    "SecurityTable": {
+      "Type": "String",
+      "AllowedPattern": "^agent-gateway-[A-Za-z0-9_-]+$"
+    },
+    "JWTSecretArn": {
+      "Type": "String",
+      "AllowedPattern": "^arn:aws:secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:agent-gateway-[A-Za-z0-9_-]+$"
+    },
+    "ActivationBucket": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "CustomerKeyObject": {
+      "Type": "String",
+      "AllowedPattern": "^activation/[A-Za-z0-9/._-]+$"
+    },
+    "CustomerKeyVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "AllowedPattern": "^[A-Za-z0-9+/_.=-]+$"
+    },
+    "GatewayLicenceObject": {
+      "Type": "String",
+      "AllowedPattern": "^activation/[A-Za-z0-9/._-]+$"
+    },
+    "GatewayLicenceVersion": {
+      "Type": "String",
+      "MinLength": 1,
+      "AllowedPattern": "^[A-Za-z0-9+/_.=-]+$"
+    },
+    "InstanceType": {
+      "Type": "String",
+      "Default": "t4g.small",
+      "AllowedValues": [
+        "t4g.small",
+        "t4g.medium"
+      ],
+      "Description": "ARM64 burstable demo proxy; standard CPU credits avoid surplus-credit billing."
+    },
+    "AMI": {
+      "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+      "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
+    },
+    "AuthzAPIId": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9]+$"
+    }
+  },
+  "Resources": {
+    "ProxyVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.88.0.0/24",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-vpc"
+            }
+          },
+          {
+            "Key": "agent-gateway-parent",
+            "Value": {
+              "Ref": "ApplicationStack"
+            }
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-internet"
+            }
+          },
+          {
+            "Key": "agent-gateway-parent",
+            "Value": {
+              "Ref": "ApplicationStack"
+            }
+          }
+        ]
+      }
+    },
+    "GatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "ProxyVPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "ProxySubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "ProxyVPC"
+        },
+        "CidrBlock": "10.88.0.0/26",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-subnet"
+            }
+          },
+          {
+            "Key": "agent-gateway-parent",
+            "Value": {
+              "Ref": "ApplicationStack"
+            }
+          }
+        ]
+      }
+    },
+    "ProxyRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "ProxyVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-routes"
+            }
+          },
+          {
+            "Key": "agent-gateway-parent",
+            "Value": {
+              "Ref": "ApplicationStack"
+            }
+          }
+        ]
+      }
+    },
+    "InternetRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "GatewayAttachment",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "ProxyRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "SubnetRouteAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "ProxySubnet"
+        },
+        "RouteTableId": {
+          "Ref": "ProxyRouteTable"
+        }
+      }
+    },
+    "ProxySecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "SSM reaches a loopback-only proxy; public IPv4 is outbound connectivity, not a public proxy.",
+          "must": [
+            "No inbound proxy, SSH or other ingress rules.",
+            "Internet egress is required for SSM, ECR and governed destinations."
+          ]
+        }
+      },
+      "Properties": {
+        "GroupDescription": "No ingress; optional demo proxy reached by SSM only.",
+        "VpcId": {
+          "Ref": "ProxyVPC"
+        },
+        "SecurityGroupIngress": [],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${AWS::StackName}-security"
+            }
+          },
+          {
+            "Key": "agent-gateway-parent",
+            "Value": {
+              "Ref": "ApplicationStack"
+            }
+          }
+        ]
+      }
+    },
+    "ProxyRole": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Dedicated EC2 identity; no credentials in user data and no gateway operator secret.",
+          "must": [
+            "SSM managed-node permissions plus exact application resources only.",
+            "Do not give this role IAM/deployment mutation permissions."
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "ProxyApplicationResources",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "GatewayActivation",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObjectVersion"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${CustomerKeyObject}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${GatewayLicenceObject}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "VerifyAgentTokens",
+                  "Effect": "Allow",
+                  "Action": [
+                    "secretsmanager:GetSecretValue"
+                  ],
+                  "Resource": {
+                    "Ref": "JWTSecretArn"
+                  }
+                },
+                {
+                  "Sid": "SharedDomainAndSecurityState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "dynamodb:ConditionCheckItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:Query",
+                    "dynamodb:UpdateItem"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${DomainTable}"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${SecurityTable}"
+                    }
+                  ]
+                },
+                {
+                  "Sid": "CallOnlyAuthorizationAPI",
+                  "Effect": "Allow",
+                  "Action": [
+                    "execute-api:Invoke"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AuthzAPIId}/$default/*/*"
+                  }
+                },
+                {
+                  "Sid": "PullOnlyGatewayImage",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:BatchGetImage",
+                    "ecr:GetDownloadUrlForLayer"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ApplicationStack}/gateway"
+                  }
+                },
+                {
+                  "Sid": "RegionalECRLogin",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ecr:GetAuthorizationToken"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": {
+                        "Ref": "AWS::Region"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReportOwnBootstrap",
+                  "Effect": "Allow",
+                  "Action": [
+                    "cloudformation:SignalResource"
+                  ],
+                  "Resource": {
+                    "Ref": "AWS::StackId"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ProxyProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Roles": [
+          {
+            "Ref": "ProxyRole"
+          }
+        ]
+      }
+    },
+    "ProxyLaunchTemplate": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "One ARM64 on-demand demo VM, not an autoscaled HA fleet.",
+          "must": [
+            "IMDSv2 required; host-networked container needs no metadata bridge hop.",
+            "Encrypted root disk is deleted on termination.",
+            "Standard CPU credits; no unlimited credit charges."
+          ]
+        }
+      },
+      "Properties": {
+        "LaunchTemplateData": {
+          "ImageId": {
+            "Ref": "AMI"
+          },
+          "InstanceType": {
+            "Ref": "InstanceType"
+          },
+          "IamInstanceProfile": {
+            "Arn": {
+              "Fn::GetAtt": [
+                "ProxyProfile",
+                "Arn"
+              ]
+            }
+          },
+          "MetadataOptions": {
+            "HttpEndpoint": "enabled",
+            "HttpTokens": "required",
+            "HttpPutResponseHopLimit": 1
+          },
+          "CreditSpecification": {
+            "CpuCredits": "standard"
+          },
+          "BlockDeviceMappings": [
+            {
+              "DeviceName": "/dev/xvda",
+              "Ebs": {
+                "VolumeType": "gp3",
+                "VolumeSize": 12,
+                "Encrypted": true,
+                "DeleteOnTermination": true
+              }
+            }
+          ],
+          "NetworkInterfaces": [
+            {
+              "DeviceIndex": 0,
+              "AssociatePublicIpAddress": true,
+              "SubnetId": {
+                "Ref": "ProxySubnet"
+              },
+              "Groups": [
+                {
+                  "Ref": "ProxySecurityGroup"
+                }
+              ]
+            }
+          ],
+          "UserData": {
+            "Fn::Base64": {
+              "Fn::Sub": [
+                "#!/bin/bash\nset -euo pipefail\nexport AWS_DEFAULT_REGION='${AWS::Region}' AWS_REGION='${AWS::Region}' AWS_PAGER=''\ntrap 'aws cloudformation signal-resource --stack-name \"${AWS::StackName}\" --logical-resource-id ProxyInstance --unique-id proxy-bootstrap --status FAILURE || true' ERR\ndnf install -y docker awscli-2\nsystemctl enable --now docker amazon-ssm-agent\ninstall -d -m 700 /etc/agent-gateway-proxy\ncat >/etc/agent-gateway-proxy/config.b64 <<'CONFIG'\n${EncodedConfig}\nCONFIG\npython3 - <<'DECODE'\nimport base64,pathlib\np=pathlib.Path('/etc/agent-gateway-proxy/config.json')\np.write_bytes(base64.b64decode(pathlib.Path('/etc/agent-gateway-proxy/config.b64').read_bytes()))\np.chmod(0o600)\nDECODE\ncat >/etc/agent-gateway-proxy/bootstrap.py <<'PYBOOT'\n#!/usr/bin/env python3\n\"\"\"Boot-time configuration for the optional proxy VM; never logs secret contents.\"\"\"\nimport json,os,pathlib,subprocess\nconfig=json.loads(pathlib.Path('/etc/agent-gateway-proxy/config.json').read_text())\ndef aws(*args):\n return subprocess.check_output(['aws','--region',config['region'],*args],text=True).strip()\nsecret=json.loads(aws('secretsmanager','get-secret-value','--secret-id',config['jwt_secret_arn'],'--query','SecretString','--output','text'))['value']\nif '\\n' in secret or '\\r' in secret:raise SystemExit('JWT secret is not a valid environment value')\nenv={\n 'JWT_SECRET':secret,'JWT_ISSUER':'agent-gateway','PERSISTENCE':'dynamodb',\n 'DYNAMODB_TABLE':config['table'],'DYNAMODB_NAMESPACE':config['application_stack'],\n 'DYNAMODB_SECURITY_TABLE':config['security_table'],'DYNAMODB_SECURITY_NAMESPACE':config['application_stack'],\n 'AUTHZ_URL':config['authz_url'],'AUTHZ_IAM_REGION':config['region'],'AWS_REGION':config['region'],\n 'GATEWAY_ADDR':'127.0.0.1:8080','GATEWAY_PROXY_ADDR':'127.0.0.1:8088',\n 'GATEWAY_URL':'http://127.0.0.1:8080','GATEWAY_ADMIN_TOKEN':'','DEMO_UI':'0',\n 'APPROVAL_CONSOLE_URL':config['console_url'],'LICENCE_S3_BUCKET':config['activation_bucket'],\n 'CUSTOMER_KEY_S3_OBJECT':config['key_object'],'CUSTOMER_KEY_S3_VERSION':config['key_version'],\n 'LICENCE_S3_OBJECT':config['gateway_licence_object'],'LICENCE_S3_VERSION':config['gateway_licence_version'],\n}\npath=pathlib.Path('/etc/agent-gateway-proxy/runtime.env');fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)\nwith os.fdopen(fd,'w') as f:\n for key,value in env.items():\n  if '\\n' in value or '\\r' in value:raise SystemExit('Invalid environment configuration')\n  f.write(key+'='+value+'\\n')\nregistry=config['gateway_image'].split('/')[0]\npassword=aws('ecr','get-login-password')\nsubprocess.run(['docker','login','--username','AWS','--password-stdin',registry],input=password,text=True,check=True,stdout=subprocess.DEVNULL)\nsubprocess.run(['docker','pull',config['gateway_image']],check=True,stdout=subprocess.DEVNULL)\nsubprocess.run(['docker','rm','--force','agent-gateway-proxy'],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\nos.execvp('docker',['docker','run','--rm','--name','agent-gateway-proxy','--network','host','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','768m','--cpus','1','--tmpfs','/tmp:rw,exec,nosuid,size=512m','--env-file',str(path),config['gateway_image']])\nPYBOOT\nchmod 700 /etc/agent-gateway-proxy/bootstrap.py\ncat >/etc/systemd/system/agent-gateway-proxy.service <<'UNIT'\n[Unit]\nDescription=Optional Agent Gateway stateful demo proxy\nAfter=network-online.target docker.service\nRequires=docker.service\nStartLimitIntervalSec=300\nStartLimitBurst=3\n[Service]\nType=simple\nExecStart=/usr/bin/python3 /etc/agent-gateway-proxy/bootstrap.py\nExecStop=-/usr/bin/docker stop --time 10 agent-gateway-proxy\nRestart=on-failure\nRestartSec=30\n[Install]\nWantedBy=multi-user.target\nUNIT\nsystemctl daemon-reload\nsystemctl enable --now agent-gateway-proxy\nready=0\nfor attempt in $(seq 1 180); do\n if curl --silent --fail http://127.0.0.1:8080/healthz >/dev/null && [ \"$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8088/)\" = 407 ]; then ready=1; break; fi\n sleep 2\ndone\n[ \"$ready\" = 1 ]\naws cloudformation signal-resource --stack-name '${AWS::StackName}' --logical-resource-id ProxyInstance --unique-id proxy-bootstrap --status SUCCESS\n",
+                {
+                  "EncodedConfig": {
+                    "Fn::Base64": {
+                      "Fn::Sub": "{\"region\":\"${AWS::Region}\",\"application_stack\":\"${ApplicationStack}\",\"gateway_image\":\"${GatewayImageUri}\",\"authz_url\":\"${AuthzURL}\",\"console_url\":\"${ConsoleURL}\",\"table\":\"${DomainTable}\",\"security_table\":\"${SecurityTable}\",\"jwt_secret_arn\":\"${JWTSecretArn}\",\"activation_bucket\":\"${ActivationBucket}\",\"key_object\":\"${CustomerKeyObject}\",\"key_version\":\"${CustomerKeyVersion}\",\"gateway_licence_object\":\"${GatewayLicenceObject}\",\"gateway_licence_version\":\"${GatewayLicenceVersion}\"}"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "TagSpecifications": [
+            {
+              "ResourceType": "instance",
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": {
+                    "Fn::Sub": "${AWS::StackName}-proxy"
+                  }
+                },
+                {
+                  "Key": "agent-gateway-parent",
+                  "Value": {
+                    "Ref": "ApplicationStack"
+                  }
+                }
+              ]
+            },
+            {
+              "ResourceType": "volume",
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": {
+                    "Fn::Sub": "${AWS::StackName}-root"
+                  }
+                },
+                {
+                  "Key": "agent-gateway-parent",
+                  "Value": {
+                    "Ref": "ApplicationStack"
+                  }
+                }
+              ]
+            }
+          ],
+          "Monitoring": {
+            "Enabled": false
+          }
+        }
+      }
+    },
+    "ProxyInstance": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": [
+        "InternetRoute",
+        "SubnetRouteAssociation"
+      ],
+      "CreationPolicy": {
+        "ResourceSignal": {
+          "Count": 1,
+          "Timeout": "PT15M"
+        }
+      },
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Opt-in stateful egress/CONNECT demo support; systemd restarts its single proxy process.",
+          "must": [
+            "Not part of the default Lambda stack.",
+            "Delete the proxy stack to remove the instance and root volume; stopping alone retains EBS costs.",
+            "No multi-AZ failover or connection migration."
+          ]
+        }
+      },
+      "Properties": {
+        "LaunchTemplate": {
+          "LaunchTemplateId": {
+            "Ref": "ProxyLaunchTemplate"
+          },
+          "Version": {
+            "Fn::GetAtt": [
+              "ProxyLaunchTemplate",
+              "LatestVersionNumber"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "InstanceId": {
+      "Value": {
+        "Ref": "ProxyInstance"
+      }
+    },
+    "ProxyPort": {
+      "Value": "8088"
+    },
+    "ConnectionMode": {
+      "Value": "SSM port forwarding to 127.0.0.1:8088; no inbound security-group rules."
+    }
+  }
+}

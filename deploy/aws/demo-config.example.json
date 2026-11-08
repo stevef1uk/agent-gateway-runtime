@@ -1,0 +1,21 @@
+{
+  "stack": "agent-gateway-dev",
+  "region": "eu-west-3",
+  "account": "123456789012",
+  "deployment_role": "arn:aws:iam::123456789012:role/agent-gateway-dev-demo-deployer",
+  "gateway_role": "arn:aws:iam::123456789012:role/agent-gateway-dev-GatewayRole-example",
+  "backend_role": "arn:aws:iam::123456789012:role/agent-gateway-dev-EmotionBackendRole-example",
+  "gateway_image": "123456789012.dkr.ecr.eu-west-3.amazonaws.com/agent-gateway-dev/gateway@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "emotion_image": "123456789012.dkr.ecr.eu-west-3.amazonaws.com/agent-gateway-dev/emotion@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "bucket": "agent-gateway-artifacts-example",
+  "key_object": "activation/customer.key",
+  "key_version": "example-key-version",
+  "gateway_licence_object": "activation/gateway.token",
+  "gateway_licence_version": "example-gateway-licence-version",
+  "jwt_secret_arn": "arn:aws:secretsmanager:eu-west-3:123456789012:secret:agent-gateway-dev-jwt-example",
+  "admin_secret_arn": "arn:aws:secretsmanager:eu-west-3:123456789012:secret:agent-gateway-dev-admin-example",
+  "authz_url": "https://example.execute-api.eu-west-3.amazonaws.com",
+  "table": "agent-gateway-dev-domain",
+  "security_table": "agent-gateway-dev-security",
+  "console_url": "https://console.execute-api.eu-west-3.amazonaws.com"
+}

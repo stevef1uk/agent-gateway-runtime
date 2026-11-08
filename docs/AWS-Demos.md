@@ -23,18 +23,11 @@ For the numbered main-branch demos (purchasing, OPA, OpenClaw/OpenShell, invoice
 
 ## Provision API/MCP demos
 
-From the **agent-gateway source repository**, after deploying the wizard-enabled parent stack and its reviewed deployment-access role:
+Open your deployed console, sign in, select the desired preset in the AI Wizard, review its configuration and choose **Deploy Demo & Create Delegation**. Wait for the demo deployment to succeed before running a client. The parent installation must already include the deployment role and image configuration supplied by its owner.
 
-```bash
-make aws-demo-deploy DEMO=weather DEMO_KIND=api
-make aws-demo-deploy DEMO=geocoding DEMO_KIND=api
-make aws-demo-deploy DEMO=users DEMO_KIND=api
-make aws-demo-deploy DEMO=refunds DEMO_KIND=api
-make aws-demo-deploy DEMO=emotion DEMO_KIND=mcp
-make aws-demo-list
-```
+Create/review the matching delegation and mint its agent token in the console. API resources use `/api-NAME/...`; MCP resources use `/mcp-NAME`. Do not reuse the baseline weather gateway URL for a different child demo. Customers use prebuilt vendor images; image publication belongs to the vendor release process.
 
-Alternatively, use **Deploy Demo & Create Delegation** in the AI Wizard. CLI provisioning creates the backend and gateway; it does not issue a delegation. Create/review the delegation in the console, then copy its agent token privately. The caller must have the demo's exact `/api-NAME/...` or `/mcp-NAME` resources and appropriate actions. Do not substitute the baseline weather gateway URL for a child demo's gateway URL.
+If you do not yet have a console/invitation, start with [Self-hosting prerequisites](Self-Hosting.md) or ask your hosted-deployment operator. No private source repository access is required to run these clients.
 
 ## Run API/MCP probes
 
@@ -55,7 +48,7 @@ make aws-demo DEMO=users
 
 The script asks privately for the **agent token from your Users delegation**. Create/review that delegation in the signed-in console first, allowing read access to `/api-users/users*`, and mint/copy its agent token. Do not supply AWS access keys, the Cognito sign-in token, or a token for another demo. `unset AGENT_TOKEN` makes the client prompt rather than reuse a token left in your shell.
 
-If AWS reports that the stack does not exist, deploy that demo using the Wizard or the source repository's `make aws-demo-deploy DEMO=users`, and wait for success. If AWS reports AccessDenied or an expired session, resolve access for the selected profile; this lookup does not grant permissions or create resources. A missing GatewayURL after creation means deployment needs inspection before testing.
+If AWS reports that the stack does not exist, deploy that demo using the Wizard, and wait for success. If AWS reports AccessDenied or an expired session, resolve access for the selected profile; this lookup does not grant permissions or create resources. A missing GatewayURL after creation means deployment needs inspection before testing.
 
 For another environment, apply the same settings to every lookup:
 
@@ -76,7 +69,7 @@ Open **CloudFormation** in the deployment region, select the child stack, open *
 | Refunds | `agent-gateway-dev-demo-api-refunds` |
 | Emotion | `agent-gateway-dev-demo-mcp-emotion` |
 
-For a different parent name or service slug, use the stack listed by `make aws-demo-list` in the source repository. Its JSON field `gateway_url` is the same URL. Select a completed child deployment, rather than the parent's baseline gateway or public web console.
+For a different parent name or service slug, ask the deployment owner for the matching child stack or GatewayURL. Select a completed child deployment, rather than the parent's baseline gateway or public web console.
 
 ### Switch demos explicitly
 
@@ -120,16 +113,9 @@ For REST demos, `PHASE=held` expects 202 and an approval ID; `PHASE=approved` ex
 
 ## Start the proxy before forward-proxy demos
 
-Run from **agent-gateway** (runtime provides wrappers for these same targets). Select an explicitly reviewed non-root deployment profile with EC2, IAM, CloudFormation and SSM permissions; the application deployment profile is not automatically granted those permissions.
+The proxy must first be created explicitly by the deployment owner from this runtime checkout. Follow [Proxy VM](Proxy-VM.md): configure AWS_VM_PROFILE, then use `make aws-proxy-create`, `make aws-proxy-status` and `make aws-proxy-connect`. These commands use the public scripts/templates in this repository; no source checkout is needed. The five Lambda demo presets need no proxy.
 
-```bash
-make aws-proxy-plan  # offline parameter preview; creates nothing
-make aws-proxy-create AWS_VM_PROFILE=YOUR_VM_PROFILE
-make aws-proxy-status AWS_VM_PROFILE=YOUR_VM_PROFILE
-make aws-proxy-connect AWS_VM_PROFILE=YOUR_VM_PROFILE
-```
-
-Keep the connect terminal open. The Session Manager plugin must be installed for port forwarding. The tunnel exposes only `http://127.0.0.1:8088` locally. The VM security group opens no inbound ports, including SSH or a public proxy port.
+For a proxy already created by your operator, obtain its instance ID/region and approved SSM session access. Open the SSM port-forwarding tunnel to proxy loopback port 8088, following [AWS instructions](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-sessions-start.html). Keep that terminal open. The local URL should be `http://127.0.0.1:8088`; do not expose a public proxy port.
 
 In another terminal, from **agent-gateway-runtime**, use a delegation with tool `egress`, resource `example.com`, and action `read` (HTTP GET):
 
@@ -153,12 +139,9 @@ A held CONNECT returns an HTTP proxy response before the TLS tunnel is establish
 
 Closing the SSM terminal only closes the tunnel. It does **not** delete or stop the VM.
 
-```bash
-# From agent-gateway, or through the runtime wrapper:
-make aws-proxy-delete AWS_VM_PROFILE=YOUR_VM_PROFILE
-```
+The deployment owner runs `make aws-proxy-delete` from this runtime checkout to delete the optional proxy stack. Customer-managed OpenClaw/backend hosts must be deleted through their own management procedure. The client runner deletes neither.
 
-Deletion waits for the proxy stack to disappear and removes its instance, encrypted root disk and owned network resources. Shared application tables, secrets, images and demo stacks are retained. Delete the optional proxy **before** deleting the parent application. EC2 compute, EBS and public IPv4 incur ongoing charges while provisioned; standard burstable CPU credits are used. Other shared AWS services can still incur charges after proxy deletion.
+The proxy deletion procedure should wait for stack removal and remove its instance, encrypted root disk and owned network. Shared application tables, secrets, images and demo stacks are separate. EC2 compute, EBS and public IPv4 can incur ongoing charges while provisioned. Review [cleanup ownership](Teardown.md).
 
 ## Availability of this design
 
