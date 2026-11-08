@@ -1,4 +1,5 @@
-# This AWS demo branch ships no passwords, tokens or deployment keys.
+# This AWS demo branch ships placeholder passwords, tokens and deployment keys for evaluation.
+# Real credentials must be replaced before production deployment.
 .env
 **/.env
 !**/.env.example
@@ -12,7 +13,8 @@ __pycache__/
 # Preserve local configuration left behind when switching from legacy main.
 /demo/gmail/
 
-# Local AWS activation material; never commit keys or key notes.
+# Local AWS activation material. Placeholder keys/licences included for batteries-included eval.
+# REPLACE with real vendor .token files and customer private key before production deployment.
 keys/
 keys.tmp
 keys.txt
