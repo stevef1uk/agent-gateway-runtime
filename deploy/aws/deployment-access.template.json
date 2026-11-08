@@ -208,8 +208,16 @@
           "must": [
             "Administrator reviews and applies this stack separately.",
             "No ability to edit this policy, the workload boundary, or the developer role.",
-            "API IDs and Cognito pool IDs are unknown until creation; regional scopes need review."
+            "API IDs and Cognito pool IDs are unknown until creation; regional scopes need review.",
+            "TagResource/UntagResource match the live API Gateway Stage provider; W3037 is suppressed here because the lint IAM action catalog omits them."
           ]
+        },
+        "cfn-lint": {
+          "config": {
+            "ignore_checks": [
+              "W3037"
+            ]
+          }
         }
       },
       "Properties": {
@@ -788,8 +796,16 @@
           "must": [
             "Only demo-prefixed functions/logs and regional HTTP APIs.",
             "Pass only existing application GatewayRole and EmotionBackendRole to Lambda.",
-            "Never create or mutate IAM roles or policies."
+            "Never create or mutate IAM roles or policies.",
+            "TagResource/UntagResource match the live API Gateway Stage provider; W3037 is suppressed here because the lint IAM action catalog omits them."
           ]
+        },
+        "cfn-lint": {
+          "config": {
+            "ignore_checks": [
+              "W3037"
+            ]
+          }
         }
       },
       "Properties": {
