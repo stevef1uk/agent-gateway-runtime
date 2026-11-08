@@ -125,18 +125,41 @@ Copy **WorkloadBoundaryArn** into `WORKLOAD_BOUNDARY_ARN` in `aws-config.mk`. Ch
 
 ### Existing stack or AccessDenied?
 
-Pulling a newer template does **not** update live IAM policies. Repeat the administrator update above after permission changes; recreating the application will not repair the access stack.
+Pulling a newer template does **not** update live IAM policies. If deployment still reports `AccessDenied` for `cloudformation:DescribeEvents`, update the access stack as an administrator:
 
-With your configured account/stack values, check the deployment profile:
+1. Pull the latest `aws` branch in this repository (`git pull` with a clean checkout).
+2. In the administrator AWS Console, open **CloudFormation → Europe (Paris)**.
+3. Select **`agent-gateway-access-dev`**, not the application stack `agent-gateway-dev`.
+4. Choose **Update stack → Create a change set → Replace existing template → Upload a template file**.
+5. Upload **`deploy/aws/deployment-access.template.json`** from this checkout.
+6. Keep existing parameters; verify **`DeploymentRole=AgentGatewayDev`**. Continue, acknowledge named IAM resources, and create the change set.
+7. Review it and choose **Execute change set**. Wait for the **access stack** to show **`UPDATE_COMPLETE`**; merely creating a change set does not apply permissions.
+8. Run the checks below, then retry **`make aws-deploy`**.
+
+If checks still return `AccessDenied`, inspect IAM → Roles → **AgentGatewayDev → Permissions** as administrator: the access stack's `DeploymentAccess` managed policy must be attached and its default version must contain the missing action. Confirm the access stack's **Events** show a successful update. Changing only the IAM user's permissions or recreating the application does not update the assumed role.
+
+These copyable checks use the default profile and stack names from this guide. If you chose different names, change them below. The policy ARN and version are discovered automatically:
 
 ```bash
-aws sts get-caller-identity --profile agent-gateway-dev
-aws iam get-policy --profile agent-gateway-dev --policy-arn YOUR_WORKLOAD_BOUNDARY_ARN
-aws iam get-policy-version --profile agent-gateway-dev --policy-arn YOUR_WORKLOAD_BOUNDARY_ARN --version-id VERSION_FROM_GET_POLICY
-aws cloudformation describe-events --profile agent-gateway-dev --region eu-west-3 --stack-name agent-gateway-dev --filters FailedEvents=true
+(
+  set -e
+  aws sts get-caller-identity --profile agent-gateway-dev
+  agw_boundary=$(aws cloudformation describe-stacks \
+    --profile agent-gateway-dev --region eu-west-3 \
+    --stack-name agent-gateway-access-dev \
+    --query 'Stacks[0].Outputs[?OutputKey==`WorkloadBoundaryArn`].OutputValue | [0]' \
+    --output text)
+  case "$agw_boundary" in arn:aws:iam::*:policy/*) ;; *) echo 'Missing workload boundary output'; exit 1 ;; esac
+  agw_policy_version=$(aws iam get-policy --profile agent-gateway-dev \
+    --policy-arn "$agw_boundary" --query 'Policy.DefaultVersionId' --output text)
+  aws iam get-policy-version --profile agent-gateway-dev \
+    --policy-arn "$agw_boundary" --version-id "$agw_policy_version"
+  aws cloudformation describe-events --profile agent-gateway-dev \
+    --region eu-west-3 --stack-name agent-gateway-dev --filters FailedEvents=true
+)
 ```
 
-Use `DefaultVersionId` from `get-policy` for the version. The event check applies after an application stack/change set exists. A missing-stack error differs from `AccessDenied`.
+The event check applies after an application stack/change set exists. A missing-stack error differs from `AccessDenied`. These checks read configuration only; they do not grant permissions.
 
 If early validation reports `AWS::EarlyValidation::ResourceExistenceCheck`, inspect these events before retrying. The current template grants `cloudformation:DescribeEvents` and read-only `iam:GetPolicy` / `iam:GetPolicyVersion` on the exact workload boundary. An administrator must apply it to make those grants live. Do not give the deployer permission to edit its own policies or attach AdministratorAccess. Remove the access stack only after workload cleanup.
 
