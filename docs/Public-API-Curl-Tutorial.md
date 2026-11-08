@@ -1,170 +1,90 @@
-# AWS weather demo: Cognito sign-in and curl probes
+# AWS Weather Demo Walkthrough: Console, Playwright & cURL
 
-This is the AWS adaptation of the weather tutorial. The upstream is
-`https://api.open-meteo.com`; the agent calls **your AWS public gateway**, not the
-provider directly. The demo needs a deployed weather-enabled Agent Gateway stack
-and an invited Cognito operator. **That first AWS deployment is still pending.**
+> Recovery status (8 November 2026): console build **1.0.93** is repaired in source and still requires a new encrypted image release and live acceptance testing. Endpoint identifiers below are recorded deployment values; confirm current CloudFormation outputs before using them.
 
-## 1. Get the correct release and URLs
+This walkthrough demonstrates the **Agent Gateway AWS Serverless Edition** governing access to `https://api.open-meteo.com` through the live stack in **Paris (`eu-west-3`)**:
 
-```sh
-git switch aws
-git pull --ff-only origin aws
-```
+- **ConsoleURL (`WebAPI`)**: `https://0b7565mq7j.execute-api.eu-west-3.amazonaws.com`
+- **GatewayURL (`GatewayAPI`)**: `https://p2ye0fbw36.execute-api.eu-west-3.amazonaws.com`
 
-Your deployment operator supplies:
+You do **not** need to open Chrome DevTools or paste JavaScript snippets. Choose any of the three workflows below.
 
-- **ConsoleURL**: your stack's HTTPS web console.
-- **GatewayURL**: its public `https://ID.execute-api.eu-west-3.amazonaws.com` gateway.
-- Your Cognito invitation and the operator email included in the console allowlist.
+---
 
-The [operator deployment notes](Deployment-Guide.md) explain enabling the exact weather routes and
-credential stripping. Your operator must supply a compatible weather-enabled deployment.
-Do not substitute a pre-existing live site, localhost/Dex address, internal API URL,
-shared demo token or older encrypted container image. This is a REST demonstration;
-Open-Meteo is not an MCP server and this is not an MCP connector acceptance test.
+## Workflow 1: Interactive Web Console (Recommended First Test)
 
-## 2. Sign in as the delegating human
+1. **Sign In via Cognito**:
+   - Open `https://0b7565mq7j.execute-api.eu-west-3.amazonaws.com` and click **Sign in with Cognito**.
+2. **Create One or More Delegations**:
+   - Click **`🌤️ Quick Weather Delegation`** in the **Delegations** section to create the `aws-weather-test` delegation (`read` on `/v1/forecast` and `/v1/elevation`, with human approval required for `/v1/elevation`) and load its Bearer token into the **Interactive Endpoint Tester**.
+   - **Create additional delegations anytime**:
+     - Click **`🧙 Delegation Wizard`** to open the 5-step wizard and create delegations for other agents or resource combinations (e.g. `/v1/forecast` only, or custom spend caps).
+     - Click **`✨ AI Config Assistant (Bedrock)`** to generate a delegation from natural language using Amazon Bedrock (`eu.amazon.nova-micro-v1:0`).
+     - Or use the **New delegation** form at the bottom of the Console.
+     - Click **`▶ Test`** on an active row to select that exact delegation. Paste its existing Bearer token or enter its agent secret to mint a fresh token; testing never revokes or replaces it.
+3. **Test Live Requests in the Console's Interactive Endpoint Tester**:
+   - Click **`🌤️ Forecast GET (200 Allowed)`** -> **▶ Send Test Request Now** -> Verify **`HTTP 200 OK`** with real London temperature and wind speed JSON.
+   - Click **`⛰️ Elevation GET (202 Held)`** -> **▶ Send Test Request Now** -> Verify **`HTTP 202 Accepted — HELD FOR HUMAN APPROVAL`**.
+   - Scroll up to **Pending approvals**, click **Approve**, then click **▶ Send Test Request Now** again -> Verify **`HTTP 200 OK`** with `"elevation": [25.0]`. Click **▶ Send Test Request Now** once more -> Verify **`HTTP 202 Accepted`** (single-use approval was consumed).
+   - Click **`🌊 Marine Path (403 Out of Scope)`** -> **▶ Send Test Request Now** -> Verify **`HTTP 403 Forbidden`**.
+   - Click **`🚫 Forecast POST (403 Read-Only)`** -> **▶ Send Test Request Now** -> Verify **`HTTP 403 Forbidden`**.
+   - Click **`🚫 No Token (401)`** -> **▶ Send Test Request Now** -> Verify **`HTTP 401 Unauthorized`**.
+4. **Verify the Audit Trail**:
+   - Scroll to **Protected API / MCP Audit Trail** to inspect every `ALLOW`, `HELD (202)`, and `DENY` event recorded in DynamoDB.
 
-Open your own ConsoleURL, sign in through Cognito, change the invitation password
-privately and return to the application. Use an email you control that is included
-in the deployed allowlist. No password grant or fixture Alice/password is used.
+---
 
-The console retains the verified human token server-side. Your agent needs only
-its own short-lived agent token, not that human token or an IAM/admin credential.
+## Workflow 2: Automated End-to-End Playwright + CLI Runner
 
-## 3. Create a scoped delegation
-
-The exact non-secret payload is in [demo/weather-delegation.json](../demo/weather-delegation.json).
-It grants read access only to forecast/elevation, expires after 30 minutes and
-requires human approval for elevation. The basic console form does not expose
-arbitrary path approval rules, so open your browser's developer console on **your
-own signed-in ConsoleURL** and run:
-
-```javascript
-const response = await fetch('/api/delegations', {
-  method: 'POST', credentials: 'same-origin',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({
-    agent_id: 'aws-weather-test',
-    resources: ['/v1/forecast', '/v1/elevation'],
-    actions: ['read'], expires_in_seconds: 1800, ttl_seconds: 300, max_depth: 0,
-    approval_rules: [{
-      when: {resource_pattern: '/v1/elevation', action_pattern: 'read'},
-      require: true, rationale: 'AWS weather demo: elevation needs a human decision'
-    }]
-  })
-});
-if (!response.ok) throw new Error('Delegation creation failed: ' + response.status);
-window.agwWeather = await response.json();
-console.log({delegation_id: window.agwWeather.delegation.id});
-```
-
-The response includes `token` and the one-time `agent_secret`. Copy
-`window.agwWeather.token` privately for the next step. Do not post token values,
-passwords, cookies, screenshots containing them or browser HAR files in Git/chat.
-The client cannot choose the delegating human; the server attaches its verified
-session identity to this request.
-
-## 4. Run the access checks
-
-In Bash, set the **public** GatewayURL. The script validates the root AWS API host,
-uses TLS verification and does not follow redirects. It cannot safely send agent
-credentials directly to Open-Meteo or an arbitrary custom URL.
+To run all CLI curl probes (`access`, `approved`, `revoked`) while Playwright handles the browser actions (creating the delegation, approving the held elevation request, and revoking the delegation):
 
 ```sh
-export GATEWAY_URL='https://REPLACE.execute-api.eu-west-3.amazonaws.com'
+bash demo/run-aws-weather-demo.sh
+```
+
+1. **Step 1 (`create-delegation`)**: Opens Chrome (`scripts/playwright_weather_demo.js`) using a persistent profile `/tmp/agw-weather-playwright-profile`. If you are not signed in yet, sign in via Cognito in the opened Chrome window; Playwright automatically detects the signed-in session, creates the `aws-weather-test` delegation, and captures `AGENT_TOKEN` in memory.
+2. **Step 2 (`access` probes)**: Runs `bash demo/public-weather-tutorial.sh access` against `https://p2ye0fbw36.execute-api.eu-west-3.amazonaws.com` and captures the held `APPROVAL_ID`:
+   - `PASS no-token: HTTP 401`
+   - `PASS forecast: HTTP 200`
+   - `PASS post-denied: HTTP 403`
+   - `PASS marine-denied: HTTP 403`
+   - `PASS header-override-ignored: HTTP 403`
+   - `PASS elevation-held: HTTP 202, approval_id=...`
+3. **Step 3 (`approve` + `approved` probes)**: Playwright approves `APPROVAL_ID` in the Console, then runs `bash demo/public-weather-tutorial.sh approved`:
+   - `PASS elevation-approved: HTTP 200`
+   - `PASS approval-single-use: HTTP 202`
+4. **Step 4 (`revoke` + `revoked` probe)**: Playwright revokes the delegation in the Console while the token is still valid, then runs `bash demo/public-weather-tutorial.sh revoked`:
+   - `PASS revoked-token: HTTP 403`
+
+---
+
+## Workflow 3: Manual CLI Probes (`demo/public-weather-tutorial.sh`)
+
+If you want to run the shell probes manually using a Bearer token copied from the Console's Endpoint Tester (`Copy Token` button):
+
+```sh
+export GATEWAY_URL='https://p2ye0fbw36.execute-api.eu-west-3.amazonaws.com'
 read -r -s -p 'Agent token: ' AGENT_TOKEN; printf '\n'
 export AGENT_TOKEN
+
+# 1. Run access & hold probes
 bash demo/public-weather-tutorial.sh access
-```
 
-Replace the URL, including the lowercase API ID. The checks are:
-
-| Probe | Expected |
-| --- | --- |
-| Forecast without a token | 401 |
-| Forecast with the delegated token | 200, including actual temperature/wind fields |
-| POST with the read-only delegation | 403 |
-| `/v1/marine`, outside the delegation | 403 |
-| POST with a forged `X-Agent-Action: read` | 403; the actual method controls policy |
-| Elevation without human consent | 202 and an approval ID |
-
-The script prints the approval ID, never your token. It sends London's coordinates
-and requests temperature/wind plus elevation. Weather data changes over time. It
-asserts response fields/statuses and exits nonzero on failure; provider errors are
-not treated as success. A 202 means the weather lookup has **not** been executed.
-
-## 5. Approve and retry
-
-In the signed-in console, find that approval ID and approve it as the same human
-who created the delegation. This records consent; it does not execute the request.
-Then run:
-
-```sh
+# 2. Click "Approve" in the Console's Pending approvals panel, then run:
 bash demo/public-weather-tutorial.sh approved
-```
 
-Expected: elevation returns 200 with a real nonempty `elevation` array once. The
-next identical lookup returns 202 because approval was consumed. The script never
-approves on behalf of the user and has no unattended `--yes` mode.
-
-Tokens last five minutes. If you need a fresh token **before revocation**, run this
-in the same signed-in browser console, then privately replace `AGENT_TOKEN` in Bash:
-
-```javascript
-const minted = await fetch('/api/tokens', {
-  method: 'POST', credentials: 'same-origin',
-  headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({delegation_id: window.agwWeather.delegation.id,
-    agent_secret: window.agwWeather.agent_secret, ttl_seconds: 300})
-});
-if (!minted.ok) throw new Error('Token mint failed: ' + minted.status);
-window.agwWeather.token = (await minted.json()).access_token;
-```
-
-## 6. Revoke while the token is still valid
-
-Revoke the delegation in your signed-in console. Do not mint a new token after
-revocation. Retry the previous token promptly:
-
-```sh
+# 3. Click "Revoke" on the delegation in the Console while the token is still valid, then run:
 bash demo/public-weather-tutorial.sh revoked
-```
 
-Expected: 403. A token-expiry 401 is a failed revocation proof, not a passing result.
-If it expires too early, create a fresh test delegation and repeat the sequence.
-Inspect the console audit for this delegation's allow/hold/deny outcomes, the
-approved elevation's approval ID and the verified approver identity.
-
-## 7. Finish
-
-```sh
 unset AGENT_TOKEN GATEWAY_URL
 ```
 
-Delete `window.agwWeather` in the browser (`delete window.agwWeather`) and sign out.
-A second held request cannot execute under the revoked delegation. The shell client
-does not automatically revoke or tear down anything; these are deliberate human/
-operator actions. If the AWS stack was created only for this test, use [teardown](Teardown.md).
+---
 
-## Boundaries and troubleshooting
+## Boundaries & Troubleshooting
 
-- Gateway path scope is not a latitude/longitude filter or query-specific approval binding.
-- This public provider can still be called directly; enforce agent network egress
-  separately if all outbound traffic must use your gateway.
-- Provider-side execution counters are not observable. Audit/status/returned JSON
-  are the evidence here; no claim is made that upstream executions were independently counted.
-- Missing weather routes (404): verify `EnableWeatherDemo=true` and the compatible source release.
-- Unexpected 401: token missing/expired, or wrong service URL.
-- Unexpected 403: check the exact delegation paths/actions, revocation and IAM logs.
-- 429/5xx: stop retries and check provider limits, upstream availability and CloudWatch.
-- Console login/creation failures: operator checks Cognito callbacks, invitation,
-  signed internal hops and server logs; do not make management APIs public to fix them.
+- **Offline syntax & unit checks**: Run `make check` to execute `bash -n` and `scripts/test_weather_client.py` with fake-curl fixtures (zero network calls).
+- **Unexpected `401 Unauthorized`**: Token missing or expired (default token TTL is 5 minutes; click `⚡ Mint Fresh Bearer Token Now` in the Console Endpoint Tester or re-run `demo/run-aws-weather-demo.sh`).
+- **Unexpected `403 Forbidden`**: Verify the delegation covers `/v1/forecast` and `/v1/elevation` with `read` action and has not been revoked.
 
-[Weather data by Open-Meteo.com](https://open-meteo.com/). Review current
-[terms](https://open-meteo.com/en/terms) and [pricing](https://open-meteo.com/en/pricing).
-The free provider endpoint is for evaluation/non-commercial use within its limits;
-commercial/promotional use needs an appropriate provider arrangement. Keep this
-acceptance run small. The script's offline checks are `make check`; no real AWS
-acceptance run has been completed yet.
+[Weather data by Open-Meteo.com](https://open-meteo.com/).

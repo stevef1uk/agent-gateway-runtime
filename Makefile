@@ -6,5 +6,6 @@ help:
 demo:
 	bash demo/public-weather-tutorial.sh access
 check:
-	bash -n demo/public-weather-tutorial.sh
+	bash -n demo/public-weather-tutorial.sh demo/run-aws-weather-demo.sh
+	node --check scripts/playwright_weather_demo.js
 	python3 -B scripts/test_weather_client.py

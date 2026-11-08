@@ -1,81 +1,82 @@
-# Internal operator notes: AWS weather deployment
+# Operator Deployment Guide: Agent Gateway on AWS (`eu-west-3`)
 
-For the new encrypted-image path, use the operator
-[image deployment guide](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/encrypted-lambda-images.md)
-and `serverless-images.template.json`. The ZIP build steps below describe the earlier
-source-only development prototype and are not a customer installation method.
-Images use the separate `stevef1uk/agent-gateway-{authz,tokensvc,gateway,web}_l` names;
-[initial versioned images are published](releases/0.1.0-aws-c506506.md), while
-AWS acceptance and a complete customer installation bundle remain pending.
+> Recovery status (8 November 2026): console build **1.0.93** is repaired in source and still requires a new encrypted image release and live acceptance testing. Endpoint identifiers below are recorded deployment values; confirm current CloudFormation outputs before using them.
 
-For ordinary users, start with the [weather walkthrough](Public-API-Curl-Tutorial.md).
-For customer-owned infrastructure, start with [Self-hosting](Self-Hosting.md).
-Marketplace delivery is covered in the separate [Marketplace guide](AWS-Marketplace.md).
-The source links below are internal evaluation references, not third-party prerequisites.
+This guide summarizes how the **Agent Gateway AWS Serverless Edition** is deployed and updated in **Paris (`eu-west-3`)** from the authorized implementation repository (`stevef1uk/agent-gateway`, branch `aws`).
 
-This runtime branch is a client/demo guide. Infrastructure and private implementation
-remain in `stevef1uk/agent-gateway`, branch `aws`. Authorized access to that repository
-is currently required for provisioning; this is not yet a self-contained Marketplace
-installer or buyer distribution. Do not deploy the old `main` branch's Compose/k3s stack
-as an AWS substitute.
+For running the demo as an operator or user against the live stack, start with [README.md](../README.md) or the [Weather Walkthrough](Public-API-Curl-Tutorial.md).
 
-Use compatible source release **`c7e0906` or later**, with these authoritative guides:
+---
 
-- [Implementation status](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/README.md).
-- [Exact deployment and cloud testing commands](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/deploy-and-test.md).
-- [Weather-specific settings and acceptance](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/weather-demo.md).
-- [Current resource/cost model](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/serverless-pricing.md).
+## 1. Live Deployed Stack Inventory (`eu-west-3`, Account `857710215813`)
 
-## Operator prerequisites
+| Resource | Deployed Identifier / URL |
+|---|---|
+| **Access Boundary Stack** | `agent-gateway-access-dev` (`deploy/aws/deployment-access.template.json`) |
+| **Workload Boundary Policy** | `arn:aws:iam::857710215813:policy/agent-gateway-access-dev-WorkloadBoundary-cUd8zZCXC0P0` |
+| **Artifact Store Stack** | `agent-gateway-artifacts-dev` (`deploy/aws/artifact-store.template.json`) |
+| **Activation S3 Bucket** | `agent-gateway-artifacts-dev-artifacts-zxnumraqhjvy` (`activation/customer.key` + `activation/{authz,tokensvc,gateway,web}.token`) |
+| **Application Stack** | `agent-gateway-dev` (`deploy/aws/serverless-images.template.json`) |
+| **ECR Repositories** | `857710215813.dkr.ecr.eu-west-3.amazonaws.com/agent-gateway-dev/{authz,tokensvc,gateway,web}` |
+| **Lambda Functions** | `agent-gateway-dev-{authz,tokensvc,gateway,web}` (`arm64`, `512 MiB`, `28s` timeout) |
+| **Public Console (`ConsoleURL`)** | `https://0b7565mq7j.execute-api.eu-west-3.amazonaws.com` |
+| **Public Gateway (`GatewayURL`)** | `https://p2ye0fbw36.execute-api.eu-west-3.amazonaws.com` |
+| **Internal IAM APIs** | `AuthzAPI` (`l2setzbxx0`), `TokensvcAPI` (`b7xncv7c9k`), `GatewayInternalAPI` (`0k8h6g0r7k`) |
+| **Cognito User Pool & Domain** | `eu-west-3_8YUGYY8ao` (`https://agw-weather-857710215813.auth.eu-west-3.amazoncognito.com`) |
 
-Choose your reviewed account and region; the current evaluation target uses Paris
-`eu-west-3`. A validation-only profile cannot provision or clean up the application.
-Deployment/cleanup permissions and workload-role boundaries require review. No
-application stack has been deployed; local passes are not AWS acceptance evidence.
+---
 
-A $10 monthly budget is a reasonable initial evaluation planning target. Check actual/forecast alerts;
-an AWS Budget is not a hard spending cap. Do not create a paid Open-Meteo subscription
-or enable extra services merely to run this small development scenario.
+## 2. How the Stack Was Deployed (`scripts/deploy-aws-weather-demo.sh`)
 
-## Weather release settings
+In the `agent-gateway` source repository (`aws` branch), the deployment is automated by `scripts/deploy-aws-weather-demo.sh`:
 
-In the authorized source checkout, follow the source runbook's artifact-store,
-immutable build/upload and change-set sequence. At its settings step:
+1. **Prerequisite IAM Access Stack (`agent-gateway-access-dev`)**:
+   Deployed once by an account administrator from `deploy/aws/deployment-access.template.json` to attach `DeploymentAccessPolicy` to `AgentGatewayDev` and create the `WorkloadBoundary` managed policy.
+2. **Automated 6-Step Deployment Script**:
+   ```sh
+   bash scripts/deploy-aws-weather-demo.sh \
+  --release-manifest dist/aws-lambda/images/release.json \
+     --domain-prefix agw-weather-857710215813 \
+     --admin-emails stevef1uk@gmail.com \
+     --workload-boundary-arn arn:aws:iam::857710215813:policy/agent-gateway-access-dev-WorkloadBoundary-cUd8zZCXC0P0 \
+     --profile agent-gateway-dev
+   ```
+   This script:
+   - Ensures `agent-gateway-artifacts-dev` exists and retrieves `ArtifactBucket`.
+   - Uploads `keys/customer_private.pem` (`activation/customer.key`) and `keys/aws-evaluation/{authz,tokensvc,gateway,web}.token` with SSE-S3 encryption and records their exact S3 `VersionId`s.
+   - Creates the four regional ECR repositories (`agent-gateway-dev/{authz,tokensvc,gateway,web}`) with `AES256` encryption and `ScanOnPush=true`, imports the encrypted ARM64 `_l` images, and verifies their SHA-256 digests.
+   - Generates `dist/aws-lambda/plan/parameters.json` via `scripts/prepare-aws-image-deployment.py` with `EnableWeatherDemo=true` and `UpstreamURL=https://api.open-meteo.com`.
+   - Creates and executes a CloudFormation change set for `deploy/aws/serverless-images.template.json` (`agent-gateway-dev`) and saves `dist/aws-lambda/plan/teardown-inventory-agent-gateway-dev.json`.
+   - Runs live HTTP boundary smoke checks (`200` on public health/discovery, `403` on unsigned internal IAM routes, `403` on spoofed `X-Agent-Gateway-Authorization` envelope headers) and invites the Cognito operator user.
+
+---
+
+## 3. Releasing the repaired console
+
+Commit and push the reviewed source before building. In `agent-gateway`, build
+and publish the four encrypted ARM64 images using only the public key directory:
 
 ```sh
-agw_upstream='https://api.open-meteo.com'
-export AWS_WEATHER_DEMO=1
+bash scripts/build-aws-lambda-images.sh /absolute/path/to/public-keys VERSION_TAG --push
 ```
 
-Prepare the release after the artifact bucket exists:
+The build writes `dist/aws-lambda/images/release.json` containing immutable digests,
+`source_commit`, and `console_build`. Review that manifest, then pass it explicitly
+with `--release-manifest` to the deployment command above. Old release manifests
+without matching source/build metadata are rejected instead of silently deploying
+an older console. The deployment updates CloudFormation, including model permissions
+and environment variables; changing only Lambda code leaves that wiring incomplete.
 
-```sh
-AWS_WEATHER_DEMO=1 bash scripts/prepare-aws-deployment.sh \
-  "$agw_bucket" "releases/$agw_release" "$agw_domain" "$agw_admin_emails" \
-  https://api.open-meteo.com
-```
+Before the application update, an administrator must review and update the access
+stack from `deploy/aws/deployment-access.template.json`. The workload boundary now
+permits Nova Micro through the EU inference profile; the web execution role receives
+the corresponding narrow invocation grant. No other service role gets Bedrock access.
+The configured model may route to Frankfurt, Stockholm, Ireland or Paris. See the
+[AWS Nova Micro model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-amazon-nova-micro.html)
+and [inference profile permissions](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-prereq.html).
 
-This command is run in the **source repository**, not this runtime repository.
-It writes `EnableWeatherDemo=true` in the reviewed parameters; it does not deploy.
-The template defaults weather mode off and rejects another upstream with it on.
-
-The source stack provides four ARM64 HTTP Lambdas, five HTTP APIs, DynamoDB,
-Cognito, scoped workload roles, generated-secret references and logs. Weather
-mode adds only three exact public routes: `/v1/forecast`, `/v1/elevation` and
-`/v1/marine` (for the negative-scope probe). Management routes remain IAM-only;
-there is no public `/v1/*` catch-all. Credentials and actor/forwarding headers are
-stripped before the third-party weather hop. Caller mapping overrides cannot
-change these routes' actual method/path authorization.
-
-Review the artifact and application change sets before executing. Save the teardown
-inventory immediately after deployment. Invite a test Cognito user at an email in
-the allowlist; complete sign-in privately. Give demo users only ConsoleURL, the
-public GatewayURL and their Cognito invitation—not AWS/admin secrets. Then follow
-[the weather tutorial](Public-API-Curl-Tutorial.md) and the source runbook's unsigned
-internal-route/spoofed-envelope checks. The complete real-AWS browser/DPoP/load/HA
-acceptance suite is not yet automated or completed.
-
-Keep `AWS_WEATHER_DEMO=1` when preparing updates that should retain weather ingress.
-A new immutable release prefix is required for changed binaries. Disabling the flag
-removes the three demo routes, not tables/audit/user data. Follow [teardown](Teardown.md)
-for cleanup rather than weakening security or deleting data as a debugging shortcut.
+The AI status pill says **configured**, not online, until a real generation request
+is made. Model invocation failure returns a plan labelled **Local policy rules
+(fallback)**. Review the generated resource scope and approval rules before creating
+any delegation. Health indicators in the serverless catalogue describe configuration,
+not a live upstream probe.
