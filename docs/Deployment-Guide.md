@@ -22,7 +22,33 @@ The supported scripted region is **Paris (`eu-west-3`)**. Keep that value for th
 
 ## 2. Arrange AWS profiles with your administrator
 
-Your AWS administrator supplies an existing non-root role and a named CLI profile that assumes it. The default profile name is `agent-gateway-dev`, but that name is local configuration, not an AWS account automatically created by this project.
+Your AWS administrator supplies an existing non-root IAM role and a named CLI profile that assumes it. The default profile name is `agent-gateway-dev`, but that name is local configuration, not an AWS account automatically created by this project.
+
+**What the administrator must create before deployment:**
+
+1. **IAM Role** - An existing role in the target AWS account (e.g. `AgentGatewayDev` or custom name). This role must exist before `make aws-access-deploy` runs; the CloudFormation template attaches policies to it but does not create the role itself.
+
+2. **Trust Policy** - The role's trust policy must allow the deployer CLI profile to assume it. Typical trust statement:
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": { "AWS": "arn:aws:iam::YOUR_ACCOUNT:root" },
+         "Action": "sts:AssumeRole"
+       }
+     ]
+   }
+   ```
+   The administrator configures this according to your organization's sign-in method (IAM user, IdP federation, etc.).
+
+3. **CLI Profile** - A named profile in `~/.aws/credentials` (or environment) that uses the role, e.g:
+   ```ini
+   [agent-gateway-dev]
+   role_arn = arn:aws:iam::123456789012:role/AgentGatewayDev
+   source_profile = your-personal-profile
+   ```
 
 You need two separate responsibilities (one person may perform both):
 
@@ -31,7 +57,7 @@ You need two separate responsibilities (one person may perform both):
 | Application deployer | `AWS_PROFILE` and its existing IAM role name, `AWS_DEPLOYMENT_ROLE_NAME` | Application/ECR/S3 deployment after bounded access is applied |
 | Account administrator | Explicit `AWS_ADMIN_PROFILE` | Reviewing/applying IAM access and boundary template, then removing it after cleanup |
 
-Ask the administrator to configure the deployer role's trust/assumption according to your organization's sign-in method. The access template attaches policies to that **existing role**; it does not create the human identity or fix profile trust. The deployer cannot grant itself these permissions. Do not use root as the application deployment profile.
+Ask the administrator to configure the deployer role's trust/assumption according to your organization's sign-in method. The access template attaches policies to that **existing role**; it does not create the human identity or fix profile trust. The deployer cannot grant itself these permissions. **Do not use root** as the application deployment profile.
 
 Run the read-only identity check once the profile is configured:
 
