@@ -1,19 +1,19 @@
-# Agent Gateway — AWS deployment
+# Agent Gateway — GCP deployment
 
-The **`aws` branch** deploys Agent Gateway into your own AWS account using published encrypted **`_l` images from Docker Hub**. Application source and a Go compiler are not required. The `main` branch contains the separate local/container demos.
+The **`gcp` branch** deploys Agent Gateway into your own Google Cloud Platform (GCP) project using published encrypted container images and **Terraform**. Application source and a Go compiler are not required. The `main` branch contains the separate local/container demos.
 
-Start with the **[customer deployment and testing guide](docs/Deployment-Guide.md)**. It explains prerequisites, activation files, configuration, administrator setup, Make deployment, sign-in and your first demo.
+## Target Serverless Architecture (`europe-west9` Paris)
 
-* [AWS architecture and availability limits](docs/Architecture.md)
-* [Demo commands and proxy prerequisites](docs/AWS-Demos.md)
-* [Optional proxy VM and cleanup](docs/Proxy-VM.md)
-* [Customer-managed OpenClaw and advanced demos](docs/Customer-Managed-Demos.md)
-* [Teardown and retained data](docs/Teardown.md)
+- **Consolidated Cloud Run v2 Services (`web` and `gateway`)**: Scale-to-zero (`min_instance_count = 0`), `1.0 vCPU`, `512 MiB`, `concurrency = 80`, with `authz` and `tokensvc` consolidated into `gateway`.
+- **Firestore Native State**: Strongly consistent document storage and ACID transactions for delegations, approvals, audit, signups, OAuth sessions and DPoP replay/revocation, with 7-day Point-in-Time Recovery (PITR).
+- **Google Cloud Identity Platform**: OIDC + S256 PKCE human authentication.
+- **Artifact Registry & Cloud Storage Activation**: Encrypted container images activated at cold start using pinned Cloud Storage object generations.
+- **Vertex AI Policy Wizard**: Powered by `gemini-2.5-flash-lite` in `europe-west9`.
+- **Optional Compute Engine Forward Proxy (`e2-micro`)**: Single-instance proxy accessed locally via Cloud IAP TCP forwarding (`gcloud compute start-iap-tunnel`).
 
 ```bash
-git clone --branch aws https://github.com/stevef1uk/agent-gateway-runtime.git
+git clone --branch gcp https://github.com/stevef1uk/agent-gateway-runtime.git
 cd agent-gateway-runtime
-make check
 ```
 
-`make check` is offline and creates no AWS resources. Deployment requires a current vendor release manifest and compatible activation material; historical manifests are not substitutes. The [guide](docs/Deployment-Guide.md#3-obtain-the-current-release-and-activation-files) explains these inputs before any billable deployment. OpenClaw hosts are not created by this repository; the proxy VM is optional.
+*(Terraform deployment modules and customer runtime scripts for the `gcp` branch are under construction.)*
