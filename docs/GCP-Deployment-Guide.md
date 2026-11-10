@@ -10,16 +10,58 @@ This guide deploys the published encrypted Agent Gateway images into your own Go
 
 Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the evaluation customer key and signed licence token to a private, versioned Cloud Storage bucket.
 
-## Deploy
+## 1. Prepare the project
 
 ```bash
 git clone --branch gcp https://github.com/stevef1uk/agent-gateway-runtime.git
 cd agent-gateway-runtime
 
+gcloud auth login
+gcloud auth application-default login
+gcloud config set project test2-514309
+```
+
+Verify the project and billing link before deployment:
+
+```bash
+gcloud projects describe test2-514309
+gcloud billing projects describe test2-514309
+```
+
+If billing is not linked:
+
+```bash
+gcloud billing accounts list
+gcloud billing projects link test2-514309 \
+  --billing-account=YOUR_OPEN_BILLING_ACCOUNT_ID
+```
+
+The deploying account needs permission to enable APIs, create service accounts, grant IAM roles, create secrets and buckets, create Firestore, and deploy Cloud Run. For a disposable development project, Project Owner or Editor is sufficient. Check the active account:
+
+```bash
+gcloud auth list
+gcloud config get-value account
+```
+
+## 2. Deploy
+
+Run a validation-only pass first:
+
+```bash
 scripts/deploy-gcp.sh \
-  --project-id YOUR_PROJECT_ID \
+  --project-id test2-514309 \
+  --version 2026-11-10-test5 \
+  --keys-directory keys
+```
+
+Then deploy:
+
+```bash
+scripts/deploy-gcp.sh \
+  --project-id test2-514309 \
   --version 2026-11-10-test5 \
   --keys-directory keys \
+  --emotion \
   --apply
 ```
 
