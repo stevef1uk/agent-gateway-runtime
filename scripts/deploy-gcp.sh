@@ -195,7 +195,7 @@ gcloud firestore indexes composite create --collection-group=agw_domains \
 
 gcloud run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
-  --service-account="$gateway_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --max-instances=10 \
+    --service-account="$gateway_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
   --set-env-vars="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,$activation_env" \
   --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
 
@@ -227,7 +227,7 @@ fi
 
 gcloud run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
-  --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --max-instances=10 \
+    --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"
 
 echo "Gateway URL: $gateway_url"

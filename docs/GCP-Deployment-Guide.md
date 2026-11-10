@@ -112,6 +112,8 @@ curl -i https://GATEWAY_CLOUD_RUN_HOST/healthz
 
 The serverless profile uses Firestore for sessions, delegations, approvals, audit state, and replay protection. Backup/Restore and Kubernetes-only features are intentionally hidden.
 
+The deployment keeps one gateway and one web instance warm so the console health polling does not repeatedly hit cold-start windows. This adds a small baseline Cloud Run cost while the deployment is running.
+
 Add `--emotion` to deploy the published private Emotion MCP upstream and wire it to the gateway:
 
 ```bash
