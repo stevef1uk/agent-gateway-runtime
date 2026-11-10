@@ -16,23 +16,25 @@ Do not reuse these evaluation files for production or paid/customer deployments.
 git clone --branch gcp https://github.com/stevef1uk/agent-gateway-runtime.git
 cd agent-gateway-runtime
 
+export GCP_PROJECT_ID="test2-514309"  # change this to your project ID
+
 gcloud auth login
 gcloud auth application-default login
-gcloud config set project test2-514309
+gcloud config set project "$GCP_PROJECT_ID"
 ```
 
 Verify the project and billing link before deployment:
 
 ```bash
-gcloud projects describe test2-514309
-gcloud billing projects describe test2-514309
+gcloud projects describe "$GCP_PROJECT_ID"
+gcloud billing projects describe "$GCP_PROJECT_ID"
 ```
 
 If billing is not linked:
 
 ```bash
 gcloud billing accounts list
-gcloud billing projects link test2-514309 \
+gcloud billing projects link "$GCP_PROJECT_ID" \
   --billing-account=YOUR_OPEN_BILLING_ACCOUNT_ID
 ```
 
@@ -49,7 +51,7 @@ Run a validation-only pass first:
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id test2-514309 \
+  --project-id "$GCP_PROJECT_ID" \
   --version 2026-11-10-test5 \
   --keys-directory keys
 ```
@@ -58,7 +60,7 @@ Then deploy:
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id test2-514309 \
+  --project-id "$GCP_PROJECT_ID" \
   --version 2026-11-10-test5 \
   --keys-directory keys \
   --emotion \
@@ -96,11 +98,11 @@ If necessary, a project administrator can grant the roles:
 ```bash
 ACCOUNT="$(gcloud config get-value account)"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
   --member="user:$ACCOUNT" \
   --role="roles/viewer"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
   --member="user:$ACCOUNT" \
   --role="roles/oauthconfig.editor"
 ```
@@ -117,7 +119,7 @@ Then redeploy with the client ID and secret file:
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id YOUR_PROJECT_ID \
+  --project-id "$GCP_PROJECT_ID" \
   --version 2026-11-10-test5 \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -133,7 +135,7 @@ echo
 export GCP_OIDC_CLIENT_SECRET
 
 scripts/deploy-gcp.sh \
-  --project-id YOUR_PROJECT_ID \
+  --project-id "$GCP_PROJECT_ID" \
   --version 2026-11-10-test5 \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -160,7 +162,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id YOUR_PROJECT_ID \
+  --project-id "$GCP_PROJECT_ID" \
   --version 2026-11-10-test5 \
   --keys-directory /secure/path/to/activation \
   --emotion \
@@ -174,7 +176,7 @@ Without `--emotion`, an allowed MCP request returns the gateway's authorization 
 For a disposable project:
 
 ```bash
-gcloud projects delete YOUR_PROJECT_ID
+gcloud projects delete "$GCP_PROJECT_ID"
 ```
 
 If retaining the project, delete the Cloud Run services, Firestore database, activation bucket, and secrets individually. Keep a secure backup of activation files before deleting them.
