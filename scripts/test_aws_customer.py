@@ -5,7 +5,7 @@ from unittest.mock import patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 def load(name,file):
     spec=importlib.util.spec_from_file_location(name,ROOT/'scripts'/file);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);return module
-release=load('release','aws-release.py');demos=load('demos','aws-demo-stacks.py')
+release=load('release','aws-release.py');demos=load('demos','aws-demo-stacks.py');activation=load('activation','check-aws-activation.py')
 def manifest():
     images={s:{'digest':'sha256:'+'a'*64,'immutable_image':f'stevef1uk/agent-gateway-{s}_l@sha256:'+'a'*64} for s in release.SERVICES}
     return dict(release_schema=2,version='1.0.94-test',source_commit='a'*40,console_build='1.0.94',platform='linux/arm64',images=images,emotion={'digest':'sha256:'+'b'*64,'immutable_image':'stevef1uk/agent-gateway-emotion_l@sha256:'+'b'*64})
@@ -23,6 +23,11 @@ class Customer(unittest.TestCase):
     def test_unencrypted_or_foreign_repository_rejected(self):
         m=manifest();m['images']['web']['immutable_image']='other/image@sha256:'+'a'*64
         with self.assertRaises(ValueError):self.validate(m)
+    def test_malformed_activation_image_map_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=pathlib.Path(folder)/'release.json';path.write_text(json.dumps({'images':None}))
+            with self.assertRaisesRegex(ValueError,'does not contain the four product images'):
+                activation.verify_image_activation(pathlib.Path(folder)/'key',pathlib.Path(folder)/'licences',path)
     def test_emotion_required(self):
         m=manifest();m.pop('emotion')
         with self.assertRaises(ValueError):self.validate(m)
@@ -52,11 +57,16 @@ class Customer(unittest.TestCase):
             folder=pathlib.Path(folder);(folder/'release.json').write_text(json.dumps(manifest()));subprocess.run(['openssl','genpkey','-algorithm','RSA','-pkeyopt','rsa_keygen_bits:2048','-out',str(folder/'customer.key')],check=True,capture_output=True)
             for name in release.SERVICES:(folder/(name+'.token')).write_text(base64.urlsafe_b64encode(b'2099-01-01:test:test@example.test:test:test-signature').decode().rstrip('='))
             fake=folder/'aws';fake.write_text('#!/bin/sh\nexit 99\n');fake.chmod(0o700)
+            docker_calls=folder/'docker-calls'
+            fake_docker=folder/'docker'
+            fake_docker.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{docker_calls}"\n')
+            fake_docker.chmod(0o700)
             args=['make','-s','aws-preflight','RELEASE_MANIFEST='+str(folder/'release.json'),'CUSTOMER_KEY_FILE='+str(folder/'customer.key'),'LICENCE_DIR='+str(folder),'AWS_ACCOUNT=123456789012','DOMAIN_PREFIX=test-prefix','ADMIN_EMAILS=test@example.test']
             env=dict(os.environ,PATH=str(folder)+os.pathsep+os.environ['PATH'])
             result=subprocess.run(args,cwd=ROOT,env=env,text=True,capture_output=True)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertIn('No AWS resources created',result.stdout)
+            self.assertEqual(4,len(docker_calls.read_text().splitlines()))
     def test_owned_delete_waits_for_exact_stack(self):
         config=dict(stack='agent-gateway-test',region='eu-west-3',account='123456789012',deployment_role='arn:aws:iam::123456789012:role/agent-gateway-test-demo-deployer',table='test-table')
         entries={'api:users':dict(name='users',kind='api',stack_name='agent-gateway-test-demo-api-users')}

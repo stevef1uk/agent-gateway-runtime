@@ -79,7 +79,7 @@ done
 
 python3 -B scripts/aws-release.py "$AGW_RELEASE_MANIFEST"
 
-python3 -B scripts/check-aws-activation.py --key "$AGW_CUSTOMER_KEY_FILE" --licences "$AGW_LICENCE_DIR"
+python3 -B scripts/check-aws-activation.py --key "$AGW_CUSTOMER_KEY_FILE" --licences "$AGW_LICENCE_DIR" --release "$AGW_RELEASE_MANIFEST"
 
 say "Checking AWS identity (profile: $AWS_PROFILE, region: $AWS_REGION)"
 caller_account="$(aws sts get-caller-identity --query Account --output text)"

@@ -205,7 +205,7 @@ make aws-identity
 make aws-preflight
 ```
 
-**Expected:** the intended account and the **assumed role** (`assumed-role/AgentGatewayDev/...`), plus passing manifest, configuration and file checks. If `make aws-identity` shows `user/agent-gateway-dev` instead, a static-key entry for `[agent-gateway-dev]` in `~/.aws/credentials` is overriding the role profile; delete that section and run it again, because deploying as the user bypasses the scoped role. Preflight validates the private-key format, licence envelope and expiry, and release identifiers, and rejects placeholder activation files. Vendor signatures and image/key compatibility are verified at runtime. Preflight creates no AWS resources; fix any missing input before continuing.
+**Expected:** the intended account and the **assumed role** (`assumed-role/AgentGatewayDev/...`), plus passing manifest, configuration and activation checks. If `make aws-identity` shows `user/agent-gateway-dev` instead, a static-key entry for `[agent-gateway-dev]` in `~/.aws/credentials` is overriding the role profile; delete that section and run it again, because deploying as the user bypasses the scoped role. Preflight validates the private-key format and licence envelope/expiry, then runs each selected ARM64 product image offline with its matching key and licence. This verifies image/key/signature compatibility before any activation material is uploaded. It may pull the public images through Docker, but creates no AWS resources; fix any missing or mismatched inputs before continuing.
 
 ## 5. Administrator: create or update deployment access
 
