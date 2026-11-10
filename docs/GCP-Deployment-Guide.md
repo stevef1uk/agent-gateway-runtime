@@ -34,6 +34,14 @@ Use the exact release version supplied with your activation material. Do not use
 
 ## Google Sign-In
 
+Google sign-in is a required **second step**. If the first deployment did not include `--oidc-client-id` and `--oidc-client-secret`, the console deliberately displays:
+
+```json
+{"error":"oidc is not enabled; unset OIDC_ISSUER_URL to use dev mode"}
+```
+
+That means the infrastructure is deployed, but browser sign-in has not been configured yet.
+
 The account creating the OAuth client needs project visibility plus OAuth configuration permissions. Check the active account:
 
 ```bash

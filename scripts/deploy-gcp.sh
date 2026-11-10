@@ -222,4 +222,9 @@ gcloud run deploy "$web_service" \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"
 
 echo "Gateway URL: $gateway_url"
-echo "Web URL: $(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format='value(status.url)')"
+web_url="$(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format='value(status.url)')"
+echo "Web URL: $web_url"
+if [[ -z "$oidc_client_id" ]]; then
+  echo "OIDC is not enabled yet. Create a Google OAuth client with this redirect URI, then rerun with --oidc-client-id and --oidc-client-secret:"
+  echo "  $web_url/oidc/callback"
+fi
