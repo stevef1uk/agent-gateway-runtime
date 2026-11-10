@@ -34,6 +34,29 @@ Use the exact release version supplied with your activation material. Do not use
 
 ## Google Sign-In
 
+The account creating the OAuth client needs project visibility plus OAuth configuration permissions. Check the active account:
+
+```bash
+gcloud auth list
+gcloud config get-value account
+```
+
+If necessary, a project administrator can grant the roles:
+
+```bash
+ACCOUNT="$(gcloud config get-value account)"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="user:$ACCOUNT" \
+  --role="roles/viewer"
+
+gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+  --member="user:$ACCOUNT" \
+  --role="roles/oauthconfig.editor"
+```
+
+`roles/oauthconfig.editor` permits creating OAuth clients and secrets, managing test users, and updating OAuth consent configuration. If these commands are denied, ask the organization or project administrator to grant the roles.
+
 Create a Google OAuth web client in **APIs & Services -> Credentials**. After the script prints the web URL, add this redirect URI to the OAuth client:
 
 ```text
