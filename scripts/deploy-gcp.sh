@@ -156,6 +156,12 @@ for service_account in "$gateway_sa" "$web_sa"; do
   gcloud storage buckets add-iam-policy-binding "gs://$bucket" --member="serviceAccount:$service_account" --role=roles/storage.objectViewer --quiet >/dev/null
 done
 
+# Cloud Storage IAM changes can take time to reach Cloud Run's service
+# identity. Wait before starting revisions so activation reads do not fail
+# while the new bucket bindings propagate.
+echo "Waiting for Cloud Storage IAM propagation before starting Cloud Run..."
+sleep 30
+
 image_base="$artifact_repo"
 activation_env="LICENCE_GCS_BUCKET=$bucket,CUSTOMER_KEY_GCS_OBJECT=activation/customer_private.pem,CUSTOMER_KEY_GCS_GENERATION=$(gcloud storage objects describe "gs://$bucket/activation/customer_private.pem" --format='value(generation)'),LICENCE_GCS_OBJECT=activation/licence.token,LICENCE_GCS_GENERATION=$(gcloud storage objects describe "gs://$bucket/activation/licence.token" --format='value(generation)')"
 
