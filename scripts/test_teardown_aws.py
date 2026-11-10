@@ -25,6 +25,7 @@ class FakeAWS:
         self.calls, self.deleted = [], set()
         self.versions, self.multipart = 0, False
         self.object_error = False
+        self.stack_generation = {APP: 1, ARTIFACT: 1}
         self.resources = {
             APP: [("DomainState", "AWS::DynamoDB::Table", APP + "-domain"), ("JWTSecret", "AWS::SecretsManager::Secret", "secret-arn"), ("UserPool", "AWS::Cognito::UserPool", "eu-west-3_pool"), ("WebLog", "AWS::Logs::LogGroup", "/aws/lambda/" + APP + "-web")],
             ARTIFACT: [("Artifacts", "AWS::S3::Bucket", ARTIFACT + "-bucket")],
@@ -38,7 +39,8 @@ class FakeAWS:
         if service == "cloudformation":
             name = params["StackName"].split("/")[1] if params["StackName"].startswith("arn:") else params["StackName"]
             if operation == "describe-stacks":
-                return None if name in self.deleted else {"Stacks": [{"StackId": f"arn:aws:cloudformation:eu-west-3:{ACCOUNT}:stack/{name}/unique", "StackStatus": "CREATE_COMPLETE"}]}
+                generation = self.stack_generation[name]
+                return None if name in self.deleted else {"Stacks": [{"StackId": f"arn:aws:cloudformation:eu-west-3:{ACCOUNT}:stack/{name}/generation-{generation}", "StackStatus": "CREATE_COMPLETE"}]}
             if operation == "get-template":
                 resources = {logical: {"Type": kind, "DeletionPolicy": "Retain"} for logical, kind, _ in self.resources[name]}
                 resources.update({"GatewayFunction": {}, "WebFunction": {}} if name == APP else {"HTTPSOnly": {}})
@@ -91,6 +93,24 @@ class TeardownSafety(unittest.TestCase):
         allowed = {"get-caller-identity", "describe-stacks", "get-template", "list-stack-resources"}
         self.assertTrue(all(operation in allowed for _, operation, _ in self.aws.calls))
         self.assertEqual(2, len(json.loads(self.path.read_text())["stacks"]))
+
+    def test_reused_stack_names_preserve_old_and_track_new_generation(self):
+        self.run_tool()
+        self.aws.stack_generation = {APP: 2, ARTIFACT: 2}
+
+        self.run_tool()
+
+        inventory = json.loads(self.path.read_text())
+        self.assertEqual(4, len(inventory["stacks"]))
+        for name in (APP, ARTIFACT):
+            generations = {
+                record["stack_id"].rsplit("/", 1)[-1]
+                for record in inventory["stacks"] if record["name"] == name
+            }
+            self.assertEqual({"generation-1", "generation-2"}, generations)
+
+        self.run_tool()
+        self.assertEqual(4, len(json.loads(self.path.read_text())["stacks"]))
 
     def test_delete_stacks_retains_data_and_deletes_application_first(self):
         self.run_tool(execute=True)

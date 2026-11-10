@@ -176,10 +176,11 @@ def run(args, aws):
     live = []
     for name in names:
         found = stack_record(aws, name)
-        saved = next((item for item in inventory["stacks"] if item["name"] == name), None)
+        saved = next((
+            item for item in inventory["stacks"]
+            if item["name"] == name and found and item["stack_id"] == found["stack_id"]
+        ), None)
         if found:
-            if saved and saved["stack_id"] != found["stack_id"]:
-                raise TeardownError("Stack name was reused; preserve this inventory and choose a new --state-file")
             if saved:
                 inventory["stacks"].remove(saved)
                 # Preserve already-recorded retained objects after a partially failed deletion.
