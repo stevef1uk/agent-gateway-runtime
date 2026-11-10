@@ -93,8 +93,16 @@ artifact_repo="${region}-docker.pkg.dev/${project_id}/agent-gateway"
 
 ensure_service_account() {
   local account=$1
-  gcloud iam service-accounts describe "$account@$project_id.iam.gserviceaccount.com" --project="$project_id" >/dev/null 2>&1 || \
+  local email="$account@$project_id.iam.gserviceaccount.com"
+  if ! gcloud iam service-accounts describe "$email" --project="$project_id" >/dev/null 2>&1; then
     gcloud iam service-accounts create "$account" --project="$project_id"
+  fi
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    gcloud iam service-accounts describe "$email" --project="$project_id" >/dev/null 2>&1 && return
+    sleep 2
+  done
+  echo "Service account did not become readable: $email" >&2
+  exit 1
 }
 
 ensure_secret() {
