@@ -16,6 +16,10 @@ __pycache__/
 # Local AWS activation material. Placeholder keys/licences included for batteries-included eval.
 # REPLACE with real vendor .token files and customer private key before production deployment.
 keys/
+!keys/
+keys/*
+!keys/customer_private.pem
+!keys/token.txt
 keys.tmp
 keys.txt
 

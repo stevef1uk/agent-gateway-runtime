@@ -6,9 +6,9 @@ This guide deploys the published encrypted Agent Gateway images into your own Go
 
 - A Google Cloud project with billing enabled.
 - `gcloud` installed and authenticated with `gcloud auth login` and `gcloud auth application-default login`.
-- A customer activation directory containing `customer_private.pem` and `token.txt`.
+- This repository contains a deliberately public **evaluation-only** activation pair in `keys/customer_private.pem` and `keys/token.txt`. Anyone who clones this branch can use the public evaluation images.
 
-Never upload a vendor private key. The deployment script uploads only the customer private key and signed licence token to a private, versioned Cloud Storage bucket.
+Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the evaluation customer key and signed licence token to a private, versioned Cloud Storage bucket.
 
 ## Deploy
 
@@ -19,7 +19,7 @@ cd agent-gateway-runtime
 scripts/deploy-gcp.sh \
   --project-id YOUR_PROJECT_ID \
   --version 2026-11-10-test5 \
-  --keys-directory /secure/path/to/activation \
+  --keys-directory keys \
   --apply
 ```
 
@@ -46,7 +46,7 @@ Then redeploy with the client ID and secret file:
 scripts/deploy-gcp.sh \
   --project-id YOUR_PROJECT_ID \
   --version 2026-11-10-test5 \
-  --keys-directory /secure/path/to/activation \
+  --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
   --apply
