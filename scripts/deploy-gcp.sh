@@ -130,8 +130,26 @@ fi
 
 gcloud storage buckets describe "gs://$bucket" --project="$project_id" >/dev/null 2>&1 || \
   gcloud storage buckets create "gs://$bucket" --location="$region" --uniform-bucket-level-access --project="$project_id"
-gcloud storage cp "$customer_key" "gs://$bucket/activation/customer_private.pem"
-gcloud storage cp "$licence_token" "gs://$bucket/activation/licence.token"
+file_md5_b64() {
+  openssl dgst -md5 -binary "$1" | base64 | tr -d '\n'
+}
+
+upload_if_changed() {
+  local file=$1
+  local object=$2
+  local remote_md5
+  local local_md5
+  remote_md5="$(gcloud storage objects describe "gs://$bucket/$object" --format='value(md5Hash)' 2>/dev/null || true)"
+  local_md5="$(file_md5_b64 "$file")"
+  if [[ -n "$remote_md5" && "$remote_md5" == "$local_md5" ]]; then
+    echo "Keeping existing activation object: gs://$bucket/$object"
+    return
+  fi
+  gcloud storage cp "$file" "gs://$bucket/$object"
+}
+
+upload_if_changed "$customer_key" "activation/customer_private.pem"
+upload_if_changed "$licence_token" "activation/licence.token"
 
 ensure_service_account "agw-${deployment_id}-gateway"
 ensure_service_account "agw-${deployment_id}-web"
@@ -242,7 +260,7 @@ fi
 
 gcloud run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
-    --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
+    --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=1 \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"
 
 echo "Gateway URL: $gateway_url"
