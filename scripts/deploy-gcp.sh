@@ -182,16 +182,19 @@ if [[ "$emotion" -eq 1 ]]; then
   mirror_image emotion
 fi
 
+echo "Creating/checking Firestore composite indexes; Google may take several minutes..."
 # The Firestore domain store queries by partition key and sort key. Existing
 # indexes are harmless; a duplicate create is ignored on repeat deployments.
 gcloud firestore indexes composite create --collection-group=agw_domains \
   --field-config=field-path=pk,order=ascending \
   --field-config=field-path=sk,order=ascending \
   --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
+echo "Ascending Firestore index request complete; waiting for Google index operations as needed..."
 gcloud firestore indexes composite create --collection-group=agw_domains \
   --field-config=field-path=pk,order=ascending \
   --field-config=field-path=sk,order=descending \
   --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
+echo "Descending Firestore index request complete. Deploying Cloud Run services..."
 
 gcloud run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
