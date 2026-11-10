@@ -238,9 +238,14 @@ activation_env="PRIVATE_KEY_PATH=/run/secrets/customer/customer_private.pem,LICE
 
 gcloud run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
-    --service-account="$gateway_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
+    --service-account="$gateway_sa" --no-allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
+    --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
+    --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
   --set-env-vars="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,$activation_env" \
   --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest,/run/secrets/customer/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence/licence.token=$licence_token_secret:latest"
+
+gcloud run services add-iam-policy-binding "$gateway_service" --region="$region" --project="$project_id" \
+  --member="serviceAccount:$web_sa" --role=roles/run.invoker --quiet >/dev/null
 
 gateway_url="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format='value(status.url)')"
 [[ -n "$gateway_url" ]] || { echo "Could not discover the deployed gateway URL" >&2; exit 1; }
@@ -272,6 +277,8 @@ fi
 gcloud run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
     --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=1 \
+    --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
+    --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args,/run/secrets/customer/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence/licence.token=$licence_token_secret:latest"
 
 echo "Gateway URL: $gateway_url"
