@@ -83,6 +83,22 @@ scripts/deploy-gcp.sh \
   --apply
 ```
 
+Alternatively, enter the secret interactively without putting it in shell history:
+
+```bash
+read -r -s -p "Google OAuth client secret: " GCP_OIDC_CLIENT_SECRET
+echo
+export GCP_OIDC_CLIENT_SECRET
+
+scripts/deploy-gcp.sh \
+  --project-id YOUR_PROJECT_ID \
+  --version 2026-11-10-test5 \
+  --keys-directory keys \
+  --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
+  --apply
+unset GCP_OIDC_CLIENT_SECRET
+```
+
 The client secret is stored in Secret Manager. Google may show an unverified-app warning while the OAuth app is in testing; add your account as a test user.
 
 ## Verify

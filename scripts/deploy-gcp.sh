@@ -66,8 +66,15 @@ licence_token="$keys_directory/token.txt"
 [[ -s "$licence_token" ]] || { echo "Missing $licence_token" >&2; exit 1; }
 
 if [[ -n "$oidc_client_id" && -z "$oidc_client_secret_file" ]]; then
-  echo '--oidc-client-secret is required when --oidc-client-id is supplied.' >&2
-  exit 2
+  if [[ -n "${GCP_OIDC_CLIENT_SECRET:-}" ]]; then
+    oidc_client_secret_file="$(mktemp)"
+    chmod 600 "$oidc_client_secret_file"
+    printf '%s' "$GCP_OIDC_CLIENT_SECRET" > "$oidc_client_secret_file"
+    trap 'rm -f "$oidc_client_secret_file"' EXIT
+  else
+    echo '--oidc-client-secret FILE or GCP_OIDC_CLIENT_SECRET is required when --oidc-client-id is supplied.' >&2
+    exit 2
+  fi
 fi
 if [[ -n "$oidc_client_secret_file" ]]; then
   [[ -s "$oidc_client_secret_file" ]] || { echo "Missing OIDC secret file: $oidc_client_secret_file" >&2; exit 1; }
