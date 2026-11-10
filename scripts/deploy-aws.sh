@@ -21,6 +21,8 @@ if [ -z "$AGW_ACCOUNT" ]; then
 fi
 AGW_ARTIFACT_STACK="${AGW_ARTIFACT_STACK:-agent-gateway-artifacts-dev}"
 AGW_APP_STACK="${AGW_APP_STACK:-agent-gateway-dev}"
+AGW_ACCESS_STACK="${AGW_ACCESS_STACK:-agent-gateway-access-dev}"
+AGW_ACCESS_PROFILE="${AGW_ACCESS_PROFILE:-${AWS_ADMIN_PROFILE:-}}"
 AGW_UPSTREAM="${AGW_UPSTREAM:-https://api.open-meteo.com}"
 AGW_RELEASE_MANIFEST="${AGW_RELEASE_MANIFEST:-}"
 AGW_CUSTOMER_KEY_FILE="${AGW_CUSTOMER_KEY_FILE:-keys/local-activation/customer_private.pem}"
@@ -37,12 +39,12 @@ Usage:
     --release-manifest <reviewed-release.json> \
     --domain-prefix <unique-cognito-prefix> \
     --admin-emails <operator@example.com> \
-    --workload-boundary-arn <WorkloadBoundaryArn-from-your-access-stack> \
+    [--workload-boundary-arn <WorkloadBoundaryArn-from-your-access-stack>] \
     [--profile agent-gateway-dev] \
     [--skip-ecr-push]
 
 Environment equivalents:
-  AGW_RELEASE_MANIFEST, AGW_DOMAIN_PREFIX, AGW_ADMIN_EMAILS, AGW_WORKLOAD_BOUNDARY_ARN, AWS_PROFILE
+  AGW_RELEASE_MANIFEST, AGW_DOMAIN_PREFIX, AGW_ADMIN_EMAILS, AGW_WORKLOAD_BOUNDARY_ARN, AGW_ACCESS_STACK, AGW_ACCESS_PROFILE, AWS_ADMIN_PROFILE, AWS_PROFILE
 EOF
 }
 
@@ -108,15 +110,30 @@ deploy 'deploy/aws/deployment-access.template.json' in eu-west-3:
        DeploymentRole=AgentGatewayDev
        ApplicationStack=$AGW_APP_STACK
        ArtifactStack=$AGW_ARTIFACT_STACK
-  3. Copy the stack output 'WorkloadBoundaryArn' and re-run this script with:
-       --workload-boundary-arn <WorkloadBoundaryArn>
+  3. Re-run after the administrator has deployed the access stack. The
+     WorkloadBoundaryArn output is read automatically from that stack.
 ================================================================================
 EOF
   exit 1
 fi
 
 if [[ -z "$AGW_WORKLOAD_BOUNDARY_ARN" ]]; then
-  die "Missing --workload-boundary-arn (or AGW_WORKLOAD_BOUNDARY_ARN) from stack agent-gateway-access-dev"
+  [[ -n "$AGW_ACCESS_PROFILE" ]] ||
+    die "Set AWS_ADMIN_PROFILE to read the access stack, or provide WORKLOAD_BOUNDARY_ARN explicitly"
+  say "Reading workload boundary from access stack '$AGW_ACCESS_STACK' (profile: $AGW_ACCESS_PROFILE)"
+  access_account="$(aws sts get-caller-identity --profile "$AGW_ACCESS_PROFILE" --query Account --output text)" ||
+    die "Cannot verify AWS account for access profile '$AGW_ACCESS_PROFILE'"
+  [[ "$access_account" == "$AGW_ACCOUNT" ]] ||
+    die "Access profile '$AGW_ACCESS_PROFILE' points to account $access_account, expected $AGW_ACCOUNT"
+  set +e
+  boundary_output="$(aws cloudformation describe-stacks --profile "$AGW_ACCESS_PROFILE" --region "$AWS_REGION" --stack-name "$AGW_ACCESS_STACK" --query 'Stacks[0].Outputs[?OutputKey==`WorkloadBoundaryArn`].OutputValue | [0]' --output text 2>&1)"
+  boundary_status=$?
+  set -e
+  [[ $boundary_status -eq 0 ]] ||
+    die "Cannot read WorkloadBoundaryArn from access stack '$AGW_ACCESS_STACK' using profile '$AGW_ACCESS_PROFILE': $boundary_output. Set AWS_ADMIN_PROFILE or provide WORKLOAD_BOUNDARY_ARN."
+  [[ -n "$boundary_output" && "$boundary_output" != "None" ]] ||
+    die "Access stack '$AGW_ACCESS_STACK' has no WorkloadBoundaryArn output. Complete administrator setup or provide WORKLOAD_BOUNDARY_ARN."
+  AGW_WORKLOAD_BOUNDARY_ARN="$boundary_output"
 fi
 if [[ -z "$AGW_DOMAIN_PREFIX" ]]; then
   die "Missing --domain-prefix (or AGW_DOMAIN_PREFIX) for Cognito hosted UI"

@@ -94,7 +94,7 @@ Edit **aws-config.mk**, not the example. It is ignored by Git. Fill these values
 | `LICENCE_DIR` | Actual directory containing the four named service `.token` files |
 | `DOMAIN_PREFIX` | Choose a unique lowercase Cognito prefix, e.g. your organization's name plus a random suffix; this is a name you choose, not an API ID |
 | `ADMIN_EMAILS` | Your real reachable operator email; multiple emails comma-separated without spaces |
-| `WORKLOAD_BOUNDARY_ARN` | Leave empty until step 5; copy the administrator stack output exactly |
+| `WORKLOAD_BOUNDARY_ARN` | Leave empty when `AWS_ADMIN_PROFILE` is configured; deployment reads and account-checks the administrator stack output automatically. Otherwise, copy the output exactly |
 
 Use paths without spaces in this Make configuration. Keep credentials in the AWS credential provider/profile, not this file. `DEMO_DEPLOYMENT_ROLE_ARN` is derived automatically from your account and application stack; no ARN guessing is needed.
 
@@ -121,7 +121,7 @@ make aws-access-outputs AWS_ADMIN_PROFILE=YOUR_ADMIN_PROFILE
 
 The CLI command executes the change set and waits. **Expected:** `CREATE_COMPLETE` or `UPDATE_COMPLETE`. For Console setup, read the same values from the stack's **Outputs** tab.
 
-Copy **WorkloadBoundaryArn** into `WORKLOAD_BOUNDARY_ARN` in `aws-config.mk`. Check **DemoDeploymentRoleArn** matches `arn:aws:iam::YOUR_ACCOUNT:role/YOUR_APPLICATION_STACK-demo-deployer`; Make derives this identifier automatically. Keep `AWS_PROFILE=agent-gateway-dev` for application deployment. Keep `AWS_ADMIN_PROFILE` as a separate genuinely privileged administrator profile; do not set it to the restricted deployment role.
+Make reads **WorkloadBoundaryArn** automatically using `AWS_ADMIN_PROFILE` and verifies the administrator profile targets `AWS_ACCOUNT`; leave `WORKLOAD_BOUNDARY_ARN` empty for this path. If you instead provide the ARN explicitly, copy the administrator stack output exactly. Check **DemoDeploymentRoleArn** matches `arn:aws:iam::YOUR_ACCOUNT:role/YOUR_APPLICATION_STACK-demo-deployer`; Make derives this identifier automatically. Keep `AWS_PROFILE=agent-gateway-dev` for application deployment. Keep `AWS_ADMIN_PROFILE` as a separate genuinely privileged administrator profile; do not set it to the restricted deployment role.
 
 ### Existing stack or AccessDenied?
 
