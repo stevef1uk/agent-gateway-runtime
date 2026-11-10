@@ -249,7 +249,7 @@ gcloud run services add-iam-policy-binding "$gateway_service" --region="$region"
 
 gateway_url="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format='value(status.url)')"
 [[ -n "$gateway_url" ]] || { echo "Could not discover the deployed gateway URL" >&2; exit 1; }
-gcloud run services update "$gateway_service" --region="$region" --project="$project_id" --update-env-vars="GCP_INTERNAL_AUDIENCE=$gateway_url"
+gcloud run services update "$gateway_service" --region="$region" --project="$project_id" --update-env-vars="GCP_INTERNAL_AUDIENCE=${gateway_url}/"
 
 if [[ "$emotion" -eq 1 ]]; then
   emotion_service="agw-${deployment_id}-emotion"
