@@ -100,6 +100,8 @@ web_sa="agw-${deployment_id}-web@${project_id}.iam.gserviceaccount.com"
 jwt_secret="agw-${deployment_id}-jwt-secret"
 admin_secret="agw-${deployment_id}-admin-token"
 oidc_secret="agw-${deployment_id}-oidc-client-secret"
+customer_key_secret="agw-${deployment_id}-customer-key"
+licence_token_secret="agw-${deployment_id}-licence-token"
 registry="stevef1uk"
 artifact_repo="${region}-docker.pkg.dev/${project_id}/agent-gateway"
 
@@ -155,6 +157,11 @@ ensure_service_account "agw-${deployment_id}-gateway"
 ensure_service_account "agw-${deployment_id}-web"
 ensure_secret "$jwt_secret"
 ensure_secret "$admin_secret"
+ensure_secret "$customer_key_secret"
+ensure_secret "$licence_token_secret"
+
+gcloud secrets versions add "$customer_key_secret" --data-file="$customer_key" --project="$project_id"
+gcloud secrets versions add "$licence_token_secret" --data-file="$licence_token" --project="$project_id"
 
 if gcloud secrets versions list "$jwt_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$jwt_secret" --data-file=- --project="$project_id"; fi
 if gcloud secrets versions list "$admin_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$admin_secret" --data-file=- --project="$project_id"; fi
@@ -171,6 +178,8 @@ for service_account in "$gateway_sa" "$web_sa"; do
   gcloud projects add-iam-policy-binding "$project_id" --member="serviceAccount:$service_account" --role=roles/aiplatform.user --quiet >/dev/null
   gcloud secrets add-iam-policy-binding "$jwt_secret" --project="$project_id" --member="serviceAccount:$service_account" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
   gcloud secrets add-iam-policy-binding "$admin_secret" --project="$project_id" --member="serviceAccount:$service_account" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
+  gcloud secrets add-iam-policy-binding "$customer_key_secret" --project="$project_id" --member="serviceAccount:$service_account" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
+  gcloud secrets add-iam-policy-binding "$licence_token_secret" --project="$project_id" --member="serviceAccount:$service_account" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
   gcloud storage buckets add-iam-policy-binding "gs://$bucket" --member="serviceAccount:$service_account" --role=roles/storage.objectViewer --quiet >/dev/null
 done
 
@@ -225,10 +234,13 @@ gcloud firestore indexes composite create --collection-group=agw_domains \
   --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
 echo "Descending Firestore index request complete. Deploying Cloud Run services..."
 
+activation_env="PRIVATE_KEY_PATH=/run/secrets/customer_private.pem,LICENCE_TOKEN_PATH=/run/secrets/licence.token"
+
 gcloud run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
     --service-account="$gateway_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
   --set-env-vars="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,$activation_env" \
+  --update-secrets="/run/secrets/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence.token=$licence_token_secret:latest" \
   --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
 
 gateway_url="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format='value(status.url)')"
@@ -261,7 +273,7 @@ fi
 gcloud run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
     --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=1 \
-  --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"
+  --set-env-vars="${web_env// ,/,}" --update-secrets="/run/secrets/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence.token=$licence_token_secret:latest" --set-secrets="$secret_args"
 
 echo "Gateway URL: $gateway_url"
 web_url="$(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format='value(status.url)')"
