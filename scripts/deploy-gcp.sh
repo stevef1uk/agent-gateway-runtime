@@ -208,8 +208,7 @@ gcloud run deploy "$gateway_service" \
   --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
 
 gateway_url="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format='value(status.url)')"
-project_number="$(gcloud projects describe "$project_id" --format='value(projectNumber)')"
-gateway_url="https://${gateway_service}-${project_number}.${region}.run.app"
+[[ -n "$gateway_url" ]] || { echo "Could not discover the deployed gateway URL" >&2; exit 1; }
 gcloud run services update "$gateway_service" --region="$region" --project="$project_id" --update-env-vars="GCP_INTERNAL_AUDIENCE=$gateway_url"
 
 if [[ "$emotion" -eq 1 ]]; then
@@ -241,7 +240,8 @@ gcloud run deploy "$web_service" \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"
 
 echo "Gateway URL: $gateway_url"
-web_url="https://${web_service}-${project_number}.${region}.run.app"
+web_url="$(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format='value(status.url)')"
+[[ -n "$web_url" ]] || { echo "Could not discover the deployed web URL" >&2; exit 1; }
 echo "Web URL: $web_url"
 if [[ -z "$oidc_client_id" ]]; then
   echo "OIDC is not enabled yet. Create a Google OAuth client with this redirect URI, then rerun with --oidc-client-id and --oidc-client-secret:"
