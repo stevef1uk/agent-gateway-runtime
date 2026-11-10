@@ -78,6 +78,11 @@ if [[ -n "$oidc_client_id" && -z "$oidc_client_secret_file" ]]; then
 fi
 if [[ -n "$oidc_client_secret_file" ]]; then
   [[ -s "$oidc_client_secret_file" ]] || { echo "Missing OIDC secret file: $oidc_client_secret_file" >&2; exit 1; }
+  normalized_secret_file="$(mktemp)"
+  chmod 600 "$normalized_secret_file"
+  tr -d '\r\n' < "$oidc_client_secret_file" > "$normalized_secret_file"
+  oidc_client_secret_file="$normalized_secret_file"
+  trap 'rm -f "$normalized_secret_file"' EXIT
 fi
 
 gcloud config set project "$project_id" >/dev/null
