@@ -148,6 +148,10 @@ mirror_image() {
   local source="docker.io/$registry/agent-gateway-${name}_g:$version"
   local destination="$artifact_repo/agent-gateway-${name}_g:$version"
   local context
+  if gcloud artifacts docker images describe "$destination" --project="$project_id" >/dev/null 2>&1; then
+    echo "Using existing mirrored image: $destination"
+    return
+  fi
   context="$(mktemp -d)"
   printf 'FROM --platform=linux/amd64 %s\n' "$source" > "$context/Dockerfile"
   echo "Mirroring $source to $destination with Cloud Build..."
