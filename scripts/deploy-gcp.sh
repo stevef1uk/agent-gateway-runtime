@@ -73,7 +73,8 @@ fi
 gcloud config set project "$project_id" >/dev/null
 gcloud services enable \
   run.googleapis.com firestore.googleapis.com secretmanager.googleapis.com \
-  aiplatform.googleapis.com iam.googleapis.com iamcredentials.googleapis.com identitytoolkit.googleapis.com
+  storage.googleapis.com aiplatform.googleapis.com iam.googleapis.com \
+  iamcredentials.googleapis.com identitytoolkit.googleapis.com
 
 bucket="${project_id}-agw-activation"
 gateway_service="agw-${deployment_id}-gateway"
