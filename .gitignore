@@ -26,3 +26,9 @@ keys.txt
 
 # Commit current.json for batteries-included workflow
 /releases/current.json!
+
+# GCP customer-local deployment state and credentials
+**/.terraform/
+*.tfstate
+*.tfstate.*
+gcp-client-secret.txt

@@ -16,4 +16,4 @@ git clone --branch gcp https://github.com/stevef1uk/agent-gateway-runtime.git
 cd agent-gateway-runtime
 ```
 
-*(Terraform deployment modules and customer runtime scripts for the `gcp` branch are under construction.)*
+See [docs/GCP-Deployment-Guide.md](docs/GCP-Deployment-Guide.md) for the customer deployment procedure. The `gcp` branch uses published Docker Hub images; application source and Go are not required.
