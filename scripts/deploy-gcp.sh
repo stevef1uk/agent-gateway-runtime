@@ -139,6 +139,8 @@ if gcloud secrets versions list "$admin_secret" --project="$project_id" --format
 if [[ -n "$oidc_client_id" ]]; then
   ensure_secret "$oidc_secret"
   gcloud secrets versions add "$oidc_secret" --data-file="$oidc_client_secret_file" --project="$project_id"
+  gcloud secrets add-iam-policy-binding "$oidc_secret" --project="$project_id" \
+    --member="serviceAccount:$web_sa" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
 fi
 
 for service_account in "$gateway_sa" "$web_sa"; do
