@@ -133,8 +133,8 @@ ensure_service_account "agw-${deployment_id}-web"
 ensure_secret "$jwt_secret"
 ensure_secret "$admin_secret"
 
-if gcloud secrets versions list "$jwt_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else openssl rand -base64 32 | gcloud secrets versions add "$jwt_secret" --data-file=- --project="$project_id"; fi
-if gcloud secrets versions list "$admin_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else openssl rand -base64 32 | gcloud secrets versions add "$admin_secret" --data-file=- --project="$project_id"; fi
+if gcloud secrets versions list "$jwt_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$jwt_secret" --data-file=- --project="$project_id"; fi
+if gcloud secrets versions list "$admin_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$admin_secret" --data-file=- --project="$project_id"; fi
 
 if [[ -n "$oidc_client_id" ]]; then
   ensure_secret "$oidc_secret"
