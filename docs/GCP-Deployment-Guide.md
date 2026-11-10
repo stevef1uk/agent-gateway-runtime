@@ -65,6 +65,19 @@ curl -i https://GATEWAY_CLOUD_RUN_HOST/healthz
 
 The serverless profile uses Firestore for sessions, delegations, approvals, audit state, and replay protection. Backup/Restore and Kubernetes-only features are intentionally hidden.
 
+Add `--emotion` to deploy the published private Emotion MCP upstream and wire it to the gateway:
+
+```bash
+scripts/deploy-gcp.sh \
+  --project-id YOUR_PROJECT_ID \
+  --version 2026-11-10-test5 \
+  --keys-directory /secure/path/to/activation \
+  --emotion \
+  --apply
+```
+
+Without `--emotion`, an allowed MCP request returns the gateway's authorization echo because no upstream is configured. With `--emotion`, the gateway forwards `/mcp-emotion` calls to the private Emotion service using Cloud Run IAM.
+
 ## Tear Down
 
 For a disposable project:

@@ -18,6 +18,7 @@ Options:
   --deployment-id ID         Resource name prefix (default: agent-gateway-dev)
   --keys-directory DIR       Directory containing customer_private.pem and token.txt
                              (default: ./keys)
+  --emotion                  Deploy and wire the published Emotion MCP upstream
   --oidc-client-id ID        Google OAuth client ID
   --oidc-client-secret FILE  File containing the Google OAuth client secret
   --apply                    Create/update resources; otherwise only validate inputs
@@ -34,6 +35,7 @@ keys_directory="keys"
 oidc_client_id="${GCP_OIDC_CLIENT_ID:-}"
 oidc_client_secret_file=""
 apply=0
+emotion=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -44,6 +46,7 @@ while [[ $# -gt 0 ]]; do
     --keys-directory) [[ $# -ge 2 ]] || usage; keys_directory=$2; shift 2 ;;
     --oidc-client-id) [[ $# -ge 2 ]] || usage; oidc_client_id=$2; shift 2 ;;
     --oidc-client-secret) [[ $# -ge 2 ]] || usage; oidc_client_secret_file=$2; shift 2 ;;
+    --emotion) emotion=1; shift ;;
     --apply) apply=1; shift ;;
     --help|-h) usage ;;
     *) echo "Unknown option: $1" >&2; usage ;;
@@ -135,6 +138,17 @@ activation_env="LICENCE_GCS_BUCKET=$bucket,CUSTOMER_KEY_GCS_OBJECT=activation/cu
 gcloud firestore databases describe --database='(default)' --project="$project_id" >/dev/null 2>&1 || \
   gcloud firestore databases create --database='(default)' --location="$region" --type=firestore-native --project="$project_id"
 
+# The Firestore domain store queries by partition key and sort key. Existing
+# indexes are harmless; a duplicate create is ignored on repeat deployments.
+gcloud firestore indexes composite create --collection-group=agw_domains \
+  --field-config=field-path=pk,order=ascending \
+  --field-config=field-path=sk,order=ascending \
+  --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
+gcloud firestore indexes composite create --collection-group=agw_domains \
+  --field-config=field-path=pk,order=ascending \
+  --field-config=field-path=sk,order=descending \
+  --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
+
 gcloud run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
   --service-account="$gateway_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --max-instances=10 \
@@ -143,6 +157,22 @@ gcloud run deploy "$gateway_service" \
 
 gateway_url="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format='value(status.url)')"
 gcloud run services update "$gateway_service" --region="$region" --project="$project_id" --update-env-vars="GCP_INTERNAL_AUDIENCE=$gateway_url"
+
+if [[ "$emotion" -eq 1 ]]; then
+  emotion_service="agw-${deployment_id}-emotion"
+  emotion_sa="agw-${deployment_id}-emotion@${project_id}.iam.gserviceaccount.com"
+  ensure_service_account "agw-${deployment_id}-emotion"
+  gcloud storage buckets add-iam-policy-binding "gs://$bucket" --member="serviceAccount:$emotion_sa" --role=roles/storage.objectViewer --quiet >/dev/null
+  gcloud run deploy "$emotion_service" \
+    --image="$image_base/agent-gateway-emotion_g:$version" --region="$region" --project="$project_id" \
+    --service-account="$emotion_sa" --no-allow-unauthenticated --port=8085 --cpu=2 --memory=4Gi --timeout=180s --concurrency=10 --max-instances=2 \
+    --set-env-vars="EMOTION_BRIDGE_PORT=8085,LICENCE_GCS_BUCKET=$bucket,CUSTOMER_KEY_GCS_OBJECT=activation/customer_private.pem,CUSTOMER_KEY_GCS_GENERATION=$(gcloud storage objects describe "gs://$bucket/activation/customer_private.pem" --format='value(generation)')"
+  gcloud run services add-iam-policy-binding "$emotion_service" --region="$region" --project="$project_id" \
+    --member="serviceAccount:$gateway_sa" --role=roles/run.invoker --quiet >/dev/null
+  emotion_url="$(gcloud run services describe "$emotion_service" --region="$region" --project="$project_id" --format='value(status.url)')"
+  gcloud run services update "$gateway_service" --region="$region" --project="$project_id" \
+    --update-env-vars="UPSTREAM_URL=$emotion_url,UPSTREAM_GCP_IAM=1"
+fi
 
 web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,WEB_IDP_RELAY=0,OIDC_CONNECTOR_ID=google,$activation_env"
 secret_args="GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
