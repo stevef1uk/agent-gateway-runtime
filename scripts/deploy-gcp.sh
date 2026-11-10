@@ -218,7 +218,7 @@ if [[ "$emotion" -eq 1 ]]; then
     --update-env-vars="UPSTREAM_URL=$emotion_url,UPSTREAM_GCP_IAM=1"
 fi
 
-web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,WEB_IDP_RELAY=0,OIDC_CONNECTOR_ID=google,$activation_env"
+web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,WEB_IDP_RELAY=0,$activation_env"
 secret_args="GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
 if [[ -n "$oidc_client_id" ]]; then
   web_env+=" ,OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"
