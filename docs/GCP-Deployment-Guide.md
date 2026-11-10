@@ -23,7 +23,7 @@ scripts/deploy-gcp.sh \
   --apply
 ```
 
-The script enables APIs, creates Firestore, service accounts, Secret Manager secrets, the activation bucket, and the two Cloud Run services. It uses the published Docker Hub images:
+The script enables APIs, creates Firestore, service accounts, Secret Manager secrets, the activation bucket, and the two Cloud Run services. It mirrors the public Docker Hub images into your project’s Artifact Registry with Cloud Build, then deploys Cloud Run from that private project registry. Docker is not required on the customer machine.
 
 ```text
 stevef1uk/agent-gateway-gateway_g:VERSION

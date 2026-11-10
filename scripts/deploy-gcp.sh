@@ -77,7 +77,8 @@ gcloud config set project "$project_id" >/dev/null
 gcloud services enable \
   run.googleapis.com firestore.googleapis.com secretmanager.googleapis.com \
   storage.googleapis.com aiplatform.googleapis.com iam.googleapis.com \
-  iamcredentials.googleapis.com identitytoolkit.googleapis.com
+  iamcredentials.googleapis.com identitytoolkit.googleapis.com \
+  artifactregistry.googleapis.com cloudbuild.googleapis.com
 
 bucket="${project_id}-agw-activation"
 gateway_service="agw-${deployment_id}-gateway"
@@ -88,6 +89,7 @@ jwt_secret="agw-${deployment_id}-jwt-secret"
 admin_secret="agw-${deployment_id}-admin-token"
 oidc_secret="agw-${deployment_id}-oidc-client-secret"
 registry="stevef1uk"
+artifact_repo="${region}-docker.pkg.dev/${project_id}/agent-gateway"
 
 ensure_service_account() {
   local account=$1
@@ -132,11 +134,32 @@ for service_account in "$gateway_sa" "$web_sa"; do
   gcloud storage buckets add-iam-policy-binding "gs://$bucket" --member="serviceAccount:$service_account" --role=roles/storage.objectViewer --quiet >/dev/null
 done
 
-image_base="docker.io/$registry"
+image_base="$artifact_repo"
 activation_env="LICENCE_GCS_BUCKET=$bucket,CUSTOMER_KEY_GCS_OBJECT=activation/customer_private.pem,CUSTOMER_KEY_GCS_GENERATION=$(gcloud storage objects describe "gs://$bucket/activation/customer_private.pem" --format='value(generation)'),LICENCE_GCS_OBJECT=activation/licence.token,LICENCE_GCS_GENERATION=$(gcloud storage objects describe "gs://$bucket/activation/licence.token" --format='value(generation)')"
 
 gcloud firestore databases describe --database='(default)' --project="$project_id" >/dev/null 2>&1 || \
   gcloud firestore databases create --database='(default)' --location="$region" --type=firestore-native --project="$project_id"
+
+gcloud artifacts repositories describe agent-gateway --location="$region" --project="$project_id" >/dev/null 2>&1 || \
+  gcloud artifacts repositories create agent-gateway --repository-format=docker --location="$region" --description="Agent Gateway customer image mirror" --project="$project_id"
+
+mirror_image() {
+  local name=$1
+  local source="docker.io/$registry/agent-gateway-${name}_g:$version"
+  local destination="$artifact_repo/agent-gateway-${name}_g:$version"
+  local context
+  context="$(mktemp -d)"
+  printf 'FROM --platform=linux/amd64 %s\n' "$source" > "$context/Dockerfile"
+  echo "Mirroring $source to $destination with Cloud Build..."
+  gcloud builds submit "$context" --tag="$destination" --project="$project_id" --quiet
+  rm -rf "$context"
+}
+
+mirror_image gateway
+mirror_image web
+if [[ "$emotion" -eq 1 ]]; then
+  mirror_image emotion
+fi
 
 # The Firestore domain store queries by partition key and sort key. Existing
 # indexes are harmless; a duplicate create is ignored on repeat deployments.
