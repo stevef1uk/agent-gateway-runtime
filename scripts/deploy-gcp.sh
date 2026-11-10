@@ -234,13 +234,13 @@ gcloud firestore indexes composite create --collection-group=agw_domains \
   --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
 echo "Descending Firestore index request complete. Deploying Cloud Run services..."
 
-activation_env="PRIVATE_KEY_PATH=/run/secrets/customer_private.pem,LICENCE_TOKEN_PATH=/run/secrets/licence.token"
+activation_env="PRIVATE_KEY_PATH=/run/secrets/customer/customer_private.pem,LICENCE_TOKEN_PATH=/run/secrets/licence/licence.token"
 
 gcloud run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
     --service-account="$gateway_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
   --set-env-vars="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,$activation_env" \
-  --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest,/run/secrets/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence.token=$licence_token_secret:latest"
+  --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest,/run/secrets/customer/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence/licence.token=$licence_token_secret:latest"
 
 gateway_url="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format='value(status.url)')"
 [[ -n "$gateway_url" ]] || { echo "Could not discover the deployed gateway URL" >&2; exit 1; }
@@ -272,7 +272,7 @@ fi
 gcloud run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
     --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=1 \
-  --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args,/run/secrets/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence.token=$licence_token_secret:latest"
+  --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args,/run/secrets/customer/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence/licence.token=$licence_token_secret:latest"
 
 echo "Gateway URL: $gateway_url"
 web_url="$(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format='value(status.url)')"
