@@ -247,10 +247,9 @@ gcloud run deploy "$gateway_service" \
 gcloud run services add-iam-policy-binding "$gateway_service" --region="$region" --project="$project_id" \
   --member="serviceAccount:$web_sa" --role=roles/run.invoker --quiet >/dev/null
 
-gateway_urls="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format="value(metadata.annotations['run.googleapis.com/urls'])")"
-gateway_url="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())[0])' <<< "$gateway_urls")"
+gateway_url="$(gcloud run services describe "$gateway_service" --region="$region" --project="$project_id" --format='value(status.url)')"
 [[ -n "$gateway_url" ]] || { echo "Could not discover the deployed gateway URL" >&2; exit 1; }
-gcloud run services update "$gateway_service" --region="$region" --project="$project_id" --update-env-vars="GCP_INTERNAL_AUDIENCE=${gateway_url}/"
+gcloud run services update "$gateway_service" --region="$region" --project="$project_id" --update-env-vars="GCP_INTERNAL_AUDIENCE=$gateway_url"
 
 if [[ "$emotion" -eq 1 ]]; then
   emotion_service="agw-${deployment_id}-emotion"
@@ -283,8 +282,7 @@ gcloud run deploy "$web_service" \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args,/run/secrets/customer/customer_private.pem=$customer_key_secret:latest,/run/secrets/licence/licence.token=$licence_token_secret:latest"
 
 echo "Gateway URL: $gateway_url"
-web_urls="$(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format="value(metadata.annotations['run.googleapis.com/urls'])")"
-web_url="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read())[0])' <<< "$web_urls")"
+web_url="$(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format='value(status.url)')"
 [[ -n "$web_url" ]] || { echo "Could not discover the deployed web URL" >&2; exit 1; }
 echo "Web URL: $web_url"
 if [[ -z "$oidc_client_id" ]]; then
