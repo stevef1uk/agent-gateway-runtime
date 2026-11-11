@@ -254,16 +254,6 @@ CONSOLE_URL="https://WEB_CLOUD_RUN_HOST" bash demo/public-weather-tutorial-gcp.s
 
 The script makes requests to the public Console URL, which proxies to the private Gateway. Never put the delegation secret or access token in a URL, source control, or shared logs.
 
-#### About `scripts/test_weather_client.py`
-
-This file is an offline Python regression test, not a live GCP client. It replaces `curl` with a fake executable and tests `demo/public-weather-tutorial.sh` (the AWS shell demo); it makes no network calls and does not use a Wizard delegation or token. To run it from the runtime repository root:
-
-```bash
-python3 -B scripts/test_weather_client.py
-```
-
-Use `demo/public-weather-tutorial-gcp.sh` above to exercise a real GCP deployment with the delegation created in the Console Wizard.
-
 The deployment allows the gateway and web services to scale to zero (`min=0`) to avoid baseline instance charges. The first request after an idle period may take longer while Cloud Run starts an instance and the service fetches and verifies its signed licence. If cold starts noticeably affect users, change both deploy flags to `--min=1` and redeploy.
 
 Add `--emotion` to deploy the published private Emotion MCP upstream and wire it to the gateway:
