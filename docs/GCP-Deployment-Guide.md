@@ -54,7 +54,7 @@ Run a validation-only pass first:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-4be653f \
+  --version 2026-11-11-gcp-afde5db \
   --keys-directory keys
 ```
 
@@ -63,7 +63,7 @@ Then deploy:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-4be653f \
+  --version 2026-11-11-gcp-afde5db \
   --keys-directory keys \
   --emotion \
   --apply
@@ -122,7 +122,7 @@ Then redeploy with the client ID and secret file:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-4be653f \
+  --version 2026-11-11-gcp-afde5db \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
@@ -138,7 +138,7 @@ export GCP_OIDC_CLIENT_SECRET
 
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-4be653f \
+  --version 2026-11-11-gcp-afde5db \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --apply
@@ -190,7 +190,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-4be653f \
+  --version 2026-11-11-gcp-afde5db \
   --keys-directory /secure/path/to/activation \
   --emotion \
   --apply
