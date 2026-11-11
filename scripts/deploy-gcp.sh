@@ -248,7 +248,7 @@ if [[ -n "$oidc_client_id" ]]; then
   gateway_env+=",OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"
 fi
 
-gcloud run deploy "$gateway_service" \
+gcloud beta run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
     --service-account="$gateway_sa" --no-allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=0 --max-instances=10 \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
@@ -287,7 +287,7 @@ if [[ -n "$oidc_client_id" ]]; then
   secret_args+=",OIDC_CLIENT_SECRET=$oidc_secret:latest"
 fi
 
-gcloud run deploy "$web_service" \
+gcloud beta run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
     --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=0 --max-instances=1 \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
