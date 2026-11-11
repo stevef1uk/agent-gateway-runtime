@@ -77,7 +77,8 @@ scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
-  --keys-directory keys
+  --keys-directory keys \
+  --admin-emails "admin@example.com"
 ```
 
 Then deploy:
@@ -88,6 +89,7 @@ scripts/deploy-gcp.sh \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
   --keys-directory keys \
+  --admin-emails "admin@example.com" \
   --emotion \
   --apply
 ```
