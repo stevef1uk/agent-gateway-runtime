@@ -26,6 +26,7 @@ AGW_ACCESS_PROFILE="${AGW_ACCESS_PROFILE:-${AWS_ADMIN_PROFILE:-}}"
 AGW_UPSTREAM="${AGW_UPSTREAM:-https://api.open-meteo.com}"
 AGW_RELEASE_MANIFEST="${AGW_RELEASE_MANIFEST:-}"
 AGW_CUSTOMER_KEY_FILE="${AGW_CUSTOMER_KEY_FILE:-keys/local-activation/customer_private.pem}"
+AGW_VENDOR_PUBLIC_KEY_FILE="${AGW_VENDOR_PUBLIC_KEY_FILE:-keys/local-activation/vendor_public.pem}"
 AGW_LICENCE_DIR="${AGW_LICENCE_DIR:-keys/local-activation/licences}"
 AGW_DOMAIN_PREFIX="${AGW_DOMAIN_PREFIX:-}"
 AGW_ADMIN_EMAILS="${AGW_ADMIN_EMAILS:-}"
@@ -73,13 +74,14 @@ done
 [[ -n "$AGW_RELEASE_MANIFEST" ]] || die "Choose --release-manifest for the rebuilt console; no old image release is selected automatically"
 [[ -f "$AGW_RELEASE_MANIFEST" ]] || die "Missing release manifest: $AGW_RELEASE_MANIFEST"
 [[ -f "$AGW_CUSTOMER_KEY_FILE" ]] || die "Missing customer private key file: $AGW_CUSTOMER_KEY_FILE"
+[[ -f "$AGW_VENDOR_PUBLIC_KEY_FILE" ]] || die "Missing vendor public key file: $AGW_VENDOR_PUBLIC_KEY_FILE"
 for svc in authz tokensvc gateway web; do
   [[ -f "$AGW_LICENCE_DIR/$svc.token" ]] || die "Missing service licence file: $AGW_LICENCE_DIR/$svc.token"
 done
 
 python3 -B scripts/aws-release.py "$AGW_RELEASE_MANIFEST"
 
-python3 -B scripts/check-aws-activation.py --key "$AGW_CUSTOMER_KEY_FILE" --licences "$AGW_LICENCE_DIR" --release "$AGW_RELEASE_MANIFEST"
+python3 -B scripts/check-aws-activation.py --key "$AGW_CUSTOMER_KEY_FILE" --vendor-public-key "$AGW_VENDOR_PUBLIC_KEY_FILE" --licences "$AGW_LICENCE_DIR" --release "$AGW_RELEASE_MANIFEST"
 
 say "Checking AWS identity (profile: $AWS_PROFILE, region: $AWS_REGION)"
 caller_account="$(aws sts get-caller-identity --query Account --output text)"
