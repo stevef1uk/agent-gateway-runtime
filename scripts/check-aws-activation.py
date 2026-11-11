@@ -82,7 +82,7 @@ def verify_signed_licence(token_file, vendor_public_key, service, today=None):
                     'openssl', 'pkeyutl', '-verify', '-pubin', '-inkey', str(vendor_public_key),
                     '-rawin', '-digest', 'sha256', '-in', str(payload_path),
                     '-sigfile', str(signature_path), '-pkeyopt', 'rsa_padding_mode:pss',
-                    '-pkeyopt', 'rsa_pss_saltlen:digest',
+                    '-pkeyopt', 'rsa_pss_saltlen:auto',
                 ],
                 capture_output=True,
                 timeout=10,

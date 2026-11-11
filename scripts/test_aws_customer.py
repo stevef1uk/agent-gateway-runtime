@@ -10,11 +10,11 @@ def manifest():
     images={s:{'digest':'sha256:'+'a'*64,'immutable_image':f'stevef1uk/agent-gateway-{s}_l@sha256:'+'a'*64} for s in release.SERVICES}
     return dict(release_schema=2,version='1.0.94-test',source_commit='a'*40,console_build='1.0.94',platform='linux/arm64',images=images,emotion={'digest':'sha256:'+'b'*64,'immutable_image':'stevef1uk/agent-gateway-emotion_l@sha256:'+'b'*64})
 
-def signed_token(private_key, expiry='2099-01-01'):
+def signed_token(private_key, expiry='2099-01-01', salt_length='digest'):
     payload=f'{expiry}:ASG Demo:license@example.test:NOFERNET'.encode()
     with tempfile.TemporaryDirectory() as folder:
         folder=pathlib.Path(folder);source=folder/'payload';signature=folder/'signature';source.write_bytes(payload)
-        subprocess.run(['openssl','dgst','-sha256','-sign',str(private_key),'-sigopt','rsa_padding_mode:pss','-sigopt','rsa_pss_saltlen:digest','-out',str(signature),str(source)],check=True,capture_output=True)
+        subprocess.run(['openssl','dgst','-sha256','-sign',str(private_key),'-sigopt','rsa_padding_mode:pss','-sigopt',f'rsa_pss_saltlen:{salt_length}','-out',str(signature),str(source)],check=True,capture_output=True)
         encoded_signature=base64.urlsafe_b64encode(signature.read_bytes()).decode()
     envelope=payload.decode()+':'+encoded_signature
     return base64.urlsafe_b64encode(envelope.encode()).decode()
@@ -89,6 +89,14 @@ class Customer(unittest.TestCase):
             token=folder/'gateway.token';token.write_text(base64.urlsafe_b64encode(envelope.encode()).decode())
             with self.assertRaisesRegex(ValueError,'invalid vendor signature'):
                 activation.verify_signed_licence(token,folder/'vendor.pub','gateway')
+    def test_signed_licence_accepts_maximum_pss_salt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder=pathlib.Path(folder)
+            subprocess.run(['openssl','genpkey','-algorithm','RSA','-pkeyopt','rsa_keygen_bits:2048','-out',str(folder/'vendor.key')],check=True,capture_output=True)
+            subprocess.run(['openssl','pkey','-in',str(folder/'vendor.key'),'-pubout','-out',str(folder/'vendor.pub')],check=True,capture_output=True)
+            (folder/'gateway.token').write_text(signed_token(folder/'vendor.key',salt_length='max'))
+            expiry=activation.verify_signed_licence(folder/'gateway.token',folder/'vendor.pub','gateway')
+            self.assertEqual(expiry.isoformat(),'2099-01-01')
     def test_owned_delete_waits_for_exact_stack(self):
         config=dict(stack='agent-gateway-test',region='eu-west-3',account='123456789012',deployment_role='arn:aws:iam::123456789012:role/agent-gateway-test-demo-deployer',table='test-table')
         entries={'api:users':dict(name='users',kind='api',stack_name='agent-gateway-test-demo-api-users')}
