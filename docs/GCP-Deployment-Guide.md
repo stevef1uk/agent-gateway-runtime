@@ -156,7 +156,7 @@ curl -i https://GATEWAY_CLOUD_RUN_HOST/healthz
 
 The serverless profile uses Firestore for sessions, delegations, approvals, audit state, and replay protection. Backup/Restore and Kubernetes-only features are intentionally hidden.
 
-The deployment currently keeps one gateway and one web instance warm so the console health polling does not repeatedly hit cold-start windows. This adds a small baseline Cloud Run cost while the deployment is running. The application binaries no longer need image decryption at startup; after measuring real Cloud Run cold starts, the minimum instance counts can be reconsidered.
+The deployment allows the gateway and web services to scale to zero (`min=0`) to avoid baseline instance charges. The first request after an idle period may take longer while Cloud Run starts an instance and the service fetches and verifies its signed licence. If cold starts noticeably affect users, change both deploy flags to `--min=1` and redeploy.
 
 Add `--emotion` to deploy the published private Emotion MCP upstream and wire it to the gateway:
 

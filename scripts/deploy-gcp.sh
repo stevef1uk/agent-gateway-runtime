@@ -250,7 +250,7 @@ fi
 
 gcloud run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
-    --service-account="$gateway_sa" --no-allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=10 \
+    --service-account="$gateway_sa" --no-allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=0 --max-instances=10 \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
     --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
   --set-env-vars="$gateway_env" \
@@ -289,7 +289,7 @@ fi
 
 gcloud run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
-    --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=1 --max-instances=1 \
+    --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=0 --max-instances=1 \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
     --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"
