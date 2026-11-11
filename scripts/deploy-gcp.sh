@@ -279,7 +279,7 @@ if [[ "$emotion" -eq 1 ]]; then
     --member="serviceAccount:$gateway_sa" --role=roles/run.invoker --quiet >/dev/null
   emotion_url="$(gcloud run services describe "$emotion_service" --region="$region" --project="$project_id" --format='value(status.url)')"
   gcloud run services update "$gateway_service" --region="$region" --project="$project_id" \
-    --update-env-vars="UPSTREAM_URL=$emotion_url,UPSTREAM_GCP_IAM=1"
+    --update-env-vars="UPSTREAM_MCP_URL=$emotion_url,UPSTREAM_MCP_GCP_IAM=1"
 fi
 
 web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,GCP_SERVERLESS_PROFILE=1,WEATHER_DEMO_ENABLED=true,WEB_IDP_RELAY=0,$activation_env"
