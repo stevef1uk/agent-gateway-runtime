@@ -214,18 +214,14 @@ mirror_image() {
   local source="docker.io/$registry/agent-gateway-${name}_g:$version"
   local destination="$artifact_repo/agent-gateway-${name}_g:$version"
   local context
-  local cache_args=()
   if [[ "$version" != latest ]] && gcloud artifacts docker images describe "$destination" --project="$project_id" >/dev/null 2>&1; then
     echo "Using existing mirrored image: $destination"
     return
   fi
-  if [[ "$version" == latest ]]; then
-    cache_args+=(--no-cache)
-  fi
   context="$(mktemp -d)"
   printf 'FROM --platform=linux/amd64 %s\n' "$source" > "$context/Dockerfile"
   echo "Mirroring $source to $destination with Cloud Build..."
-  gcloud builds submit "$context" --tag="$destination" --project="$project_id" --quiet "${cache_args[@]}"
+  gcloud builds submit "$context" --tag="$destination" --project="$project_id" --quiet
   rm -rf "$context"
 }
 
