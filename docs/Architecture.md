@@ -8,14 +8,16 @@ flowchart TB
  Human --> Web[Public console API / Web Lambda]
  Agent[Agent with delegation token] --> PEP[Demo HTTP API / Gateway Lambda]
  Web --> IAM[SigV4-protected control APIs]
- IAM --> Control[Authz / Token / Gateway Lambdas]
+ IAM --> Control[Token / Gateway Lambdas]
+ IAM --> Authz[Authz Lambda: Built-in + OPA/Rego]
  Web --> Bedrock[Bedrock AI Wizard]
  Web --> CF[Bounded child CloudFormation stacks]
  CF --> PEP
- PEP --> Authz[SigV4 authorization API]
+ PEP --> Authz
  PEP --> Public[Public HTTPS demo provider]
  PEP --> Emotion[Private Emotion Lambda: published API + MCP]
  Control --> State[(DynamoDB domain + security state)]
+ Authz --> State
  PEP --> State
  Client[Optional forward-proxy client] --> Tunnel[Local SSM tunnel]
  Tunnel --> VM[One EC2 proxy instance]
@@ -27,7 +29,7 @@ flowchart TB
 
 * **Deployment access** (`deployment-access.template.json`): bounded deployment policies, workload permissions boundary and a fixed CloudFormation role for child demos. Applying named IAM resources is an explicit administrator operation. Web runtime permissions allow only application-owned demo stack lifecycle and passing this reviewed role; child templates do not create IAM roles.
 * **Artifacts** (`artifact-store.template.json`): private versioned activation storage and image preparation inputs. S3 object versions pin customer keys and gateway product licences.
-* **Application** (`serverless-images.template.json`): four plain-binary ARM64 Lambda images (web, gateway, authz, tokensvc) with signed vendor-licence verification, public console/gateway HTTP APIs, three IAM-protected internal HTTP APIs, Cognito, DynamoDB domain/security tables and execution roles. JWT and operator tokens are generated at deploy time and passed as CloudFormation `NoEcho` parameters; AWS Secrets Manager is the recommended production option but is intentionally not used in this demo to avoid its per-secret monthly cost. The baseline weather routes remain available.
+* **Application** (`serverless-images.template.json`): four plain-binary ARM64 Lambda images (web, gateway, authz, tokensvc) with signed vendor-licence verification, public console/gateway HTTP APIs, three IAM-protected internal HTTP APIs, Cognito, DynamoDB domain/security tables and execution roles. The Authz Lambda contains the built-in policy engine and, when `EnableRegoPolicy=true`, the optional OPA/Rego engine. Rego-selected delegations are evaluated by OPA; the admin-managed, versioned Rego policy is stored in DynamoDB and loaded by authorization workers. JWT and operator tokens are generated at deploy time and passed as CloudFormation `NoEcho` parameters; AWS Secrets Manager is the recommended production option but is intentionally not used in this demo to avoid its per-secret monthly cost. The baseline weather routes remain available.
 * **Demo children**: one dedicated gateway Lambda and public HTTP API per API/MCP demo, sharing authorization and durable domain/security state. Public routes contain only that demo's governed path; operator routes are not exposed. Weather/geocoding/users/refunds use public HTTPS providers. Refunds is a JSONPlaceholder simulation.
 * **Emotion child**: the dedicated gateway invokes a private Lambda directly through IAM `lambda:InvokeFunction`. That backend packages the actual published Emotion API and MCP binaries; it has no public function URL or API integration. The native container enforces its licence. A missing/expired licence may produce a native MCP tool error after the gateway allows the call. No gateway Emotion licence gate is added.
 * **Optional proxy** (`proxy-vm.template.json`): one ARM64 EC2 instance in one subnet/AZ, an encrypted disposable root disk, its own small VPC/internet route, SSM instance role and no security-group ingress. SSM port forwarding provides local access to the proxy. It shares the application's authorization and state but does not host arbitrary demo databases/connectors.
@@ -40,6 +42,7 @@ The AI Wizard retains the Bedrock Converse integration, EU Nova Micro inference 
 |---|---|---|
 | Lambda + HTTP APIs | AWS-managed regional request processing, scalable independent workers | No reserved capacity/warm concurrency; in-flight calls can fail; no cross-region deployment/failover |
 | DynamoDB | Shared on-demand domain/security tables, TTL where applicable, point-in-time recovery and retained data | No global tables or cross-region application recovery automation; backup restoration is an operator action |
+| Authorization / Rego | Authz Lambda selects the built-in or optional OPA/Rego engine per delegation; managed policy revisions are shared through DynamoDB | OPA is not a separate service; authorization workers load the shared policy on startup, and policy persistence depends on DynamoDB |
 | Console/OAuth/approvals | Durable state shared between workers, atomic approval consumption/replay controls | Existing browser/request connections can fail; clients must handle expiry/retry without duplicating mutations |
 | Demo gateways | Separate Lambda/API per demo with shared authorization | Separation does not remove shared control-service dependencies |
 | Emotion | Private on-demand Lambda, vendor model initialization inside its worker | Cold starts, model readiness and vendor licence can prevent inference; no permanently warm model service |
