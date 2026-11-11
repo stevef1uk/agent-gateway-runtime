@@ -241,14 +241,14 @@ gcloud firestore indexes composite create --collection-group=agw_domains \
 echo "Descending Firestore index request complete. Deploying Cloud Run services..."
 
 gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,GATEWAY_IGNORE_AGENT_OVERRIDES=1,$activation_env"
-gateway_env+=",UPSTREAM_URL=https://api.open-meteo.com,UPSTREAM_STRIP_CREDENTIALS=1"
+gateway_env+=",UPSTREAM_URL=https://api.open-meteo.com,UPSTREAM_GEOCODING_URL=https://geocoding-api.open-meteo.com,UPSTREAM_DEMO_API_URL=https://jsonplaceholder.typicode.com,UPSTREAM_STRIP_CREDENTIALS=1"
 if [[ -n "$oidc_client_id" ]]; then
   gateway_env+=",OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"
 fi
 
 gcloud beta run deploy "$gateway_service" \
   --image="$image_base/agent-gateway-gateway_g:$version" --region="$region" --project="$project_id" \
-    --service-account="$gateway_sa" --no-allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=0 --max-instances=10 \
+    --service-account="$gateway_sa" --no-allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=120s --concurrency=80 --min=0 --max-instances=10 \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
     --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
   --set-env-vars="$gateway_env" \
@@ -276,7 +276,7 @@ if [[ "$emotion" -eq 1 ]]; then
     --update-env-vars="UPSTREAM_MCP_URL=$emotion_url,UPSTREAM_MCP_GCP_IAM=1"
 fi
 
-web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,GCP_SERVERLESS_PROFILE=1,WEATHER_DEMO_ENABLED=true,WEB_IDP_RELAY=0,$activation_env"
+web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,GCP_SERVERLESS_PROFILE=1,WEATHER_DEMO_ENABLED=true,GCP_DEMO_ROUTES_ENABLED=1,GCP_EMOTION_DEMO_ENABLED=$emotion,WEB_IDP_RELAY=0,$activation_env"
 secret_args="GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
 if [[ -n "$oidc_client_id" ]]; then
   web_env+=" ,OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"
@@ -285,7 +285,7 @@ fi
 
 gcloud beta run deploy "$web_service" \
   --image="$image_base/agent-gateway-web_g:$version" --region="$region" --project="$project_id" \
-    --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=60s --concurrency=80 --min=0 --max-instances=1 \
+    --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=120s --concurrency=80 --min=0 --max-instances=1 \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
     --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
   --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"

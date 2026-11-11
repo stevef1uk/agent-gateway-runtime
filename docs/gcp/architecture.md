@@ -29,7 +29,7 @@ flowchart TB
 
 ## Request and identity flow
 
-The console's web service calls the private gateway using a Google-signed Cloud Run identity token. The gateway checks the token audience and caller identity before accepting internal calls. Agents call the gateway with their delegated credentials. The Gateway keeps the Open-Meteo REST upstream in `UPSTREAM_URL`; when the optional Emotion MCP service is deployed, its URL is configured separately as `UPSTREAM_MCP_URL`, so MCP traffic cannot replace the weather API route. Cloud Run provides HTTPS endpoints and service-to-service IAM enforcement.
+The console's web service calls the private gateway using a Google-signed Cloud Run identity token. The gateway checks the token audience and caller identity before accepting internal calls. Agents call the gateway with their delegated credentials. The Gateway keeps the Open-Meteo weather upstream in `UPSTREAM_URL`, routes `/api-geocoding` to `UPSTREAM_GEOCODING_URL`, and routes `/api-users` and simulated `/api-refunds` to `UPSTREAM_DEMO_API_URL`. The optional Emotion MCP service is configured separately as `UPSTREAM_MCP_URL`. Cloud Run provides HTTPS endpoints and service-to-service IAM enforcement.
 
 ## Availability and operational trade-offs
 

@@ -81,12 +81,18 @@ scripts/deploy-gcp.sh \
 
 The script enables APIs, creates Firestore, service accounts, Secret Manager secrets, the activation bucket, and the two Cloud Run services. It mirrors the public Docker Hub images into your project’s Artifact Registry with Cloud Build, then deploys Cloud Run from that private project registry. The main services fetch and verify only the signed licence token; the customer key is not mounted into them. Docker is not required on the customer machine.
 
+The configured Wizard demos route weather and geocoding to their respective
+Open-Meteo services, and users and simulated refunds to JSONPlaceholder. The
+refunds demo uses `/posts` as a simulation: writes are not persisted and no
+real refund is issued. Add `--emotion` to deploy the Emotion MCP backend.
+The Wizard creates delegations; it does not deploy arbitrary upstreams.
+
 ```text
 stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-f33d360`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
+The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-4cf3e30`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
 
 ## Google Sign-In
 
