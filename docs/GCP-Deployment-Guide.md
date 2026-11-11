@@ -25,7 +25,8 @@ automatically; review them before removing them if they are no longer needed.
 git clone --branch gcp https://github.com/stevef1uk/agent-gateway-runtime.git
 cd agent-gateway-runtime
 
-export GCP_PROJECT_ID="test2-514309"  # change this to your project ID
+export GCP_PROJECT_ID="YOUR_GCP_PROJECT_ID"
+export GCP_DEPLOYMENT_ID="agent-gateway-dev"  # Change if using a different resource prefix.
 
 gcloud auth login
 gcloud auth application-default login
@@ -61,6 +62,7 @@ Run a validation-only pass first:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
+  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
   --keys-directory keys
 ```
@@ -70,6 +72,7 @@ Then deploy:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
+  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
   --keys-directory keys \
   --emotion \
@@ -124,13 +127,17 @@ Create a Google OAuth web client in **APIs & Services -> Credentials**. After th
 https://WEB_CLOUD_RUN_HOST/oidc/callback
 ```
 
-Then redeploy with the client ID and secret file:
+Then redeploy with the client ID and secret file. The examples below include
+`--emotion` to retain the optional Emotion upstream; omit it if you do not
+want to configure Emotion.
 
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
+  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
   --keys-directory keys \
+  --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
   --apply
@@ -145,8 +152,10 @@ export GCP_OIDC_CLIENT_SECRET
 
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
+  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
   --keys-directory keys \
+  --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --apply
 unset GCP_OIDC_CLIENT_SECRET
@@ -197,19 +206,23 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
+  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
-  --keys-directory /secure/path/to/activation \
+  --keys-directory keys \
   --emotion \
+  --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
+  --oidc-client-secret /secure/path/to/client-secret.txt \
   --apply
 ```
 
+Include the OIDC options when Google sign-in is configured; otherwise, omit them.
 Without `--emotion`, an allowed MCP request returns the gateway's authorization echo because no upstream is configured. With `--emotion`, the gateway forwards `/mcp-emotion` calls to the private Emotion service using Cloud Run IAM.
 
 Emotion tool discovery and inference use separate processes: `tools/list` can succeed while the model API is still unavailable. The GCP Emotion image build verifies that the llama.cpp runtime can load its shared libraries. If an inference tool reports `Service Unavailable`, inspect the Emotion revision logs for the last health-probe result:
 
 ```bash
 gcloud logging read \
-  'resource.type="cloud_run_revision" AND resource.labels.service_name="agw-agent-gateway-dev-emotion" AND textPayload:"emotion:"' \
+  "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"agw-${GCP_DEPLOYMENT_ID}-emotion\" AND textPayload:\"emotion:\"" \
   --project="$GCP_PROJECT_ID" \
   --freshness=30m \
   --limit=30 \
