@@ -76,7 +76,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-9b64e49`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
+The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-fa519a3`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
 
 ## Google Sign-In
 
@@ -197,6 +197,17 @@ scripts/deploy-gcp.sh \
 ```
 
 Without `--emotion`, an allowed MCP request returns the gateway's authorization echo because no upstream is configured. With `--emotion`, the gateway forwards `/mcp-emotion` calls to the private Emotion service using Cloud Run IAM.
+
+Emotion tool discovery and inference use separate processes: `tools/list` can succeed while the model API is still unavailable. If an inference tool reports `Service Unavailable`, inspect the Emotion revision logs for the last health-probe result or a key-staging/startup error:
+
+```bash
+gcloud logging read \
+  'resource.type="cloud_run_revision" AND resource.labels.service_name="agw-agent-gateway-dev-emotion" AND textPayload:"emotion:"' \
+  --project="$GCP_PROJECT_ID" \
+  --freshness=30m \
+  --limit=30 \
+  --format="value(timestamp,textPayload)"
+```
 
 ## Tear Down
 
