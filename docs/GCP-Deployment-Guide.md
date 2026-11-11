@@ -76,7 +76,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. For repeatable deployments or rollback, replace `latest` with the exact immutable release tag, for example `2026-11-11-gcp-7e128a4`.
+The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. For repeatable deployments or rollback, replace `latest` with the exact immutable release tag, for example `2026-11-11-gcp-9f56d5e`.
 
 ## Google Sign-In
 
