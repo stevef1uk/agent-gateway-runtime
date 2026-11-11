@@ -1,0 +1,218 @@
+{
+  "date": "2026-11-09",
+  "region": "europe-west9",
+  "currency": "USD",
+  "architecture_baseline": "cloud-run-2-service-consolidated-terraform",
+  "allowances_applied": false,
+  "rates": {
+    "cloud_run_vcpu_second": {
+      "usd": "0.00002400",
+      "unit": "vCPU-Second",
+      "description": "Cloud Run Tier 1 (europe-west9 Paris) request-based CPU allocation",
+      "free_tier_monthly": "180000",
+      "source": "https://cloud.google.com/run/pricing"
+    },
+    "cloud_run_gib_second": {
+      "usd": "0.00000250",
+      "unit": "GiB-Second",
+      "description": "Cloud Run Tier 1 (europe-west9 Paris) request-based memory allocation",
+      "free_tier_monthly": "360000",
+      "source": "https://cloud.google.com/run/pricing"
+    },
+    "cloud_run_request": {
+      "usd": "0.00000040",
+      "unit": "Requests",
+      "description": "Cloud Run Tier 1 ($0.40 per million requests beyond free tier)",
+      "free_tier_monthly": "2000000",
+      "source": "https://cloud.google.com/run/pricing"
+    },
+    "firestore_read": {
+      "usd": "0.00000036",
+      "unit": "DocumentReads",
+      "description": "Firestore Standard document reads in europe-west9 ($0.036 per 100,000)",
+      "free_tier_monthly": "1500000",
+      "source": "https://cloud.google.com/firestore/pricing"
+    },
+    "firestore_write": {
+      "usd": "0.00000108",
+      "unit": "DocumentWrites",
+      "description": "Firestore Standard document writes in europe-west9 ($0.108 per 100,000)",
+      "free_tier_monthly": "600000",
+      "source": "https://cloud.google.com/firestore/pricing"
+    },
+    "firestore_gib_month": {
+      "usd": "0.18000000",
+      "unit": "GiB-Mo",
+      "description": "Firestore Standard stored data in europe-west9 ($0.18 per GiB-month beyond 1 GiB free)",
+      "free_tier_monthly": "1.0",
+      "source": "https://cloud.google.com/firestore/pricing"
+    },
+    "firestore_pitr_gib_month": {
+      "usd": "0.18000000",
+      "unit": "GiB-Mo",
+      "description": "Firestore Point-in-Time Recovery (7-day retention) storage in europe-west9",
+      "free_tier_monthly": "0",
+      "source": "https://cloud.google.com/firestore/pricing"
+    },
+    "logs_ingest_gib": {
+      "usd": "0.50000000",
+      "unit": "GiB",
+      "description": "Cloud Logging ingestion ($0.50/GiB beyond first 50 GiB/month free; 30-day retention included)",
+      "free_tier_monthly": "50.0",
+      "source": "https://cloud.google.com/stackdriver/pricing"
+    },
+    "logs_store_gib_month": {
+      "usd": "0.00000000",
+      "unit": "GiB-Mo",
+      "description": "Cloud Logging default 30-day retention is included at no additional storage charge (14-day retention used)",
+      "free_tier_monthly": "Inf",
+      "source": "https://cloud.google.com/stackdriver/pricing"
+    },
+    "secret_version_month": {
+      "usd": "0.06000000",
+      "unit": "SecretVersions",
+      "description": "Secret Manager active secret version ($0.06/version/month; first 6 versions free)",
+      "free_tier_monthly": "6",
+      "source": "https://cloud.google.com/secret-manager/pricing"
+    },
+    "secret_access": {
+      "usd": "0.00000300",
+      "unit": "AccessOperations",
+      "description": "Secret Manager access operations ($0.03 per 10,000; first 10,000/month free)",
+      "free_tier_monthly": "10000",
+      "source": "https://cloud.google.com/secret-manager/pricing"
+    },
+    "gcs_gib_month": {
+      "usd": "0.02000000",
+      "unit": "GiB-Mo",
+      "description": "Cloud Storage Standard in europe-west9 ($0.020 per GB-month)",
+      "free_tier_monthly": "0",
+      "source": "https://cloud.google.com/storage/pricing"
+    },
+    "gcs_class_a": {
+      "usd": "0.00000500",
+      "unit": "Operations",
+      "description": "Cloud Storage Standard Class A operations in europe-west9 ($0.005 per 1,000)",
+      "free_tier_monthly": "0",
+      "source": "https://cloud.google.com/storage/pricing"
+    },
+    "gcs_class_b": {
+      "usd": "0.00000040",
+      "unit": "Operations",
+      "description": "Cloud Storage Standard Class B operations in europe-west9 ($0.0004 per 1,000)",
+      "free_tier_monthly": "0",
+      "source": "https://cloud.google.com/storage/pricing"
+    },
+    "identity_platform_mau": {
+      "usd": "0.00000000",
+      "unit": "MAU",
+      "description": "Identity Platform rate reference; runtime uses Google OIDC directly and provider charges are not modelled",
+      "free_tier_monthly": "50000",
+      "source": "https://cloud.google.com/identity-platform/pricing"
+    },
+    "internet_egress_gib": {
+      "usd": "0.08500000",
+      "unit": "GiB",
+      "description": "Google Cloud Standard Network Tier internet egress from Europe (first 10 TiB)",
+      "free_tier_monthly": "0",
+      "source": "https://cloud.google.com/vpc/network-pricing"
+    },
+    "artifact_registry_gib_month": {
+      "usd": "0.10000000",
+      "unit": "GiB-Mo",
+      "description": "Artifact Registry container image storage ($0.10 per GB-month; first 0.5 GB free)",
+      "free_tier_monthly": "0.5",
+      "source": "https://cloud.google.com/artifact-registry/pricing"
+    }
+  },
+  "scenarios": [
+    {
+      "name": "Idle",
+      "external_actions": 0,
+      "hops_per_action": 1.5,
+      "effective_concurrency": 1.0,
+      "average_billed_seconds": 1,
+      "vcpu": 1.0,
+      "memory_gib": 0.5,
+      "read_ops_per_action": 20,
+      "write_ops_per_action": 10,
+      "firestore_gib_month": 0.1,
+      "pitr_gib_month": 0.1,
+      "logs_ingest_gib": 0,
+      "logs_store_gib_month": 0.1,
+      "internet_egress_gib": 0,
+      "gcs_gib_month": 1,
+      "gcs_puts": 20,
+      "gcs_gets": 100,
+      "secrets": 2,
+      "secret_requests": 100,
+      "identity_mau": 0
+    },
+    {
+      "name": "Light testing",
+      "external_actions": 10000,
+      "hops_per_action": 1.5,
+      "effective_concurrency": 1.5,
+      "average_billed_seconds": 1,
+      "vcpu": 1.0,
+      "memory_gib": 0.5,
+      "read_ops_per_action": 20,
+      "write_ops_per_action": 10,
+      "firestore_gib_month": 0.25,
+      "pitr_gib_month": 0.25,
+      "logs_ingest_gib": 0.25,
+      "logs_store_gib_month": 0.125,
+      "internet_egress_gib": 1,
+      "gcs_gib_month": 1,
+      "gcs_puts": 20,
+      "gcs_gets": 100,
+      "secrets": 2,
+      "secret_requests": 500,
+      "identity_mau": 5
+    },
+    {
+      "name": "Regular testing",
+      "external_actions": 100000,
+      "hops_per_action": 1.5,
+      "effective_concurrency": 2.0,
+      "average_billed_seconds": 1,
+      "vcpu": 1.0,
+      "memory_gib": 0.5,
+      "read_ops_per_action": 20,
+      "write_ops_per_action": 10,
+      "firestore_gib_month": 2,
+      "pitr_gib_month": 2,
+      "logs_ingest_gib": 2,
+      "logs_store_gib_month": 1,
+      "internet_egress_gib": 10,
+      "gcs_gib_month": 2,
+      "gcs_puts": 100,
+      "gcs_gets": 1000,
+      "secrets": 2,
+      "secret_requests": 5000,
+      "identity_mau": 10
+    },
+    {
+      "name": "Busy illustration",
+      "external_actions": 1000000,
+      "hops_per_action": 1.5,
+      "effective_concurrency": 4.0,
+      "average_billed_seconds": 1,
+      "vcpu": 1.0,
+      "memory_gib": 0.5,
+      "read_ops_per_action": 20,
+      "write_ops_per_action": 10,
+      "firestore_gib_month": 10,
+      "pitr_gib_month": 10,
+      "logs_ingest_gib": 20,
+      "logs_store_gib_month": 10,
+      "internet_egress_gib": 100,
+      "gcs_gib_month": 5,
+      "gcs_puts": 1000,
+      "gcs_gets": 10000,
+      "secrets": 2,
+      "secret_requests": 50000,
+      "identity_mau": 100
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 
 This guide deploys the published signed-licence Agent Gateway images into your own Google Cloud project. You do not need the Agent Gateway application source, Go, Terraform, or Docker.
 
+For an overview of the deployed services and request flow, see the [GCP architecture](gcp/architecture.md). For indicative operating costs, see the [GCP pricing estimate](gcp/serverless-pricing.md).
+
 ## What you need
 
 - A Google Cloud project with billing enabled.
@@ -52,7 +54,7 @@ Run a validation-only pass first:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-10-test5 \
+  --version 2026-11-11-gcp-4be653f \
   --keys-directory keys
 ```
 
@@ -61,7 +63,7 @@ Then deploy:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-10-test5 \
+  --version 2026-11-11-gcp-4be653f \
   --keys-directory keys \
   --emotion \
   --apply
@@ -120,7 +122,7 @@ Then redeploy with the client ID and secret file:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-10-test5 \
+  --version 2026-11-11-gcp-4be653f \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
@@ -136,7 +138,7 @@ export GCP_OIDC_CLIENT_SECRET
 
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-10-test5 \
+  --version 2026-11-11-gcp-4be653f \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --apply
@@ -163,7 +165,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-10-test5 \
+  --version 2026-11-11-gcp-4be653f \
   --keys-directory /secure/path/to/activation \
   --emotion \
   --apply
