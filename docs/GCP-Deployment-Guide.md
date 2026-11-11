@@ -158,6 +158,31 @@ curl -i https://GATEWAY_CLOUD_RUN_HOST/healthz
 
 The serverless profile uses Firestore for sessions, delegations, approvals, audit state, and replay protection. Backup/Restore and Kubernetes-only features are intentionally hidden.
 
+### Demonstrate a protected weather API
+
+The GCP weather API is reached through the public **web Console URL**, which proxies governed calls to the private Gateway. Do not give an agent the private Gateway URL or the Open-Meteo upstream URL.
+
+1. Sign in to the Console and open the API Wizard.
+2. Create a delegation for `/v1/forecast` and `/v1/elevation` with the `read` action. Add an approval rule for `read` on `/v1/elevation` if you want to exercise the approval flow.
+3. Keep the one-time delegation secret secure. The Wizard’s **Token** tab provides the GCP refresh command at `/api/agent/token`; it requires the delegation ID and secret, not an administrator cookie.
+4. Copy the initial access token and run the public-client walkthrough against the **web** Cloud Run URL printed by the deploy script:
+
+```bash
+CONSOLE_URL="https://WEB_CLOUD_RUN_HOST" \
+  AGENT_TOKEN="ACCESS_TOKEN_FROM_THE_WIZARD" \
+  bash demo/public-weather-tutorial-gcp.sh access
+```
+
+The script also prompts privately for the access token if `AGENT_TOKEN` is unset. It checks allowed forecast access, denied requests, and an approval-held elevation call. Approve that request in the signed-in Console, then run:
+
+```bash
+CONSOLE_URL="https://WEB_CLOUD_RUN_HOST" \
+  AGENT_TOKEN="ACCESS_TOKEN_FROM_THE_WIZARD" \
+  bash demo/public-weather-tutorial-gcp.sh approved
+```
+
+Finally revoke the delegation in the Console and run the `revoked` phase. Never put the delegation secret or access token in a URL, source control, or shared logs.
+
 The deployment allows the gateway and web services to scale to zero (`min=0`) to avoid baseline instance charges. The first request after an idle period may take longer while Cloud Run starts an instance and the service fetches and verifies its signed licence. If cold starts noticeably affect users, change both deploy flags to `--min=1` and redeploy.
 
 Add `--emotion` to deploy the published private Emotion MCP upstream and wire it to the gateway:
