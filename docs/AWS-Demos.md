@@ -29,7 +29,7 @@ The Delegation Wizard's **Authorization policy engine** choice is saved on each 
 
 ## Emotion image and licence renewal
 
-Do not deploy the GCP `_g` Emotion image to AWS. It is a `linux/amd64` Cloud Run image and retrieves activation files from GCS; AWS uses a separate `linux/arm64` Lambda image and retrieves the signed token and customer key from S3. A renewed licence is activated through the existing `make aws-emotion-activate` workflow and its versioned S3 objects; licence material is not baked into the image. Use only a token and key compatible with the vendor runtime bundled in the selected AWS release.
+Use the dedicated `linux/arm64` Lambda Emotion wrapper for AWS; it retrieves the signed token and customer key from versioned S3 objects. Do not substitute a different-architecture wrapper or one that expects another activation store. A renewed licence is activated through the existing `make aws-emotion-activate` workflow; licence material is not baked into the image. Use only a token and key compatible with the vendor runtime bundled in the selected AWS release.
 
 ## Provision API/MCP demos
 
