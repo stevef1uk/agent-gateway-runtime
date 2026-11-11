@@ -245,7 +245,7 @@ gcloud firestore indexes composite create --collection-group=agw_domains \
   --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
 echo "Descending Firestore index request complete. Deploying Cloud Run services..."
 
-gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,$activation_env"
+gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,GATEWAY_IGNORE_AGENT_OVERRIDES=1,$activation_env"
 gateway_env+=",UPSTREAM_URL=https://api.open-meteo.com,UPSTREAM_STRIP_CREDENTIALS=1"
 if [[ -n "$oidc_client_id" ]]; then
   gateway_env+=",OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"

@@ -173,7 +173,7 @@ CONSOLE_URL="https://WEB_CLOUD_RUN_HOST" \
   bash demo/public-weather-tutorial-gcp.sh access
 ```
 
-The script also prompts privately for the access token if `AGENT_TOKEN` is unset. It checks allowed forecast access, denied requests, and an approval-held elevation call. Approve that request in the signed-in Console, then run:
+The script also prompts privately for the access token if `AGENT_TOKEN` is unset. It checks allowed forecast access, denied requests, and an approval-held elevation call. It also verifies that a caller cannot bypass method-based policy by supplying an `X-Agent-Action` header. The GCP deploy script configures the Gateway to ignore caller-supplied action/resource overrides; rerun it with `--apply` to update an existing deployment. Approve the elevation request in the signed-in Console, then run:
 
 ```bash
 CONSOLE_URL="https://WEB_CLOUD_RUN_HOST" \

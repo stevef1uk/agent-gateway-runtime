@@ -50,6 +50,10 @@ probe() {
   fi
   status="$(curl -q "${curl_args[@]}" "$@" "$console$path")"
   [[ "$status" == "$expected" ]] || {
+    if [[ "$label" == mapping-override-refused ]]; then
+      echo "FAIL $label: expected $expected, got $status. Redeploy the GCP Gateway with GATEWAY_IGNORE_AGENT_OVERRIDES=1." >&2
+      exit 1
+    fi
     echo "FAIL $label: expected $expected, got $status. Check token expiry, deployment and provider availability." >&2
     exit 1
   }
