@@ -94,6 +94,17 @@ stevef1uk/agent-gateway-web_g:VERSION
 
 The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-334b971`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
 
+## Choosing the policy engine for a delegation
+
+The GCP Console's delegation wizard lets an allowlisted administrator choose
+the built-in policy or Rego (OPA) for each new delegation. Existing delegations
+retain their recorded choice; new delegations default to the built-in policy.
+The deployment bundles the sample Rego policy with the Gateway image. Policy
+editing and versioned live policy storage are not yet exposed in the GCP
+Console, so changing the Rego source currently requires publishing and
+deploying a new Gateway image. Platform checks, including mandatory GCP
+approval rules, still apply to either engine.
+
 ## Google Sign-In
 
 Google sign-in is a required **second step**. If the first deployment did not include `--oidc-client-id` and `--oidc-client-secret`, the console deliberately displays:
@@ -103,6 +114,11 @@ Google sign-in is a required **second step**. If the first deployment did not in
 ```
 
 That means the infrastructure is deployed, but browser sign-in has not been configured yet.
+
+When enabling Google sign-in, provide `--admin-emails` with the comma-separated,
+verified Google account email addresses that may administer this deployment.
+The private Console refuses to start with OIDC enabled but no configured admin
+allowlist; non-listed accounts cannot sign in to the private Console.
 
 The account creating the OAuth client needs project visibility plus OAuth configuration permissions. Check the active account:
 
@@ -146,6 +162,7 @@ scripts/deploy-gcp.sh \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
+  --admin-emails "admin@example.com" \
   --apply
 ```
 
@@ -163,6 +180,7 @@ scripts/deploy-gcp.sh \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
+  --admin-emails "admin@example.com" \
   --apply
 unset GCP_OIDC_CLIENT_SECRET
 ```
@@ -218,6 +236,7 @@ scripts/deploy-gcp.sh \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
+  --admin-emails "admin@example.com" \
   --apply
 ```
 

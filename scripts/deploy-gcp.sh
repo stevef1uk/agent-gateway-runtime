@@ -20,6 +20,7 @@ Options:
   --emotion                  Deploy and wire the published Emotion MCP upstream
   --oidc-client-id ID        Google OAuth client ID
   --oidc-client-secret FILE  File containing the Google OAuth client secret
+  --admin-emails EMAILS      Comma-separated verified Google admin emails (required with OIDC)
   --apply                    Create/update resources; otherwise only validate inputs
   --help                     Show this help
 EOF
@@ -33,6 +34,7 @@ deployment_id="agent-gateway-dev"
 keys_directory="keys"
 oidc_client_id="${GCP_OIDC_CLIENT_ID:-}"
 oidc_client_secret_file=""
+admin_emails="${GCP_ADMIN_EMAILS:-}"
 apply=0
 emotion=0
 
@@ -45,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --keys-directory) [[ $# -ge 2 ]] || usage; keys_directory=$2; shift 2 ;;
     --oidc-client-id) [[ $# -ge 2 ]] || usage; oidc_client_id=$2; shift 2 ;;
     --oidc-client-secret) [[ $# -ge 2 ]] || usage; oidc_client_secret_file=$2; shift 2 ;;
+    --admin-emails) [[ $# -ge 2 ]] || usage; admin_emails=$2; shift 2 ;;
     --emotion) emotion=1; shift ;;
     --apply) apply=1; shift ;;
     --help|-h) usage ;;
@@ -57,6 +60,10 @@ done
   echo 'Version must be a valid Docker tag.' >&2
   exit 2
 }
+if [[ -n "$oidc_client_id" && -z "$admin_emails" ]]; then
+  echo '--admin-emails or GCP_ADMIN_EMAILS is required when Google sign-in is enabled.' >&2
+  exit 2
+fi
 
 for command in gcloud openssl python3; do
   command -v "$command" >/dev/null 2>&1 || { echo "Required command not found: $command" >&2; exit 1; }
@@ -249,7 +256,7 @@ gcloud firestore indexes composite create --collection-group=agw_domains \
   --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
 echo "Descending Firestore index request complete. Deploying Cloud Run services..."
 
-gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,GATEWAY_IGNORE_AGENT_OVERRIDES=1,$activation_env"
+gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,GATEWAY_IGNORE_AGENT_OVERRIDES=1,GCP_REGO_ENABLED=1,$activation_env"
 gateway_env+=",UPSTREAM_URL=https://api.open-meteo.com,UPSTREAM_GEOCODING_URL=https://geocoding-api.open-meteo.com,UPSTREAM_DEMO_API_URL=https://jsonplaceholder.typicode.com,UPSTREAM_STRIP_CREDENTIALS=1"
 if [[ "$emotion" -eq 1 ]]; then
   gateway_env+=",GCP_EMOTION_DETAILED_APPROVAL=1"
@@ -288,10 +295,13 @@ if [[ "$emotion" -eq 1 ]]; then
     --update-env-vars="UPSTREAM_MCP_URL=$emotion_url,UPSTREAM_MCP_GCP_IAM=1"
 fi
 
-web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,GCP_SERVERLESS_PROFILE=1,WEATHER_DEMO_ENABLED=true,GCP_DEMO_ROUTES_ENABLED=1,GCP_EMOTION_DEMO_ENABLED=$emotion,WEB_IDP_RELAY=0,$activation_env"
+web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,GATEWAY_URL=$gateway_url,GATEWAY_MCP_URL=$gateway_url,AUTHZ_URL=$gateway_url,TOKENSVC_URL=$gateway_url,INTERNAL_GCP_IAM=1,AUTHZ_GCP_IAM=1,SERVERLESS_PROFILE=1,GCP_SERVERLESS_PROFILE=1,GCP_REGO_ENABLED=1,WEATHER_DEMO_ENABLED=true,GCP_DEMO_ROUTES_ENABLED=1,GCP_EMOTION_DEMO_ENABLED=$emotion,WEB_IDP_RELAY=0,$activation_env"
+web_env="${web_env// ,/,}"
+web_env="${web_env//,/|}"
+web_env+="|WEB_ADMIN_EMAILS=$admin_emails"
 secret_args="GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
 if [[ -n "$oidc_client_id" ]]; then
-  web_env+=" ,OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"
+  web_env+="|OIDC_ISSUER_URL=https://accounts.google.com|OIDC_CLIENT_ID=$oidc_client_id"
   secret_args+=",OIDC_CLIENT_SECRET=$oidc_secret:latest"
 fi
 
@@ -300,7 +310,7 @@ gcloud beta run deploy "$web_service" \
     --service-account="$web_sa" --allow-unauthenticated --port=8080 --cpu=1 --memory=512Mi --timeout=120s --concurrency=80 --min=0 --max-instances=1 \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
     --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
-  --set-env-vars="${web_env// ,/,}" --set-secrets="$secret_args"
+  --set-env-vars="^|^$web_env" --set-secrets="$secret_args"
 
 echo "Gateway URL: $gateway_url"
 web_url="$(gcloud run services describe "$web_service" --region="$region" --project="$project_id" --format='value(status.url)')"
