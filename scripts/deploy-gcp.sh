@@ -215,8 +215,17 @@ mirror_image() {
   fi
   context="$(mktemp -d)"
   printf 'FROM --platform=linux/amd64 %s\n' "$source" > "$context/Dockerfile"
+  cat > "$context/cloudbuild.yaml" <<EOF
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '--pull', '--no-cache', '-t', '$destination', '.']
+  - name: gcr.io/cloud-builders/docker
+    args: ['push', '$destination']
+images: ['$destination']
+EOF
   echo "Mirroring $source to $destination with Cloud Build..."
-  gcloud builds submit "$context" --tag="$destination" --project="$project_id" --quiet
+  # A fresh pull and disabled Docker layer cache are required for moving tags.
+  gcloud builds submit "$context" --config="$context/cloudbuild.yaml" --project="$project_id" --quiet
   rm -rf "$context"
 }
 
@@ -242,6 +251,9 @@ echo "Descending Firestore index request complete. Deploying Cloud Run services.
 
 gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,GATEWAY_IGNORE_AGENT_OVERRIDES=1,$activation_env"
 gateway_env+=",UPSTREAM_URL=https://api.open-meteo.com,UPSTREAM_GEOCODING_URL=https://geocoding-api.open-meteo.com,UPSTREAM_DEMO_API_URL=https://jsonplaceholder.typicode.com,UPSTREAM_STRIP_CREDENTIALS=1"
+if [[ "$emotion" -eq 1 ]]; then
+  gateway_env+=",GCP_EMOTION_DETAILED_APPROVAL=1"
+fi
 if [[ -n "$oidc_client_id" ]]; then
   gateway_env+=",OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"
 fi

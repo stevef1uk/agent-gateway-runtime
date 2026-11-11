@@ -92,7 +92,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-4cf3e30`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
+The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-be2ef3d`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
 
 ## Google Sign-In
 
@@ -224,7 +224,7 @@ scripts/deploy-gcp.sh \
 Include the OIDC options when Google sign-in is configured; otherwise, omit them.
 Without `--emotion`, an allowed MCP request returns the gateway's authorization echo because no upstream is configured. With `--emotion`, the gateway forwards `/mcp-emotion` calls to the private Emotion service using Cloud Run IAM.
 
-Emotion tool discovery and inference use separate processes: `tools/list` can succeed while the model API is still unavailable. The GCP Emotion image build verifies that the llama.cpp runtime can load its shared libraries. If an inference tool reports `Service Unavailable`, inspect the Emotion revision logs for the last health-probe result:
+Emotion tool discovery and inference use separate processes: `tools/list` can succeed while the model API is still unavailable. The Console tester checks `/mcp-emotion/healthz` and waits for both inference backends to be ready before sending a tool call; the delegation must allow `list` on `/mcp-emotion*` for this readiness check. With `--emotion`, the Gateway also requires a human approval for `emotion_detection_detailed`, even if an individual delegation omitted that approval rule; ordinary `emotion_detection` remains governed by its delegation. The GCP Emotion image build verifies that the llama.cpp runtime can load its shared libraries. If an inference tool reports `Service Unavailable`, inspect the Emotion revision logs for the last health-probe result:
 
 ```bash
 gcloud logging read \
