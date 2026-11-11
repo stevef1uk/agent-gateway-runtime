@@ -1,6 +1,6 @@
 # Self-hosting on AWS
 
-The `aws` branch contains the public CloudFormation templates, Make deployment commands and AWS CLI/Python lifecycle scripts. It consumes published encrypted `_l` Docker Hub images and a prebuilt Emotion Lambda wrapper; it does not contain proprietary application source or require customers to build it.
+The `aws` branch contains the public CloudFormation templates, Make deployment commands and AWS CLI/Python lifecycle scripts. It consumes published plain-binary `_l` Docker Hub images with signed licence verification and a prebuilt Emotion Lambda wrapper; it does not contain proprietary application source or require customers to build it.
 
 Follow [Deploy Agent Gateway to your AWS account](Deployment-Guide.md) from step 1. The guide explains current release/activation prerequisites, the administrator's existing-role setup, local configuration, billable deployment, invitations, real endpoint discovery and cleanup.
 

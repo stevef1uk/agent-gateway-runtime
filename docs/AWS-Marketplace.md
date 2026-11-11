@@ -65,7 +65,7 @@ Official references: [SaaS products](https://docs.aws.amazon.com/marketplace/lat
 [container delivery](https://docs.aws.amazon.com/marketplace/latest/userguide/container-based-products.html),
 [metering/entitlement](https://docs.aws.amazon.com/marketplace/latest/userguide/saas-integration-metering-and-entitlement-apis.html).
 
-The intended standard distribution is encrypted Lambda container images with private
-S3 activation material. A separately purchased source licence can allow customers
+The intended standard distribution is Lambda container images with signed licence
+verification and private S3 activation material. A separately purchased source licence can allow customers
 to build without encryption; it does not imply a Marketplace source listing exists.
 Neither path bypasses Marketplace subscription/entitlement requirements.

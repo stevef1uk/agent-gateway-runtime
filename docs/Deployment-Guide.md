@@ -158,22 +158,23 @@ ls releases/current.json
 
 **Expected:** the file exists with schema version 2.
 
-To update it for a new release, obtain a schema-2 manifest from the vendor and save it to `releases/current.json`. It must target `linux/arm64` and include all four encrypted product image digests plus the Emotion wrapper.
+To update it for a new release, obtain a schema-2 manifest from the vendor and save it to `releases/current.json`. It must target `linux/arm64` and include all four signed-licence product image digests plus the Emotion wrapper.
 
 ```bash
 make aws-release-check
 ```
 
-**Expected:** `Valid AWS release: ... (four encrypted product images + Emotion wrapper)`. If the manifest is stale or invalid, obtain a current release from the vendor.
+**Expected:** `Valid AWS release: ... (four signed-licence product images + Emotion wrapper)`. If the manifest is stale or invalid, obtain a current release from the vendor.
 
-You also need, even for evaluation, a genuine **customer private key** and **four signed service licences** from the vendor:
+You need a genuine **vendor public key** and **four signed service licences** from the vendor. The customer private key is used only by the optional Emotion backend:
 
-- Key: `keys/local-activation/customer_private.pem`
+- Vendor public key: `keys/local-activation/vendor_public.pem`
+- Emotion customer key: `keys/local-activation/customer_private.pem`
 - Licences: four `.token` files under `keys/local-activation/licences/`
 
-These are the configuration defaults. The directory is Git-ignored; keep activation files out of Git. Tracked key/token examples in the repository are placeholders and cannot start the encrypted images, so leave them unchanged.
+These are the configuration defaults. The directory is Git-ignored; keep activation files out of Git. Tracked key/token examples in the repository are placeholders and cannot start the licensed services, so leave them unchanged.
 
-The script uploads the customer key and licences to your private, versioned S3 bucket; only object identifiers and versions go into CloudFormation parameters. Never supply a vendor signing private key. These gateway licences are separate from Emotion's native licence: a purchased Emotion token is optional and is not needed to deploy or test approval and error forwarding.
+The script uploads signed licences and the customer key needed by the optional Emotion backend to your private, versioned S3 bucket; only object identifiers and versions go into CloudFormation parameters. Never supply a vendor signing private key. These gateway licences are separate from Emotion's native licence: a purchased Emotion token is optional and is not needed to deploy or test approval and error forwarding.
 
 ## 4. Create your local configuration
 
@@ -193,6 +194,7 @@ Edit **aws-config.mk**, not the example. It is ignored by Git. Fill in:
 | `AWS_STACK`, `AWS_ARTIFACT_STACK`, `AWS_ACCESS_STACK` | Keep the example names for a first isolated deployment, or agree consistent names with your administrator |
 | `RELEASE_MANIFEST` | Path to the vendor manifest from step 3 |
 | `CUSTOMER_KEY_FILE` | Actual local path to the customer private key |
+| `VENDOR_PUBLIC_KEY_FILE` | Actual local path to the public key used to verify vendor licence signatures |
 | `LICENCE_DIR` | Actual directory containing the four service `.token` files |
 | `DOMAIN_PREFIX` | A unique lowercase Cognito prefix you choose, such as your organisation name plus a random suffix. It is not an API ID |
 | `ADMIN_EMAILS` | Your real, reachable operator email; separate several with commas and no spaces |
@@ -205,7 +207,7 @@ make aws-identity
 make aws-preflight
 ```
 
-**Expected:** the intended account and the **assumed role** (`assumed-role/AgentGatewayDev/...`), plus passing manifest, configuration and activation checks. If `make aws-identity` shows `user/agent-gateway-dev` instead, a static-key entry for `[agent-gateway-dev]` in `~/.aws/credentials` is overriding the role profile; delete that section and run it again, because deploying as the user bypasses the scoped role. Preflight validates the private-key format and licence envelope/expiry, then runs each selected ARM64 product image offline with its matching key and licence. This verifies image/key/signature compatibility before any activation material is uploaded. It may pull the public images through Docker, but creates no AWS resources; fix any missing or mismatched inputs before continuing.
+**Expected:** the intended account and the **assumed role** (`assumed-role/AgentGatewayDev/...`), plus passing manifest, configuration and activation checks. If `make aws-identity` shows `user/agent-gateway-dev` instead, a static-key entry for `[agent-gateway-dev]` in `~/.aws/credentials` is overriding the role profile; delete that section and run it again, because deploying as the user bypasses the scoped role. Preflight validates the Emotion customer-key format and verifies each service licence's RSA-PSS signature and expiry against the vendor public key. It checks release image references but does not decrypt or launch the service images. It creates no AWS resources; fix any missing or mismatched inputs before continuing.
 
 ## 5. Administrator: create or update deployment access
 
@@ -280,7 +282,7 @@ The script checks the selected account and profile, the current manifest, and li
 
 1. Creates or reuses private, versioned activation storage.
 2. Uploads and pins your customer activation material.
-3. Pulls the four encrypted `_l` images and the prebuilt Emotion wrapper from Docker Hub into private ECR, checking every digest.
+3. Pulls the four signed-licence `_l` images and the prebuilt Emotion wrapper from Docker Hub into private ECR, checking every digest.
 4. Generates CloudFormation parameters from your configuration and discovered S3 versions, including deploy-time JWT and operator secrets passed as `NoEcho` values.
 5. Creates or updates the Lambda application, HTTP APIs, Cognito and DynamoDB through a change set.
 6. Saves a teardown inventory, checks public and internal HTTP boundaries, and sends the first operator's Cognito invitation if needed.
@@ -400,7 +402,7 @@ OpenClaw/OpenShell and custom stateful backends are **not** provisioned by these
 
 ### Demo signing secrets
 
-The encrypted-image web function receives the same JWT signing value and operator value as the parent gateway. The wizard passes them to child stacks as separate `NoEcho` parameters; they never appear in `DemoConfiguration` outputs or child template bodies. Keep the private local `dist/aws-lambda/plan/secrets.json` for updates. The published web image handles this provisioning path; customers do not rebuild images or use the private source CLI.
+The signed-licence web function receives the same JWT signing value and operator value as the parent gateway. The wizard passes them to child stacks as separate `NoEcho` parameters; they never appear in `DemoConfiguration` outputs or child template bodies. Keep the private local `dist/aws-lambda/plan/secrets.json` for updates. The published web image handles this provisioning path; customers do not rebuild images or use the private source CLI.
 
 ## 13. Troubleshooting
 

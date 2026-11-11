@@ -287,9 +287,6 @@
                   ],
                   "Resource": [
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${CustomerKeyObject}"
-                    },
-                    {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${GatewayLicenceObject}"
                     }
                   ]

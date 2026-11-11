@@ -61,15 +61,16 @@ source access. The public runtime now contains deployment templates and lifecycl
 
 The existing infrastructure examples were modeled for development ZIPs. Customer
 image deployment also incurs private ECR storage and activation S3 GET/storage
-charges. Licence verification/decryption consumes billed cold-start duration; the
-local 508 ms median is not an AWS measurement. A complete image release quote must
-include these items, retained image versions and any software/source licence fee.
+charges. Signed licence verification consumes billed cold-start duration, but the
+service binary is no longer decrypted; prior local activation measurements do not
+represent the current launcher or AWS cold starts. A complete image release quote
+must include these items, retained image versions and any software/source licence fee.
 
 
 ## Image evaluation planning
 
 The operator model now adds private ECR storage, activation S3 GETs and cold-start
-licence/decryption duration. With 2 GB-month registry storage, 10% cold service
+licence-verification duration. With 2 GB-month registry storage, 10% cold service
 invocations, two additional seconds of activation and the existing usage model:
 idle is $1.08/month, 10,000 external actions $1.91 and 100,000 actions $9.12.
 If base invocations average five seconds rather than one, 100,000 actions become

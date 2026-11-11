@@ -46,9 +46,9 @@ AWS_ACCESS_STACK = agent-gateway-access-dev
 # Included in this repo's aws branch: releases/current.json
 RELEASE_MANIFEST = releases/current.json
 
-# Existing local activation material compatible with the published images.
-# Create keys/ directory and place your customer private key and licence .token files there.
+# Local signed licences for the four services. The customer key is for optional Emotion activation.
 CUSTOMER_KEY_FILE = keys/local-activation/customer_private.pem
+VENDOR_PUBLIC_KEY_FILE = keys/local-activation/vendor_public.pem
 LICENCE_DIR = keys/local-activation/licences
 
 # Choose a unique lowercase Cognito domain prefix.

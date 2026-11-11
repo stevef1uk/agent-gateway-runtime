@@ -11,7 +11,7 @@ def load_release(path):
     build=manifest.get('console_build','')
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',build) or tuple(map(int,build.split('.')))<(1,0,94):raise ValueError('Release predates the full AWS Wizard.')
     images=manifest.get('images',{})
-    if set(images)!=set(SERVICES):raise ValueError('Release needs all four encrypted product images.')
+    if set(images)!=set(SERVICES):raise ValueError('Release needs all four signed-licence product images.')
     for name in [*SERVICES,'emotion']:
         item=manifest.get('emotion') if name=='emotion' else images[name]
         if not isinstance(item,dict):raise ValueError('Release needs the prebuilt Emotion Lambda wrapper image.')
@@ -22,5 +22,5 @@ def load_release(path):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('manifest');a=p.parse_args()
     try:
-        m=load_release(a.manifest);print('Valid AWS release:',m['version'],'(four encrypted product images + Emotion wrapper)')
+        m=load_release(a.manifest);print('Valid AWS release:',m['version'],'(four signed-licence product images + Emotion wrapper)')
     except (ValueError,KeyError,TypeError,OSError) as error:p.error(str(error))

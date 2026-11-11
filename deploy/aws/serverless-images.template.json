@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Agent Gateway encrypted ARM64 Lambda image development stack. Requires vendor images in same-account, same-region ECR and private versioned S3 activation objects.",
+  "Description": "Agent Gateway ARM64 Lambda images with signed vendor-licence verification. Requires vendor images in same-account, same-region ECR and private versioned S3 licence objects.",
   "Metadata": {
     "AWSToolsMetrics": {
       "AWSAgentToolkit": "aws-cloudformation@3"
@@ -56,7 +56,7 @@
     "AuthzImageUri": {
       "Type": "String",
       "AllowedPattern": "^[0-9]{12}\\.dkr\\.ecr\\.eu-west-3\\.amazonaws\\.com/[a-z0-9][a-z0-9/._-]*@sha256:[0-9a-f]{64}$",
-      "Description": "Immutable ARM64 encrypted release image in your Paris ECR registry; no latest tag."
+      "Description": "Immutable ARM64 signed-licence release image in your Paris ECR registry; no latest tag."
     },
     "AuthzLicenceObject": {
       "Type": "String",
@@ -70,7 +70,7 @@
     "TokensvcImageUri": {
       "Type": "String",
       "AllowedPattern": "^[0-9]{12}\\.dkr\\.ecr\\.eu-west-3\\.amazonaws\\.com/[a-z0-9][a-z0-9/._-]*@sha256:[0-9a-f]{64}$",
-      "Description": "Immutable ARM64 encrypted release image in your Paris ECR registry; no latest tag."
+      "Description": "Immutable ARM64 signed-licence release image in your Paris ECR registry; no latest tag."
     },
     "TokensvcLicenceObject": {
       "Type": "String",
@@ -84,7 +84,7 @@
     "GatewayImageUri": {
       "Type": "String",
       "AllowedPattern": "^[0-9]{12}\\.dkr\\.ecr\\.eu-west-3\\.amazonaws\\.com/[a-z0-9][a-z0-9/._-]*@sha256:[0-9a-f]{64}$",
-      "Description": "Immutable ARM64 encrypted release image in your Paris ECR registry; no latest tag."
+      "Description": "Immutable ARM64 signed-licence release image in your Paris ECR registry; no latest tag."
     },
     "GatewayLicenceObject": {
       "Type": "String",
@@ -98,7 +98,7 @@
     "WebImageUri": {
       "Type": "String",
       "AllowedPattern": "^[0-9]{12}\\.dkr\\.ecr\\.eu-west-3\\.amazonaws\\.com/[a-z0-9][a-z0-9/._-]*@sha256:[0-9a-f]{64}$",
-      "Description": "Immutable ARM64 encrypted release image in your Paris ECR registry; no latest tag."
+      "Description": "Immutable ARM64 signed-licence release image in your Paris ECR registry; no latest tag."
     },
     "WebLicenceObject": {
       "Type": "String",
@@ -1136,9 +1136,6 @@
                   ],
                   "Resource": [
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${CustomerKeyObject}"
-                    },
-                    {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${AuthzLicenceObject}"
                     }
                   ]
@@ -1224,12 +1221,6 @@
             "SERVERLESS_PROFILE": "1",
             "LICENCE_S3_BUCKET": {
               "Ref": "ActivationBucket"
-            },
-            "CUSTOMER_KEY_S3_OBJECT": {
-              "Ref": "CustomerKeyObject"
-            },
-            "CUSTOMER_KEY_S3_VERSION": {
-              "Ref": "CustomerKeyVersion"
             },
             "LICENCE_S3_OBJECT": {
               "Ref": "AuthzLicenceObject"
@@ -1329,9 +1320,6 @@
                   ],
                   "Resource": [
                     {
-                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${CustomerKeyObject}"
-                    },
-                    {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${TokensvcLicenceObject}"
                     }
                   ]
@@ -1420,12 +1408,6 @@
             "SERVERLESS_PROFILE": "1",
             "LICENCE_S3_BUCKET": {
               "Ref": "ActivationBucket"
-            },
-            "CUSTOMER_KEY_S3_OBJECT": {
-              "Ref": "CustomerKeyObject"
-            },
-            "CUSTOMER_KEY_S3_VERSION": {
-              "Ref": "CustomerKeyVersion"
             },
             "LICENCE_S3_OBJECT": {
               "Ref": "TokensvcLicenceObject"
@@ -1542,9 +1524,6 @@
                     "s3:GetObjectVersion"
                   ],
                   "Resource": [
-                    {
-                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${CustomerKeyObject}"
-                    },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${GatewayLicenceObject}"
                     }
@@ -1688,12 +1667,6 @@
             "LICENCE_S3_BUCKET": {
               "Ref": "ActivationBucket"
             },
-            "CUSTOMER_KEY_S3_OBJECT": {
-              "Ref": "CustomerKeyObject"
-            },
-            "CUSTOMER_KEY_S3_VERSION": {
-              "Ref": "CustomerKeyVersion"
-            },
             "LICENCE_S3_OBJECT": {
               "Ref": "GatewayLicenceObject"
             },
@@ -1803,9 +1776,6 @@
                     "s3:GetObjectVersion"
                   ],
                   "Resource": [
-                    {
-                      "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${CustomerKeyObject}"
-                    },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:s3:::${ActivationBucket}/${WebLicenceObject}"
                     }
@@ -2004,12 +1974,6 @@
             },
             "LICENCE_S3_BUCKET": {
               "Ref": "ActivationBucket"
-            },
-            "CUSTOMER_KEY_S3_OBJECT": {
-              "Ref": "CustomerKeyObject"
-            },
-            "CUSTOMER_KEY_S3_VERSION": {
-              "Ref": "CustomerKeyVersion"
             },
             "LICENCE_S3_OBJECT": {
               "Ref": "WebLicenceObject"

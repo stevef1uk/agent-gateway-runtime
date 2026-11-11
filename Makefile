@@ -11,6 +11,7 @@ AWS_ADMIN_PROFILE ?=
 AWS_VM_PROFILE ?=
 RELEASE_MANIFEST ?= releases/current.json
 CUSTOMER_KEY_FILE ?= keys/local-activation/customer_private.pem
+VENDOR_PUBLIC_KEY_FILE ?= keys/local-activation/vendor_public.pem
 LICENCE_DIR ?= keys/local-activation/licences
 DOMAIN_PREFIX ?=
 ADMIN_EMAILS ?=
@@ -28,7 +29,7 @@ CFN_LINT_BIN ?= cfn-lint
 help:
 	@echo 'Start with docs/Deployment-Guide.md (customer deployment and testing).'
 	@echo 'make check: offline checks; creates no AWS resources'
-	@echo 'make aws-preflight: validate config and test activation against every release image'
+	@echo 'make aws-preflight: verify signed licences and configuration without AWS calls'
 	@echo 'make aws-access-deploy: administrator setup; explicit AWS_ADMIN_PROFILE required'
 	@echo 'make aws-deploy: deploy prebuilt Docker Hub images into your account'
 	@echo 'make aws-outputs: print your actual console and baseline gateway URLs'
@@ -54,9 +55,10 @@ aws-release-check:
 	python3 -B scripts/aws-release.py "$(RELEASE_MANIFEST)"
 aws-preflight: aws-release-check
 	@test -n "$(AWS_ACCOUNT)" -a -n "$(DOMAIN_PREFIX)" -a -n "$(ADMIN_EMAILS)" || { echo 'Fill AWS_ACCOUNT, DOMAIN_PREFIX and ADMIN_EMAILS in aws-config.mk; see docs/Deployment-Guide.md.' >&2; exit 2; }
-	@test -s "$(CUSTOMER_KEY_FILE)" || { echo 'Missing customer activation key; check CUSTOMER_KEY_FILE.' >&2; exit 2; }
+	@test -s "$(CUSTOMER_KEY_FILE)" || { echo 'Missing customer key used by the optional Emotion backend; check CUSTOMER_KEY_FILE.' >&2; exit 2; }
+	@test -s "$(VENDOR_PUBLIC_KEY_FILE)" || { echo 'Missing vendor public key; check VENDOR_PUBLIC_KEY_FILE.' >&2; exit 2; }
 	@for service in authz tokensvc gateway web; do test -s "$(LICENCE_DIR)/$$service.token" || { echo "Missing $$service.token in LICENCE_DIR." >&2; exit 2; }; done
-	python3 -B scripts/check-aws-activation.py --key "$(CUSTOMER_KEY_FILE)" --licences "$(LICENCE_DIR)" --release "$(RELEASE_MANIFEST)"
+	python3 -B scripts/check-aws-activation.py --key "$(CUSTOMER_KEY_FILE)" --vendor-public-key "$(VENDOR_PUBLIC_KEY_FILE)" --licences "$(LICENCE_DIR)" --release "$(RELEASE_MANIFEST)"
 	@echo 'Local release/config/activation checks passed. No AWS resources created.'
 aws-access-deploy:
 	@test -n "$(AWS_ADMIN_PROFILE)" -a -n "$(AWS_ACCOUNT)" || { echo 'Set AWS_ADMIN_PROFILE and AWS_ACCOUNT explicitly in aws-config.mk.' >&2; exit 2; }

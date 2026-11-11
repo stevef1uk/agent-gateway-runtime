@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# End-to-end encrypted Lambda image deployment for the Agent Gateway AWS weather demo.
+# End-to-end signed-licence Lambda image deployment for the Agent Gateway AWS weather demo.
 # Uses an explicitly reviewed _l ARM64 release manifest, uploads activation objects
 # to private versioned S3, imports verified digests into regional ECR, deploys
 # deploy/aws/serverless-images.template.json, saves the teardown inventory, runs
@@ -223,7 +223,7 @@ printf 'Service licences (VersionIds: authz=%s tokensvc=%s gateway=%s web=%s)\n'
 # ---------------------------------------------------------------------------
 # 3. Import Encrypted _l Images from Docker Hub into Regional Private ECR
 # ---------------------------------------------------------------------------
-say "3/6 Importing encrypted _l ARM64 images into private ECR ($AWS_REGION)"
+say "3/6 Importing signed-licence _l ARM64 images into private ECR ($AWS_REGION)"
 ecr_registry="${AGW_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 release_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$AGW_RELEASE_MANIFEST")"
 
