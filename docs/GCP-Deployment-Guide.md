@@ -76,7 +76,7 @@ Run a validation-only pass first:
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version latest \
+  --version gcp-28ac097 \
   --keys-directory keys \
   --admin-emails "admin@example.com"
 ```
@@ -87,7 +87,7 @@ Then deploy:
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version latest \
+  --version gcp-28ac097 \
   --keys-directory keys \
   --admin-emails "admin@example.com" \
   --emotion \
@@ -107,7 +107,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-8b81e71`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
+The `latest` tag is a moving alias updated whenever a new GCP image release is published. These examples pin `gcp-28ac097`, so deployments use the same tested images each time. To upgrade, choose a specific published release tag and use it consistently; use `latest` only when you intentionally want the newest published images.
 
 ## Choosing the policy engine for a delegation
 
@@ -185,7 +185,7 @@ want to configure Emotion.
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version latest \
+  --version gcp-28ac097 \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -204,7 +204,7 @@ export GCP_OIDC_CLIENT_SECRET
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version latest \
+  --version gcp-28ac097 \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -262,7 +262,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version latest \
+  --version gcp-28ac097 \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
