@@ -4,17 +4,23 @@ The runtime deployment script provisions a single-region control plane in Google
 
 ```mermaid
 flowchart TB
- Human[Operator] --> Web[Public Cloud Run service: web]
- Agent[Agent with delegation token] --> Gateway[Private Cloud Run service: gateway + authz + tokensvc]
- Web -->|Cloud Run IAM identity token| Gateway
- Web --> Vertex[Vertex AI policy wizard]
- Web --> State[(Firestore Native)]
- Gateway --> State
- Gateway --> Public[Governed upstream APIs]
- Gateway --> Emotion[Optional private Emotion Cloud Run service]
- Web --> Licence[(Private Cloud Storage licence token)]
- Gateway --> Licence
- Gateway --> Licence
+  Admin[Allowlisted Console administrator] -->|Google OIDC| Web[Public Cloud Run service: web Console]
+  Agent[Agent with delegation token] -->|HTTPS via Console proxy| Web
+  Web -->|Create delegation and save selected engine| State[(Firestore Native)]
+  Web -->|Cloud Run IAM identity token| Gateway[Private Cloud Run service: gateway + authz + tokensvc]
+  Web --> Vertex[Vertex AI policy wizard]
+  subgraph GatewayPolicy[Consolidated Gateway authorization]
+    Gateway --> Engine{Delegation policy_engine}
+    Engine -->|basic| Basic[Built-in delegation policy]
+    Engine -->|opa| OPA[Rego policy via bundled OPA]
+    Basic --> Guardrails[Delegation scope and approval guardrails]
+    OPA --> Guardrails
+  end
+  Gateway --> State
+  Gateway --> Public[Governed upstream APIs]
+  Gateway --> Emotion[Optional private Emotion Cloud Run service]
+  Web --> Licence[(Private Cloud Storage licence token)]
+  Gateway --> Licence
 ```
 
 ## Core resources
@@ -29,7 +35,21 @@ flowchart TB
 
 ## Request and identity flow
 
-The console's web service calls the private gateway using a Google-signed Cloud Run identity token. The gateway checks the token audience and caller identity before accepting internal calls. Agents call the gateway with their delegated credentials. The Gateway keeps the Open-Meteo weather upstream in `UPSTREAM_URL`, routes `/api-geocoding` to `UPSTREAM_GEOCODING_URL`, and routes `/api-users` and simulated `/api-refunds` to `UPSTREAM_DEMO_API_URL`. The optional Emotion MCP service is configured separately as `UPSTREAM_MCP_URL`. Cloud Run provides HTTPS endpoints and service-to-service IAM enforcement.
+Allowlisted administrators sign in to the public Console with Google OIDC. The
+Console's delegation wizard can save either the built-in policy or Rego (OPA)
+as the new delegation's `policy_engine` in Firestore. Agents send delegated
+requests to the public Console endpoint, which proxies them to the private
+Gateway using a Google-signed Cloud Run identity token. The Gateway checks the
+token audience and caller identity before accepting internal calls, then uses
+the engine recorded on the delegation. The selected engine does not bypass
+delegation scope or mandatory approval checks. The Rego policy and OPA runtime
+are bundled in the Gateway image; they are not a separate Cloud Run service.
+
+The Gateway keeps the Open-Meteo weather upstream in `UPSTREAM_URL`, routes
+`/api-geocoding` to `UPSTREAM_GEOCODING_URL`, and routes `/api-users` and
+simulated `/api-refunds` to `UPSTREAM_DEMO_API_URL`. The optional Emotion MCP
+service is configured separately as `UPSTREAM_MCP_URL`. Cloud Run provides
+HTTPS endpoints and service-to-service IAM enforcement.
 
 ## Availability and operational trade-offs
 
