@@ -59,8 +59,12 @@ def prepare(config):
     weather = config.get('weather_demo', False)
     if not isinstance(weather, bool) or (weather and upstream != 'https://api.open-meteo.com'):
         raise ValueError('Weather demo requires boolean true and exact https://api.open-meteo.com upstream')
+    enable_rego = config.get('enable_rego_policy', True)
+    if not isinstance(enable_rego, bool):
+        raise ValueError('enable_rego_policy must be a boolean')
     parameters.update(DomainPrefix=domain, AdminEmails=emails, UpstreamURL=upstream,
-                      EnableWeatherDemo=str(weather).lower())
+                      EnableWeatherDemo=str(weather).lower(),
+                      EnableRegoPolicy=str(enable_rego).lower())
     return [{'ParameterKey': key, 'ParameterValue': value} for key, value in parameters.items()]
 
 

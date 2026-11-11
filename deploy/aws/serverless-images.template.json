@@ -38,6 +38,15 @@
       ],
       "Description": "Opt in to exact Open-Meteo REST tutorial routes; no wildcard /v1 management exposure."
     },
+    "EnableRegoPolicy": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": [
+        "false",
+        "true"
+      ],
+      "Description": "Enable the administrator-managed DynamoDB Rego policy editor and per-delegation OPA selection."
+    },
     "ActivationBucket": {
       "Type": "String",
       "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
@@ -1215,6 +1224,9 @@
               "Ref": "AWS::AccountId"
             },
             "DEMO_UI": "0",
+            "AWS_REGO_ENABLED": {
+              "Ref": "EnableRegoPolicy"
+            },
             "IAM_INTERNAL_API_IDS": {
               "Fn::Sub": "${AuthzAPI}"
             },
@@ -1965,6 +1977,9 @@
             },
             "WEB_ADMIN_EMAILS": {
               "Ref": "AdminEmails"
+            },
+            "AWS_REGO_ENABLED": {
+              "Ref": "EnableRegoPolicy"
             },
             "WEB_IDP_RELAY": "0",
             "WEB_DIR": "/app/web",

@@ -21,6 +21,16 @@ The old local `demo.sh`/Docker Compose workflow uses local services and admin en
 
 For the numbered main-branch demos (purchasing, OPA, OpenClaw/OpenShell, invoice, CRM, DPoP, kill switch, approval edges and Gmail), see the [migration compatibility matrix](Main-Demo-Compatibility.md). These workflows have additional local backend/sandbox assumptions; the AWS clients below cover the listed presets and HTTP proxy probe, rather than claiming every unchanged main-branch script works on AWS.
 
+## Administrator-managed Rego policy
+
+The AWS Console includes the Rego editor and live decision probes when the deployment's `EnableRegoPolicy` CloudFormation parameter is `true` (the default). Sign in with an email in the deployment's `AdminEmails` allowlist, then open **Policy & Rego** in the Console header. The editor validates changes with OPA, stores versioned policy revisions in the stack's DynamoDB domain-state table, and restores the bundled policy or a prior saved revision. Authorization Lambda environments poll shared policy state; a cold environment loads the current policy on startup.
+
+The Delegation Wizard's **Authorization policy engine** choice is saved on each delegation: **Built-in delegation policy** remains the default, while **Rego (OPA)** uses the operator-managed Rego policy. Older delegations without a saved choice continue to use the built-in policy. The editor's Decision probes create a short-lived Rego-enabled probe delegation and send editable requests to the authorization service; they do not call an upstream API or execute an action. The page also explains how to change the spend approval threshold and makes clear that a policy-wide threshold affects every Rego-enabled delegation.
+
+## Emotion image and licence renewal
+
+Do not deploy the GCP `_g` Emotion image to AWS. It is a `linux/amd64` Cloud Run image and retrieves activation files from GCS; AWS uses a separate `linux/arm64` Lambda image and retrieves the signed token and customer key from S3. A renewed licence is activated through the existing `make aws-emotion-activate` workflow and its versioned S3 objects; licence material is not baked into the image. Use only a token and key compatible with the vendor runtime bundled in the selected AWS release.
+
 ## Provision API/MCP demos
 
 Open your deployed console and sign in. For the documented API/MCP presets, open **Protected APIs & MCP Servers**, click **AI Config Assistant (Freeride)**, select the desired preset (for example **Users REST API**), and click **Ask Freeride AI to Generate**. Review the generated configuration, then choose **Open in 5-Step Wizard to Customize** or deploy directly if offered, followed by **Deploy Demo & Create Delegation**. This is different from the separate **Delegation Wizard**, which does not list every guided AWS preset. Wait for the demo deployment to succeed before running a client. The parent installation must already include the deployment role and image configuration supplied by its owner.

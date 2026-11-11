@@ -8,7 +8,7 @@ The AWS presets have [dedicated runners](AWS-Demos.md). This matrix describes pr
 |---|---|---|
 | 1 Scripted purchasing | **No** for direct API calls | Needs purchasing backend and matching allow/amount/approval delegation. Refunds preset is a simulation, not that backend |
 | 2 Graphical walkthrough | **No** for direct API calls | AWS console supplies delegation/approval/audit UI; local demo UI/fixture setup is separate |
-| 3 OPA playground | **No** | Requires OPA-capable policy hosting/version publication. Lambda images use built-in engine; playground is not bundled |
+| 3 OPA playground | **No** | Administrator-only Console Rego editor, DynamoDB-backed version history, per-delegation engine selection, and live authorization probes are available when `EnableRegoPolicy=true` (default) |
 | 4 Protected API | **No** | Dedicated API Lambda PEP and reachable HTTPS backend; users/refunds clients are provided examples |
 | 5 Outbound egress | **Yes** | SSM tunnel plus host/action-scoped egress delegation; AWS HTTP proxy probe is provided |
 | 6 OpenClaw/OpenShell sandbox | **No** for sandbox-only setup | Customer runs sandbox/model tools separately; outbound governed proxy use then needs VM |

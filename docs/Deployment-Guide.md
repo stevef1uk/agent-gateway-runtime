@@ -293,6 +293,8 @@ The parent deployment uses Lambda and managed services only; it creates no proxy
 
 **Expected:** the script prints **Deployment Complete**, the **ConsoleURL**, the baseline **GatewayURL**, the pool ID and the operator email. It saves endpoint identifiers to `dist/aws-lambda/plan/deployment-outputs.env` and a cleanup inventory under `dist/aws-lambda/teardown/`. Keep both for later cleanup and recovery.
 
+`EnableRegoPolicy` defaults to `true`. This exposes **Policy & Rego** to signed-in administrators in the `AdminEmails` allowlist, enables per-delegation policy-engine selection in the Wizard, and stores managed revisions in DynamoDB. To disable those capabilities when preparing an image deployment, set `"enable_rego_policy": false` in the release configuration; the generated CloudFormation parameters then set `EnableRegoPolicy` to `false`. Existing and new delegations otherwise continue to use the built-in policy unless an administrator selects Rego. See [AWS demos](AWS-Demos.md#administrator-managed-rego-policy) for the editor, probes, and threshold guidance.
+
 If deployment fails, open the named stack's CloudFormation **Events** and find the *first* underlying resource failure. Fix that, keep the inventory, and rerun with the same configuration. A printed plan or a created ECR repository alone does not mean the deployment succeeded.
 
 ## 7. Retrieve URLs without editing placeholders

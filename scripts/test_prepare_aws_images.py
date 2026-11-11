@@ -17,10 +17,19 @@ class ImageParameters(unittest.TestCase):
         template=json.loads((ROOT/'deploy/aws/serverless-images.template.json').read_text())
         params={p['ParameterKey']:p['ParameterValue'] for p in module.prepare(self.config())}
         self.assertEqual(set(params) | {'JWTSecretValue', 'AdminSecretValue'}, set(template['Parameters']))
+        self.assertEqual(template['Parameters']['EnableRegoPolicy']['Default'],'true')
         self.assertEqual(params['EnableWeatherDemo'],'true')
+        self.assertEqual(params['EnableRegoPolicy'],'true')
         self.assertEqual(params['EmotionImageUri'], '')
         self.assertEqual(params['DemoDeploymentRoleArn'], '')
         self.assertFalse(any('EmotionLicence' in name for name in params))
+    def test_rego_policy_can_be_disabled(self):
+        config=self.config()
+        config['enable_rego_policy']=False
+        params={p['ParameterKey']:p['ParameterValue'] for p in module.prepare(config)}
+        self.assertEqual(params['EnableRegoPolicy'],'false')
+        config['enable_rego_policy']='false'
+        with self.assertRaises(ValueError):module.prepare(config)
     def test_mutable_images_or_unversioned_activation_are_rejected(self):
         for mutation in ['image','version','boundary']:
             config=self.config()
