@@ -268,7 +268,9 @@ if [[ "$emotion" -eq 1 ]]; then
   emotion_sa="agw-${deployment_id}-emotion@${project_id}.iam.gserviceaccount.com"
   upload_if_changed "$customer_key" "activation/customer_private.pem"
   ensure_service_account "agw-${deployment_id}-emotion"
-  gcloud storage buckets add-iam-policy-binding "gs://$bucket" --member="serviceAccount:$emotion_sa" --role=roles/storage.objectViewer --quiet >/dev/null
+  gcloud storage buckets add-iam-policy-binding "gs://$bucket" \
+    --member="serviceAccount:$emotion_sa" --role=roles/storage.objectViewer \
+    --condition=None --quiet >/dev/null
   gcloud run deploy "$emotion_service" \
     --image="$image_base/agent-gateway-emotion_g:$version" --region="$region" --project="$project_id" \
     --service-account="$emotion_sa" --no-allow-unauthenticated --port=8085 --cpu=2 --memory=4Gi --timeout=180s --concurrency=10 --max-instances=2 \
