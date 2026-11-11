@@ -25,7 +25,7 @@ flowchart TB
 - **Secrets:** Secret Manager stores the gateway JWT secret and admin token. If Google OIDC is configured, its client secret is stored there too.
 - **State:** Firestore Native `(default)` stores sessions, delegations, approvals, audit state, and security/replay state. The deploy script creates the database and required composite indexes.
 - **Vertex AI:** the web service account receives `roles/aiplatform.user` for the policy wizard.
-- **Optional Emotion backend:** `--emotion` deploys a separate private Cloud Run service. It retains its existing customer-key activation flow; the key is uploaded only for this optional service.
+- **Optional Emotion backend:** `--emotion` deploys a separate private Cloud Run service. It uses the model image's bundled vendor public key and signed token; the Agent Gateway customer private key is neither required nor uploaded.
 
 ## Request and identity flow
 

@@ -16,8 +16,7 @@ Required:
 Options:
   --region REGION            Cloud Run region (default: europe-west9)
   --deployment-id ID         Resource name prefix (default: agent-gateway-dev)
-  --keys-directory DIR       Directory containing token.txt and, with --emotion,
-                             customer_private.pem (default: ./keys)
+  --keys-directory DIR       Directory containing token.txt (default: ./keys)
   --emotion                  Deploy and wire the published Emotion MCP upstream
   --oidc-client-id ID        Google OAuth client ID
   --oidc-client-secret FILE  File containing the Google OAuth client secret
@@ -63,12 +62,8 @@ for command in gcloud openssl python3; do
   command -v "$command" >/dev/null 2>&1 || { echo "Required command not found: $command" >&2; exit 1; }
 done
 
-customer_key="$keys_directory/customer_private.pem"
 licence_token="$keys_directory/token.txt"
 [[ -s "$licence_token" ]] || { echo "Missing $licence_token" >&2; exit 1; }
-if [[ "$emotion" -eq 1 ]]; then
-  [[ -s "$customer_key" ]] || { echo "--emotion requires $customer_key" >&2; exit 1; }
-fi
 
 if [[ -n "$oidc_client_id" && -z "$oidc_client_secret_file" ]]; then
   if [[ -n "${GCP_OIDC_CLIENT_SECRET:-}" ]]; then
@@ -269,15 +264,11 @@ gcloud run services update "$gateway_service" --region="$region" --project="$pro
 if [[ "$emotion" -eq 1 ]]; then
   emotion_service="agw-${deployment_id}-emotion"
   emotion_sa="agw-${deployment_id}-emotion@${project_id}.iam.gserviceaccount.com"
-  upload_if_changed "$customer_key" "activation/customer_private.pem"
   ensure_service_account "agw-${deployment_id}-emotion"
-  gcloud storage buckets add-iam-policy-binding "gs://$bucket" \
-    --member="serviceAccount:$emotion_sa" --role=roles/storage.objectViewer \
-    --condition=None --quiet >/dev/null
   gcloud run deploy "$emotion_service" \
     --image="$image_base/agent-gateway-emotion_g:$version" --region="$region" --project="$project_id" \
     --service-account="$emotion_sa" --no-allow-unauthenticated --port=8085 --cpu=2 --memory=4Gi --timeout=180s --concurrency=10 --max-instances=2 \
-    --set-env-vars="EMOTION_BRIDGE_PORT=8085,LICENCE_GCS_BUCKET=$bucket,CUSTOMER_KEY_GCS_OBJECT=activation/customer_private.pem,CUSTOMER_KEY_GCS_GENERATION=$(gcloud storage objects describe "gs://$bucket/activation/customer_private.pem" --format='value(generation)')"
+    --set-env-vars="EMOTION_BRIDGE_PORT=8085"
   gcloud run services add-iam-policy-binding "$emotion_service" --region="$region" --project="$project_id" \
     --member="serviceAccount:$gateway_sa" --role=roles/run.invoker --quiet >/dev/null
   emotion_url="$(gcloud run services describe "$emotion_service" --region="$region" --project="$project_id" --format='value(status.url)')"

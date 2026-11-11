@@ -8,9 +8,16 @@ For an overview of the deployed services and request flow, see the [GCP architec
 
 - A Google Cloud project with billing enabled.
 - `gcloud` installed and authenticated with `gcloud auth login` and `gcloud auth application-default login`.
-- This repository contains deliberately public **evaluation-only** activation material. `keys/token.txt` is used by the four Agent Gateway service images. `keys/customer_private.pem` is required only when deploying the separate Emotion backend with `--emotion`.
+- This repository contains deliberately public **evaluation-only** activation material. `keys/token.txt` is used by the four Agent Gateway service images. The optional Emotion backend uses the model image's bundled vendor public key and signed token; it does not require `keys/customer_private.pem`.
 
-Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the signed licence token to a private Cloud Storage bucket. It uploads the evaluation customer key only for the optional Emotion backend.
+Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the signed licence token to a private Cloud Storage bucket. It does not upload the customer private key for Emotion.
+
+The published GCP Emotion wrapper uses a pinned evaluation image, which can run
+without an external customer key. This is separate from customer-specific model
+packages, which require their matching private key and licence token. If an
+earlier deployment uploaded `activation/customer_private.pem` or granted the
+Emotion service account bucket access, those existing resources are not removed
+automatically; review them before removing them if they are no longer needed.
 
 ## 1. Prepare the project
 
@@ -76,7 +83,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-fa519a3`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
+The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-f33d360`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
 
 ## Google Sign-In
 
@@ -198,7 +205,7 @@ scripts/deploy-gcp.sh \
 
 Without `--emotion`, an allowed MCP request returns the gateway's authorization echo because no upstream is configured. With `--emotion`, the gateway forwards `/mcp-emotion` calls to the private Emotion service using Cloud Run IAM.
 
-Emotion tool discovery and inference use separate processes: `tools/list` can succeed while the model API is still unavailable. If an inference tool reports `Service Unavailable`, inspect the Emotion revision logs for the last health-probe result or a key-staging/startup error:
+Emotion tool discovery and inference use separate processes: `tools/list` can succeed while the model API is still unavailable. The GCP Emotion image build verifies that the llama.cpp runtime can load its shared libraries. If an inference tool reports `Service Unavailable`, inspect the Emotion revision logs for the last health-probe result:
 
 ```bash
 gcloud logging read \
