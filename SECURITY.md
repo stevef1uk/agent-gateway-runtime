@@ -1,21 +1,19 @@
-# Security scope of the AWS weather demo
+# GCP deployment security notes
 
-Use only the console/gateway URLs supplied by your own reviewed deployment. Do not
-reuse local demo accounts, operator tokens, image keys or public management endpoints
-from the `main` branch. This branch includes no credentials and no infrastructure
-provisioning/teardown implementation; operator guides link to the authorized source
-checkout. No historical security-scan result is claimed for these AWS artifacts.
+Use only the Console URL and deployment resources created in your own GCP
+project. The public web Console proxies governed requests to the Gateway; do
+not give agents the private Gateway URL or the upstream provider URL.
 
-Human sign-in is through Cognito. Delegation creation and decisions use the verified
-server-side console session; agent curls need only a short-lived agent token. Never
-commit passwords, cookies, human ID tokens, agent secrets/tokens, HAR files or private
-keys. Revoke disposable delegations after testing and keep all account changes scoped.
+Configure verified administrator emails when enabling Google sign-in. Keep
+OAuth client secrets, delegation secrets, access tokens, licence tokens, and
+private keys out of source control, URLs, and shared logs. Store deployment
+secrets in the intended local secure files or Google Secret Manager.
 
-The public weather provider must not receive gateway credentials, actor identity or
-forwarding headers. The weather-enabled gateway release implements that stripping.
-Caller mapping headers cannot turn a forbidden weather method/path into an allowed
-one. Exact weather routes are public; management APIs remain IAM protected.
+Delegations should grant only the required resources, actions, limits, and
+approval rules. Revoke test delegations when finished. Rego changes apply to
+all Rego-enabled delegations in the deployment; validate changes and use the
+Console's version history to roll back when needed.
 
-A $10 AWS Budget is not a hard cap. See docs/Teardown.md for retained resources and
-irreversible purge choices. This branch has not yet passed real AWS deployment,
-Cognito/API Gateway acceptance, load/fault testing or production HA validation.
+See the [GCP deployment guide](./docs/GCP-Deployment-Guide.md) and
+[GCP Console tutorial](./docs/GCP-Console-Tutorial.md) for deployment and
+policy-management details.

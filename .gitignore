@@ -1,5 +1,3 @@
-# This AWS demo branch ships placeholder passwords, tokens and deployment keys for evaluation.
-# Real credentials must be replaced before production deployment.
 .env
 **/.env
 !**/.env.example
@@ -10,26 +8,12 @@ __pycache__/
 .DS_Store
 /dist/
 
-# Preserve local configuration left behind when switching from legacy main.
+# Local demo data.
 /demo/gmail/
 
-# Local AWS activation material. Placeholder keys/licences included for batteries-included eval.
-# REPLACE with real vendor .token files and customer private key before production deployment.
+# Local GCP deployment credentials and licence material.
 keys/
-!keys/
-keys/*
-!keys/customer_private.pem
-!keys/token.txt
-keys.tmp
-keys.txt
-
-# Customer-local deployment identifiers, release downloads and activation material.
-/aws-config.mk
-/releases/
 *.token
-
-# Commit current.json for batteries-included workflow
-/releases/current.json!
 
 # GCP customer-local deployment state and credentials
 **/.terraform/

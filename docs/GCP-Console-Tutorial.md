@@ -51,11 +51,23 @@ reload the latest version before applying your changes.
 
 ## Verify a policy change
 
-Use the Console's API tester or a client with a delegation token to send a
-request covered by a Rego-enabled delegation. Compare the authorization result
-before and after the edit. The editor confirms that the policy was saved, but
-does not create a test delegation or automatically exercise your application
-requests.
+The policy page includes **Decision probes** for trying policy inputs against
+the running authorization service:
+
+1. Select **Create temporary probe delegation**. This creates a real,
+   short-lived delegation scoped to `/orders` with a €200 spend cap; it expires
+   after 30 minutes.
+2. Edit the resource, action, or context JSON in each probe, then select
+   **Run all probes**. The decisions reflect the active Rego policy and the
+   probe delegation's scope and limits. These are authorization checks only:
+   they do not call an upstream API or execute the action.
+3. Change the Rego source and select **Apply**. The editor validates and saves
+   the policy, then reruns the probes so you can see whether the decisions
+   changed. For example, change the spend-cap rule and compare the probe with
+   `{"amount":250}` before and after applying the policy.
+
+You can also use the Console's API tester or a client with a delegation token
+to check a request covered by a Rego-enabled delegation.
 
 Policy edits are deployment-wide, so review the impact on all Rego-enabled
 delegations before applying a change. Keep changes small and use version
