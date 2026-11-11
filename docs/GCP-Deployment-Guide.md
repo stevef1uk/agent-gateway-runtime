@@ -57,6 +57,19 @@ gcloud config get-value account
 
 ## 2. Deploy
 
+**Admin email configuration:** if you enable Google sign-in with
+`--oidc-client-id`, you must also provide `--admin-emails` with one or more
+comma-separated, verified Google account addresses allowed to administer the
+Console. For example:
+
+```bash
+--admin-emails "admin@example.com,operator@example.com"
+```
+
+You can set the same value in `GCP_ADMIN_EMAILS` instead. The deployment
+script rejects OIDC configuration without an admin allowlist; do not omit this
+flag from either the initial OIDC deployment or a later redeployment.
+
 Run a validation-only pass first:
 
 ```bash
