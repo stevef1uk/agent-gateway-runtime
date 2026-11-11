@@ -66,6 +66,23 @@ the running authorization service:
    changed. For example, change the spend-cap rule and compare the probe with
    `{"amount":250}` before and after applying the policy.
 
+### Changing the spend approval threshold
+
+By default, `spend_breached` compares the request amount with the
+delegation's `spend_per_order.max`. To set a per-delegation threshold, update
+the spend limit in the API Wizard. To hard-code a deployment-wide threshold
+of 250 in Rego, change the comparison inside `spend_breached` from
+`num(input.action.context.amount) > num(l.max)` to
+`num(input.action.context.amount) > 250`. Also update the message in
+`assessment_reason` to say `fixed approval threshold 250`; otherwise the
+decision reason will still display the delegation's configured limit.
+
+The comparison is strictly greater than: amount 250 does not require approval,
+while 251 does. Use `{"amount":251}` in a decision probe to check the new
+threshold. Rego is shared across the deployment, so a hard-coded change
+affects all Rego-enabled delegations; use the Wizard's spend limit when
+different delegations need different thresholds.
+
 You can also use the Console's API tester or a client with a delegation token
 to check a request covered by a Rego-enabled delegation.
 
