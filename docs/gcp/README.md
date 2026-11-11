@@ -3,6 +3,7 @@
 These documents describe the published-image customer deployment in this repository:
 
 - [Deployment guide](../GCP-Deployment-Guide.md): project prerequisites, deployment, verification, and teardown.
+- [Console tutorial](../GCP-Console-Tutorial.md): creating delegations, choosing Rego, editing policy, and restoring versions.
 - [Architecture](architecture.md): Cloud Run services, authentication, storage, licensing, and optional Emotion backend.
 - [Pricing estimate](serverless-pricing.md): indicative costs and the assumptions used.
 

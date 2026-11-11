@@ -6,7 +6,7 @@ The runtime deployment script provisions a single-region control plane in Google
 flowchart TB
   Admin[Allowlisted Console administrator] -->|Google OIDC| Web[Public Cloud Run service: web Console]
   Agent[Agent with delegation token] -->|HTTPS via Console proxy| Web
-  Web -->|Create delegation and save selected engine| State[(Firestore Native)]
+  Web -->|Save delegation engine and managed Rego versions| State[(Firestore Native)]
   Web -->|Cloud Run IAM identity token| Gateway[Private Cloud Run service: gateway + authz + tokensvc]
   Web --> Vertex[Vertex AI policy wizard]
   subgraph GatewayPolicy[Consolidated Gateway authorization]
@@ -15,6 +15,7 @@ flowchart TB
     Engine -->|opa| OPA[Rego policy via bundled OPA]
     Basic --> Guardrails[Delegation scope and approval guardrails]
     OPA --> Guardrails
+    OPA -. poll validated policy updates .-> State
   end
   Gateway --> State
   Gateway --> Public[Governed upstream APIs]
@@ -29,7 +30,7 @@ flowchart TB
 - **Image registry:** the script pulls `stevef1uk/agent-gateway-*_g` images from Docker Hub and mirrors the gateway and web images into a regional Artifact Registry repository in the customer project. Deployments can use immutable release tags or the moving `latest` alias.
 - **Licence activation:** a signed vendor licence token is stored in a private Cloud Storage bucket. The core service launchers fetch the configured token generation, verify its RSA-PSS signature and expiry, then start the unencrypted service binary. The customer private key is not used by these four services.
 - **Secrets:** Secret Manager stores the gateway JWT secret and admin token. If Google OIDC is configured, its client secret is stored there too.
-- **State:** Firestore Native `(default)` stores sessions, delegations, approvals, audit state, and security/replay state. The deploy script creates the database and required composite indexes.
+- **State:** Firestore Native `(default)` stores sessions, delegations, approvals, audit state, security/replay state, and the managed Rego policy with its rollback history. The deploy script creates the database and required composite indexes.
 - **Vertex AI:** the web service account receives `roles/aiplatform.user` for the policy wizard.
 - **Optional Emotion backend:** `--emotion` deploys a separate private Cloud Run service. It uses the model image's bundled vendor public key and signed token; the Agent Gateway customer private key is neither required nor uploaded.
 
@@ -37,13 +38,18 @@ flowchart TB
 
 Allowlisted administrators sign in to the public Console with Google OIDC. The
 Console's delegation wizard can save either the built-in policy or Rego (OPA)
-as the new delegation's `policy_engine` in Firestore. Agents send delegated
+as the new delegation's `policy_engine` in Firestore. The editor saves
+validated policy versions and rollback history in Firestore; Gateway instances
+poll for updates and retain their last valid policy if a change cannot be
+loaded. One active Rego policy is shared by all delegations selecting OPA.
+Agents send delegated
 requests to the public Console endpoint, which proxies them to the private
 Gateway using a Google-signed Cloud Run identity token. The Gateway checks the
 token audience and caller identity before accepting internal calls, then uses
 the engine recorded on the delegation. The selected engine does not bypass
-delegation scope or mandatory approval checks. The Rego policy and OPA runtime
-are bundled in the Gateway image; they are not a separate Cloud Run service.
+delegation scope or mandatory approval checks. The initial Rego policy and OPA
+runtime are bundled in the Gateway image; they are not a separate Cloud Run
+service.
 
 The Gateway keeps the Open-Meteo weather upstream in `UPSTREAM_URL`, routes
 `/api-geocoding` to `UPSTREAM_GEOCODING_URL`, and routes `/api-users` and

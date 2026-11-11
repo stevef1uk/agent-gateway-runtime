@@ -107,7 +107,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-4305685`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
+The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. The current published release is `2026-11-11-gcp-b24c4ee`; for repeatable deployments or rollback, replace `latest` with that exact immutable release tag.
 
 ## Choosing the policy engine for a delegation
 
@@ -127,12 +127,11 @@ policy; existing delegations retain their saved choice. Child delegations
 inherit the parent's engine. This selection does not replace platform security
 checks or mandatory GCP approval rules; those apply to both engines.
 
-The Gateway image bundles the deployment's Rego policy. The GCP Console does
-not currently provide policy editing or durable, versioned live policy
-storage, so changing the Rego source requires publishing and deploying a new
-Gateway image. The current published release is
-`2026-11-11-gcp-4305685`; use `--version latest` to deploy the current release,
-or that exact version for repeatable deployments and rollback.
+For step-by-step Console instructions, including editing and restoring Rego
+policy versions, see the [GCP Console tutorial](GCP-Console-Tutorial.md).
+Policy edits are shared through Firestore and Gateway instances load validated
+updates automatically; publishing a new image is not required for policy-only
+changes. Only delegations set to Rego use the managed Rego policy.
 
 ## Google Sign-In
 
