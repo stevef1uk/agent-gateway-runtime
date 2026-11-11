@@ -54,7 +54,7 @@ Run a validation-only pass first:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-afde5db \
+  --version latest \
   --keys-directory keys
 ```
 
@@ -63,7 +63,7 @@ Then deploy:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-afde5db \
+  --version latest \
   --keys-directory keys \
   --emotion \
   --apply
@@ -76,7 +76,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-Use the exact release version supplied with your activation material. Do not use `latest`.
+The `latest` tag is updated whenever a new GCP image release is published. Each deployment copies the current `latest` images into your Artifact Registry and deploys them. For repeatable deployments or rollback, replace `latest` with the exact immutable release tag, for example `2026-11-11-gcp-afde5db`.
 
 ## Google Sign-In
 
@@ -122,7 +122,7 @@ Then redeploy with the client ID and secret file:
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-afde5db \
+  --version latest \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
@@ -138,7 +138,7 @@ export GCP_OIDC_CLIENT_SECRET
 
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-afde5db \
+  --version latest \
   --keys-directory keys \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --apply
@@ -190,7 +190,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
-  --version 2026-11-11-gcp-afde5db \
+  --version latest \
   --keys-directory /secure/path/to/activation \
   --emotion \
   --apply

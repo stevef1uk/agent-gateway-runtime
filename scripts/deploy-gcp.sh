@@ -11,7 +11,7 @@ Usage: scripts/deploy-gcp.sh --project-id PROJECT --version VERSION [options]
 
 Required:
   --project-id PROJECT       GCP project ID with billing enabled
-  --version VERSION          Published Docker Hub release tag
+  --version VERSION          Published Docker Hub release tag, or latest (moving alias)
 
 Options:
   --region REGION            Cloud Run region (default: europe-west9)
@@ -54,7 +54,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$project_id" && -n "$version" ]] || usage
-[[ "$version" != latest ]] || { echo 'Use a versioned release tag, never latest.' >&2; exit 2; }
+[[ "$version" == latest || "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
+  echo 'Version must be a valid Docker tag.' >&2
+  exit 2
+}
 
 for command in gcloud openssl python3; do
   command -v "$command" >/dev/null 2>&1 || { echo "Required command not found: $command" >&2; exit 1; }
@@ -211,14 +214,18 @@ mirror_image() {
   local source="docker.io/$registry/agent-gateway-${name}_g:$version"
   local destination="$artifact_repo/agent-gateway-${name}_g:$version"
   local context
-  if gcloud artifacts docker images describe "$destination" --project="$project_id" >/dev/null 2>&1; then
+  local cache_args=()
+  if [[ "$version" != latest ]] && gcloud artifacts docker images describe "$destination" --project="$project_id" >/dev/null 2>&1; then
     echo "Using existing mirrored image: $destination"
     return
+  fi
+  if [[ "$version" == latest ]]; then
+    cache_args+=(--no-cache)
   fi
   context="$(mktemp -d)"
   printf 'FROM --platform=linux/amd64 %s\n' "$source" > "$context/Dockerfile"
   echo "Mirroring $source to $destination with Cloud Build..."
-  gcloud builds submit "$context" --tag="$destination" --project="$project_id" --quiet
+  gcloud builds submit "$context" --tag="$destination" --project="$project_id" --quiet "${cache_args[@]}"
   rm -rf "$context"
 }
 
