@@ -6,7 +6,7 @@ phase="${1:-access}"
 case "$phase" in
   access|approved|revoked) ;;
   -h|--help)
-    echo 'Usage: CONSOLE_URL=https://WEB-SERVICE-HASH.REGION.run.app bash demo/public-weather-tutorial-gcp.sh [access|approved|revoked]'
+    echo 'Usage: CONSOLE_URL=https://WEB-SERVICE-HASH.a.run.app bash demo/public-weather-tutorial-gcp.sh [access|approved|revoked]'
     echo 'AGENT_TOKEN is read privately if absent. This script never approves or revokes.'
     exit 0
     ;;
@@ -22,7 +22,7 @@ for tool in curl python3; do
 done
 
 console="${CONSOLE_URL:-}"
-[[ "$console" =~ ^https://[a-z0-9-]+-[0-9]+\.[a-z0-9-]+\.run\.app/?$ ]] || {
+[[ "$console" =~ ^https://[a-z0-9][a-z0-9-]*\.a\.run\.app/?$ ]] || {
   echo 'Set CONSOLE_URL to the public GCP Console Cloud Run URL (HTTPS, no path), not the private Gateway URL.' >&2
   exit 2
 }
