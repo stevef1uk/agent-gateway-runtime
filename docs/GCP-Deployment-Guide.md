@@ -96,14 +96,28 @@ The `latest` tag is updated whenever a new GCP image release is published. Each 
 
 ## Choosing the policy engine for a delegation
 
-The GCP Console's delegation wizard lets an allowlisted administrator choose
-the built-in policy or Rego (OPA) for each new delegation. Existing delegations
-retain their recorded choice; new delegations default to the built-in policy.
-The deployment bundles the sample Rego policy with the Gateway image. Policy
-editing and versioned live policy storage are not yet exposed in the GCP
-Console, so changing the Rego source currently requires publishing and
-deploying a new Gateway image. Platform checks, including mandatory GCP
-approval rules, still apply to either engine.
+An allowlisted administrator can select the authorization engine for each new
+delegation:
+
+1. Sign in to the GCP Console and open the API Wizard to create a delegation.
+2. In the delegation settings, choose **Built-in delegation policy** or
+   **Rego (OPA) policy** under **Authorization policy engine**. This control is
+   shown when the deployment has Rego enabled.
+3. Review the selected engine and create the delegation. The Console lists the
+   engine on the resulting delegation.
+
+The choice is saved with the delegation and applies to its authorization
+decisions. Delegations created without an explicit choice use the built-in
+policy; existing delegations retain their saved choice. Child delegations
+inherit the parent's engine. This selection does not replace platform security
+checks or mandatory GCP approval rules; those apply to both engines.
+
+The Gateway image bundles the deployment's Rego policy. The GCP Console does
+not currently provide policy editing or durable, versioned live policy
+storage, so changing the Rego source requires publishing and deploying a new
+Gateway image. The current published release is
+`2026-11-11-gcp-4305685`; use `--version latest` to deploy the current release,
+or that exact version for repeatable deployments and rollback.
 
 ## Google Sign-In
 
