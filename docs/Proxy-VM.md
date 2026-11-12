@@ -4,9 +4,24 @@
 
 ## Prerequisites
 
-Complete parent deployment using the [customer guide](Deployment-Guide.md). Use this runtime checkout; no private source checkout is needed. Install the AWS Session Manager plugin locally for port forwarding. Set `AWS_VM_PROFILE` in ignored `aws-config.mk` to an explicitly reviewed non-root profile with the EC2, VPC, IAM role/profile, CloudFormation and SSM permissions needed by `deploy/aws/proxy-vm.template.json`. The bounded application role does not automatically have those privileges.
+Complete parent deployment using the [customer guide](Deployment-Guide.md). Use this runtime checkout; no private source checkout is needed. Install the AWS Session Manager plugin locally for port forwarding.
 
-The create script reads the parent's DemoConfiguration, checks the same account, and uses its exact gateway image, activation references, authorization API and DynamoDB tables. Its instance role is scoped to the required shared resources and SSM. Secrets are fetched at boot and are not embedded in user data.
+The proxy VM is optional and requires an explicitly configured `AWS_VM_PROFILE`. This may be the same profile as `AWS_PROFILE`, but only if that non-root identity is approved and allowed to create the resources in `deploy/aws/proxy-vm.template.json`. In ignored `aws-config.mk`, set:
+
+```make
+AWS_PROFILE = agent-gateway-dev
+AWS_VM_PROFILE = your-approved-vm-profile
+```
+
+The VM profile needs CloudFormation and EC2/VPC permissions, permission to create the template's IAM role and instance profile and pass the role to EC2, and SSM permissions to open and close a session. The bounded application role does not automatically have those privileges. Do not assume that `AWS_PROFILE` or an administrator profile is suitable; ask your AWS administrator which profile is approved for these resources.
+
+Before creating anything, verify the VM profile's identity and account:
+
+```bash
+aws --profile your-reviewed-vm-profile --region eu-west-3 sts get-caller-identity
+```
+
+Use a non-root identity in the same AWS account as the parent deployment. The create script checks the account, reads the parent's `DemoConfiguration` using `AWS_PROFILE`, and uses its exact gateway image, activation references, authorization API and DynamoDB tables. The instance role is scoped to the required shared resources and SSM. Secrets are fetched at boot and are not embedded in user data.
 
 ## Preview, create and connect
 
@@ -26,7 +41,7 @@ The default is one `t4g.small` ARM64 instance, standard CPU credits and a 12 GiB
 
 This example calls the public [Open-Meteo forecast API](https://open-meteo.com/) over HTTPS. It needs no upstream API key; the Agent Gateway egress token is still required.
 
-1. In `aws-config.mk`, set `AWS_PROFILE` to a profile that can read the parent stack and `AWS_VM_PROFILE` to an explicitly reviewed, non-root profile allowed to create the proxy stack. Set `AWS_REGION` and `AWS_STACK` to the same region and parent stack used for the deployment. The VM profile must be in the same AWS account as the parent.
+1. In `aws-config.mk`, set `AWS_PROFILE` to a profile that can read the parent stack and `AWS_VM_PROFILE` to the reviewed profile described above. Set `AWS_REGION` and `AWS_STACK` to the same region and parent stack used for the deployment. Check the VM profile with `aws sts get-caller-identity`; it must be non-root and in the same AWS account as the parent. If you do not have a profile with the required permissions, stop here and ask your AWS administrator to provide one.
 2. Review the offline example, then deliberately create and check the VM:
 
    ```bash
