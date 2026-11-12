@@ -3,8 +3,9 @@
 OpenClaw/OpenShell sandboxes, CRM or Gmail connectors, purchasing services,
 and other application backends are not created by the published-image GCP
 deployment. The supplied deploy script creates the Agent Gateway control
-plane and its fixed demo routes; it does not provision customer hosts or
-arbitrary upstream APIs/MCP servers.
+plane and its demo routes; it does not provision customer hosts or upstream
+APIs/MCP servers. Existing reachable HTTP(S) APIs and MCP servers can be
+registered through the GCP Console.
 
 No separate GCP forward-proxy service is deployed. The public web Console
 service proxies supported, configured API/MCP requests to the private Gateway.
@@ -32,19 +33,19 @@ host or sandbox.
   traffic cannot bypass the governed routes. The Gateway does not control
   direct connections to other hosts.
 
-## Important GCP deployment limitation
+## Register an existing API or MCP server
 
-The GCP API Wizard does not provision arbitrary upstreams. Its catalogued
-weather, geocoding, users, refunds, and optional Emotion routes are configured
-by the GCP deployment. Entering an arbitrary URL or selecting a local/image
-preset does not create that service in Cloud Run. The GCP deployment's
-serverless upstream-upsert endpoint is intentionally unavailable.
+Use the Console wizard to register the service's reachable HTTP(S) base URL,
+then create a delegation scoped to the required route and actions. Follow the
+[custom-upstream walkthrough](local-custom-upstream-wizard-test.md) for a
+worked example and credential-handling details. The Gateway must be able to
+reach the upstream; registration does not deploy it or configure its network
+access. For upstream authentication, callers supply their own credentials
+per request. Registering a route is not generic egress enforcement.
 
-To govern another API or MCP service, use a separately reviewed deployment
-workflow that explicitly adds the upstream, service-to-service identity and
-authorization configuration, then verify its route and policy before
-connecting an agent. Do not assume that a preset or endpoint visible in a
-different deployment mode is provisioned in GCP.
+The built-in weather, geocoding, users, refunds, and optional Emotion routes
+are deployment-configured. The Console's Delete action applies to
+customer-registered upstreams, not these built-in demos.
 
 ## Limits of the available demos
 

@@ -4,6 +4,8 @@ This guide deploys the published signed-licence Agent Gateway images into your o
 
 For an overview of the deployed services and request flow, see the [GCP architecture](gcp/architecture.md). For indicative operating costs, see the [GCP pricing estimate](gcp/serverless-pricing.md).
 For the configured demo routes, approval walkthrough, and limits of advanced demos, see the [GCP demo guide](GCP-Demos.md).
+To register and test an existing customer API or MCP server, see the
+[custom-upstream walkthrough](gcp/local-custom-upstream-wizard-test.md).
 
 ## What you need
 
@@ -26,7 +28,7 @@ decrypt model files; the vendor runtime writes decryption output to ephemeral
 `/tmp`, not back into the image. All signed-in users share this Emotion service
 and still need their own scoped delegation.
 
-The pinned evaluation image can run without an external customer decryption
+The evaluation image can run without an external customer decryption
 key. This is separate from customer-specific model packages, which require
 their matching private key and licence token. If an earlier deployment uploaded
 `activation/customer_private.pem` or granted the Emotion service account bucket
@@ -90,7 +92,7 @@ Run a validation-only pass first:
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-5ca2f36 \
+  --version latest \
   --keys-directory keys \
   --admin-emails "admin@example.com"
 ```
@@ -101,7 +103,7 @@ Then deploy:
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-5ca2f36 \
+  --version latest \
   --keys-directory keys \
   --admin-emails "admin@example.com" \
   --emotion \
@@ -135,14 +137,19 @@ The configured Wizard demos route weather and geocoding to their respective
 Open-Meteo services, and users and simulated refunds to JSONPlaceholder. The
 refunds demo uses `/posts` as a simulation: writes are not persisted and no
 real refund is issued. Add `--emotion` to deploy the Emotion MCP backend.
-The Wizard creates delegations; it does not deploy arbitrary upstreams.
+The Wizard can also register an existing reachable HTTP(S) API or MCP server
+and create a scoped delegation for it. It does not deploy the upstream service.
 
 ```text
 stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is a moving alias updated whenever a new GCP image release is published. These examples pin `gcp-5ca2f36`, so deployments use the same tested images each time. To upgrade, choose a specific published release tag and use it consistently; use `latest` only when you intentionally want the newest published images.
+The examples use the moving `latest` aliases. A future deployment with the
+same command can therefore install different images. For reproducible
+deployments, select a verified common versioned release tag with `--version`
+and record the resolved image digests. The script does not accept a digest as
+the `--version` value.
 
 ## Choosing the policy engine for a delegation
 
@@ -228,7 +235,7 @@ separately supply a vendor-issued Emotion token with
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-5ca2f36 \
+  --version latest \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -247,7 +254,7 @@ export GCP_OIDC_CLIENT_SECRET
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-5ca2f36 \
+  --version latest \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -305,7 +312,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-5ca2f36 \
+  --version latest \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \

@@ -6,7 +6,7 @@ The runtime deployment script provisions a single-region control plane in Google
 flowchart TB
   Admin[Allowlisted Console administrator] -->|Google OIDC| Web[Public Cloud Run service: web Console]
   Agent[Agent with delegation token] -->|HTTPS via Console proxy| Web
-  Web -->|Save delegation engine and managed Rego versions| State[(Firestore Native)]
+  Web -->|Save registrations, delegations and managed Rego versions| State[(Firestore Native)]
   Web -->|Cloud Run IAM identity token| Gateway[Private Cloud Run service: gateway + authz + tokensvc]
   Web --> Vertex[Vertex AI policy wizard]
   subgraph GatewayPolicy[Consolidated Gateway authorization]
@@ -30,7 +30,7 @@ flowchart TB
 - **Image registry:** the script pulls `stevef1uk/agent-gateway-*_g` images from Docker Hub and mirrors the gateway and web images into a regional Artifact Registry repository in the customer project. Deployments can use immutable release tags or the moving `latest` alias.
 - **Licence activation:** a signed vendor licence token is stored in a private Cloud Storage bucket. The core service launchers fetch the configured token generation, verify its RSA-PSS signature and expiry, then start the unencrypted service binary. The customer private key is not used by these four services.
 - **Secrets:** Secret Manager stores the gateway JWT secret and admin token. If Google OIDC is configured, its client secret is stored there too.
-- **State:** Firestore Native `(default)` stores sessions, delegations, approvals, audit state, security/replay state, and the managed Rego policy with its rollback history. The deploy script creates the database and required composite indexes.
+- **State:** Firestore Native `(default)` stores customer-registered upstream routes, sessions, delegations, approvals, audit state, security/replay state, and the managed Rego policy with its rollback history. The deploy script creates the database and required composite indexes.
 - **Vertex AI:** the web service account receives `roles/aiplatform.user` for the policy wizard.
 - **Optional Emotion backend:** `--emotion` deploys a separate private Cloud Run service. It uses the model image's bundled vendor public key and signed token; the Agent Gateway customer private key is neither required nor uploaded.
 
@@ -55,7 +55,10 @@ The Gateway keeps the Open-Meteo weather upstream in `UPSTREAM_URL`, routes
 `/api-geocoding` to `UPSTREAM_GEOCODING_URL`, and routes `/api-users` and
 simulated `/api-refunds` to `UPSTREAM_DEMO_API_URL`. The optional Emotion MCP
 service is configured separately as `UPSTREAM_MCP_URL`. Cloud Run provides
-HTTPS endpoints and service-to-service IAM enforcement.
+HTTPS endpoints and service-to-service IAM enforcement. For a customer-registered
+API or MCP server, the web service and Gateway use the shared Firestore
+catalog to route the governed path to the configured existing upstream.
+Registration does not deploy the upstream or provide a general egress proxy.
 
 ## Availability and operational trade-offs
 

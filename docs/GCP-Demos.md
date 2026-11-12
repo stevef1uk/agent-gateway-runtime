@@ -23,9 +23,11 @@ The deploy script configures these upstream routes:
 | Emotion MCP | `/mcp-emotion` | Optional private Emotion Cloud Run service | Deploy with `--emotion`. The bundled evaluation licence is used unless a separate vendor-issued Emotion token is supplied. |
 
 These are configured routes, not independently deployed demo stacks. The GCP
-API Wizard creates delegations for the configured services; it does not deploy
-arbitrary upstream APIs or MCP servers. The wizard's upstream inventory is
-informational in this deployment.
+API Wizard also registers existing reachable HTTP(S) APIs and MCP servers and
+creates scoped delegations for them; it does not deploy those services.
+Follow the [custom-upstream walkthrough](gcp/local-custom-upstream-wizard-test.md)
+to register and test one. Built-in demo routes are deployment-configured and
+do not have the customer-registered upstream Delete action.
 
 ## Create and test a delegation
 
@@ -102,12 +104,12 @@ GCP.
 | 1. Scripted purchasing | Not provided end to end. There is no purchasing backend; the refunds route is a JSONPlaceholder simulation, not a payment or refund service. |
 | 2. Graphical walkthrough | Partially covered by the GCP Console: create delegations, review approvals, and inspect audit activity. Main-branch local fixtures and UI are separate. |
 | 3. OPA playground | Supported by the administrator-only Rego editor, per-delegation policy-engine selection, version history, and decision probes. See the [GCP Console tutorial](GCP-Console-Tutorial.md). |
-| 4. Protected API | Supported for the configured weather, geocoding, users, and simulated-refunds routes through the public Console endpoint. These are not per-demo Lambda or Cloud Run stacks. |
+| 4. Protected API | Supported for the configured demo routes and customer-registered reachable APIs through the public Console endpoint. These are not per-demo Lambda or Cloud Run stacks. |
 | 5. Outbound egress | Not provided. The GCP deployment has no general HTTP forward proxy. |
 | 6. OpenClaw/OpenShell sandbox | Customer-managed and separate. A sandbox can use an explicitly configured supported Gateway API/MCP route, but the GCP deployment does not install or govern all sandbox egress. |
 | 7. Sandbox egress rules | Not provided as a Gateway-backed generic egress demo; there is no GCP forward-proxy service in this deployment. |
 | 8. Invoice/prompt injection and human delegation | Not provided end to end. It requires a separately hosted invoice/payment backend and an agent integration; the refunds simulation is not that backend. |
-| 9. MCP/CRM | Emotion MCP is available when deployed with `--emotion`. No CRM MCP backend is provisioned. |
+| 9. MCP/CRM | Emotion MCP is available when deployed with `--emotion`; an existing reachable MCP server can also be registered. No CRM MCP backend is provisioned. |
 | 10. DPoP/RAR | No GCP end-to-end walkthrough is provided in this repository. Do not treat the Bearer-token weather script as a DPoP/RAR test. |
 | 11. Kill switch | Delegation revocation is supported and the weather walkthrough verifies subsequent calls are denied. Revocation does not cancel an in-flight request. |
 | 12. Approval edge cases | The weather walkthrough covers a basic held/approved/single-use flow. It is not a complete reproduction of the local test harness's concurrency and replay edge cases. |
