@@ -87,6 +87,28 @@ The ID and secret are credentials for minting; the JWT is the temporary
 credential presented to the gateway. Revocation ends the delegation even if
 a JWT has not yet reached its expiry time.
 
+## More advanced: bind tokens to a key and narrow their permissions
+
+The standard flow above uses **Bearer JWTs**: anyone who obtains a bearer
+token could try to present it until it expires or is revoked. Two optional
+standards add further safeguards for integrations using the token service and
+tool gateway:
+
+- **DPoP** binds a token to a private key held by the agent. The agent proves
+  possession of that key when presenting the token, so the token alone is not
+  sufficient to use it.
+- **RAR** lets the agent request a token with narrower permissions than the
+  human's delegation, such as read-only access to `/orders`. The request must
+  fit within the delegation, and the gateway continues to enforce the token's
+  permissions along with the delegation's policy.
+
+These can be used separately or together; they do not replace the human
+delegation. The basic Bearer-token flow remains available. The OpenShell
+Basic-auth setup described below uses the ordinary JWT flow, not DPoP.
+
+See [DPoP and Rich Authorization Requests](DPoP-and-RAR.md) for the protocol
+details and examples.
+
 ## The two credentials an agent receives
 
 When the human grants a delegation (`POST /v1/delegations` on authz,
