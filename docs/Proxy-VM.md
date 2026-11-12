@@ -18,7 +18,7 @@ The VM profile needs CloudFormation and EC2/VPC permissions, permission to creat
 Before creating anything, verify the VM profile's identity and account:
 
 ```bash
-aws --profile your-reviewed-vm-profile --region eu-west-3 sts get-caller-identity
+aws --profile your-approved-vm-profile --region eu-west-3 sts get-caller-identity
 ```
 
 Use a non-root identity in the same AWS account as the parent deployment. The create script checks the account, reads the parent's `DemoConfiguration` using `AWS_PROFILE`, and uses its exact gateway image, activation references, authorization API and DynamoDB tables. The instance role is scoped to the required shared resources and SSM. Secrets are fetched at boot and are not embedded in user data.
