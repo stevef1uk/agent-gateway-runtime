@@ -215,6 +215,8 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(run_from_template['Resource'],launch_arn)
   run_from_ami=next(s for s in launch if s['Sid']=='RunProxyFromAmazonLinuxAmi')
   self.assertEqual(run_from_ami['Condition']['StringEquals']['ec2:Owner'],'137112412989')
+  self.assertEqual(run_from_ami['Condition']['Bool'],{'ec2:Public':'true'})
+  self.assertNotIn('ec2:IsLaunchTemplateResource',run_from_ami['Condition']['Bool'])
   run_instance=next(s for s in instance if s['Sid']=='RunTaggedProxyInstance')
   self.assertEqual(run_instance['Condition']['StringLike']['ec2:InstanceProfile'],{'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*'})
   self.assertEqual(run_instance['Condition']['StringEquals']['ec2:InstanceType'],['t4g.small','t4g.medium'])
