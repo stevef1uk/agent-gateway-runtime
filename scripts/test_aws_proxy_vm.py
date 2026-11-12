@@ -61,6 +61,10 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertLessEqual(len(json.dumps(deployment_access,separators=(',',':'))),6144)
   self.assertLessEqual(len(json.dumps(proxy_network,separators=(',',':'))),6144)
   proxy_statements=proxy_network['Statement']
+  describe_vpcs=next(statement for statement in proxy_statements if statement['Sid']=='DescribeProxyVpcs')
+  self.assertEqual(describe_vpcs['Action'],'ec2:DescribeVpcs')
+  self.assertEqual(describe_vpcs['Resource'],'*')
+  self.assertEqual(describe_vpcs['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
   gateway_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*'}
   create_gateway=next(statement for statement in proxy_statements if statement['Sid']=='CreateProxyInternetGateway')
   self.assertEqual(create_gateway['Action'],'ec2:CreateInternetGateway')

@@ -533,6 +533,19 @@
           "Version": "2012-10-17",
           "Statement": [
             {
+              "Sid": "DescribeProxyVpcs",
+              "Effect": "Allow",
+              "Action": "ec2:DescribeVpcs",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
               "Sid": "DescribeProxyInternetGateways",
               "Effect": "Allow",
               "Action": "ec2:DescribeInternetGateways",
