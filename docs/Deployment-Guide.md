@@ -243,14 +243,17 @@ If it still fails, inspect IAM → Roles → **AgentGatewayDev → Permissions**
 
 The optional [proxy VM](Proxy-VM.md) is not part of the normal application deployment. Its stack is named `<application-stack>-proxy` (for example, `agent-gateway-dev-proxy`), separate from the `*-demo-*` stacks. The access template now includes CloudFormation lifecycle and change-set permissions for that exact proxy-stack naming pattern, including `cloudformation:ListChangeSets`, but an already-deployed access stack does not receive this change until an administrator updates it.
 
+**An administrator must do this update.** Sign in to the AWS Console with an account administrator identity that can update CloudFormation and IAM; the restricted `agent-gateway-dev` deployment role cannot update its own access stack. This is a CloudFormation template upload, not an IAM inline-policy edit: do not paste this template or the separate `Test` policy into **IAM → Roles → AgentGatewayDev → Add inline policy**.
+
 To apply the proxy-stack permission:
 
-1. Update your runtime checkout to the latest `aws` branch. In the AWS Console, switch to **Europe (Paris), `eu-west-3`**, then open CloudFormation and select **`agent-gateway-access-dev`**.
-2. Choose **Update stack → Create a change set → Replace existing template → Upload a template file**, and upload `deploy/aws/deployment-access.template.json` from that checkout.
-3. Keep the existing parameters, including `DeploymentRole=AgentGatewayDev`. Review the change set: it should update the `DeploymentAccess` managed policy only. Execute it and wait for the access stack to show `UPDATE_COMPLETE`.
-4. Retry `make aws-proxy-create` with the configured `AWS_VM_PROFILE=agent-gateway-dev`.
+1. Update the administrator's runtime checkout to the latest `aws` branch. The file to upload is `deploy/aws/deployment-access.template.json` inside that checkout; do not use the example proxy configuration or an IAM policy JSON.
+2. In the AWS Console, switch to **Europe (Paris), `eu-west-3`**, open **CloudFormation**, and select **`agent-gateway-access-dev`** (not `agent-gateway-dev`).
+3. Choose **Update stack → Create a change set → Replace existing template → Upload a template file**, then select `deploy/aws/deployment-access.template.json` from the updated checkout on the administrator's computer.
+4. Keep the existing parameters, including `DeploymentRole=AgentGatewayDev`. Review the change set: it should update the `DeploymentAccess` managed policy only. Execute it and wait for the access stack to show `UPDATE_COMPLETE`; creating the change set alone does not apply the permission.
+5. Retry `make aws-proxy-create` with the configured `AWS_VM_PROFILE=agent-gateway-dev`.
 
-The update adds lifecycle access only for the `agent-gateway-dev-proxy` stack name; it does not grant administrator access. The proxy also creates EC2/VPC resources and an instance role/profile. Your existing inline policies may already allow those operations; if the next attempt reports a different `AccessDenied`, inspect the proxy stack's CloudFormation **Events** for the exact denied action and resource before changing any other policy. Do not add `AdministratorAccess`, `AmazonEC2FullAccess` or `IAMFullAccess`. The `aws-proxy-plan` command is offline sample output and does not check permissions.
+The update adds lifecycle access only for the `agent-gateway-dev-proxy` stack name; it does not grant administrator access or create EC2 permissions. The proxy also creates EC2/VPC resources and an instance role/profile. Your existing policies may already allow those operations; if the next attempt reports a different `AccessDenied`, inspect the proxy stack's CloudFormation **Events** for the exact denied action and resource before changing any other policy. Do not add `AdministratorAccess`, `AmazonEC2FullAccess` or `IAMFullAccess`. The `aws-proxy-plan` command is offline sample output and does not check permissions.
 
 These read-only checks use the default profile and stack names; adjust them if you chose others. They discover the policy ARN and version automatically:
 

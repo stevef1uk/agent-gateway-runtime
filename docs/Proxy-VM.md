@@ -13,7 +13,7 @@ AWS_PROFILE = agent-gateway-dev
 AWS_VM_PROFILE = agent-gateway-dev
 ```
 
-Before creating the VM, an administrator must update the `agent-gateway-access-dev` stack with the latest `deploy/aws/deployment-access.template.json`, as described in [Optional proxy VM permissions](Deployment-Guide.md#optional-proxy-vm-permissions). That grants the missing CloudFormation lifecycle scope for `agent-gateway-dev-proxy`. If the create command then reports another `AccessDenied`, stop and inspect the proxy stack's CloudFormation Events for the exact denied action; do not add broad policies or switch to root for the create command.
+Before creating the VM, an administrator must update the `agent-gateway-access-dev` CloudFormation stack with the latest `deploy/aws/deployment-access.template.json`, as described in [Optional proxy VM permissions](Deployment-Guide.md#optional-proxy-vm-permissions). The administrator uploads that template file from the runtime checkout in CloudFormation; this is not an IAM inline-policy edit, and the restricted `agent-gateway-dev` role cannot update the access stack. That update grants the missing CloudFormation lifecycle scope for `agent-gateway-dev-proxy`, not EC2 permissions. If the create command then reports another `AccessDenied`, stop and inspect the proxy stack's CloudFormation Events for the exact denied action; do not add broad policies or switch to root for the create command.
 
 ```bash
 aws --profile agent-gateway-dev --region eu-west-3 sts get-caller-identity
