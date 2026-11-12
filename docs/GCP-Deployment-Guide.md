@@ -8,9 +8,9 @@ For an overview of the deployed services and request flow, see the [GCP architec
 
 - A Google Cloud project with billing enabled.
 - `gcloud` installed and authenticated with `gcloud auth login` and `gcloud auth application-default login`.
-- This repository contains deliberately public **evaluation-only** activation material. `keys/token.txt` is used by the four Agent Gateway service images. The optional Emotion backend uses the model image's bundled vendor public key and signed token; it does not require `keys/customer_private.pem`.
+- This repository contains deliberately public **evaluation-only** activation material. `keys/token.txt` is used by the four Agent Gateway service images. By default, the optional Emotion backend uses the model image's bundled evaluation token; it does not require `keys/customer_private.pem`. A vendor-issued customer token can be supplied separately at deployment time.
 
-Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the signed licence token to a private Cloud Storage bucket. It does not upload the customer private key for Emotion.
+Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the Agent Gateway signed licence token to a private Cloud Storage bucket. With `--emotion-token-file`, it also uploads the vendor-issued Emotion token to a versioned object and grants access only to the Emotion service account. Keep that token outside Git; the script does not upload the customer private key for Emotion.
 
 The published GCP Emotion wrapper uses a pinned evaluation image, which can run
 without an external customer key. This is separate from customer-specific model
@@ -270,6 +270,14 @@ scripts/deploy-gcp.sh \
   --admin-emails "admin@example.com" \
   --apply
 ```
+
+For a customer/vendor-issued Emotion licence, save the token outside source control, for example as `keys/local-activation/emotion.token` (the `keys/` directory is Git-ignored), then add:
+
+```bash
+  --emotion-token-file keys/local-activation/emotion.token
+```
+
+The deployment pins the uploaded object generation in the Emotion Cloud Run revision and grants that service account read access only to `activation/emotion.token`. Omitting the flag retains the image's bundled evaluation token; a subsequent deployment without the flag preserves any already-configured token environment values.
 
 Include the OIDC options when Google sign-in is configured; otherwise, omit them.
 Without `--emotion`, an allowed MCP request returns the gateway's authorization echo because no upstream is configured. With `--emotion`, the gateway forwards `/mcp-emotion` calls to the private Emotion service using Cloud Run IAM.

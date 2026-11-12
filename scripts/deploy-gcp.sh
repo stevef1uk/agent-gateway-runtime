@@ -18,6 +18,7 @@ Options:
   --deployment-id ID         Resource name prefix (default: agent-gateway-dev)
   --keys-directory DIR       Directory containing token.txt (default: ./keys)
   --emotion                  Deploy and wire the published Emotion MCP upstream
+  --emotion-token-file FILE  Upload a vendor-issued Emotion token from outside Git
   --oidc-client-id ID        Google OAuth client ID
   --oidc-client-secret FILE  File containing the Google OAuth client secret
   --admin-emails EMAILS      Comma-separated verified Google admin emails (required with OIDC)
@@ -37,6 +38,7 @@ oidc_client_secret_file=""
 admin_emails="${GCP_ADMIN_EMAILS:-}"
 apply=0
 emotion=0
+emotion_token_file="${EMOTION_TOKEN_FILE:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --region) [[ $# -ge 2 ]] || usage; region=$2; shift 2 ;;
     --deployment-id) [[ $# -ge 2 ]] || usage; deployment_id=$2; shift 2 ;;
     --keys-directory) [[ $# -ge 2 ]] || usage; keys_directory=$2; shift 2 ;;
+    --emotion-token-file) [[ $# -ge 2 ]] || usage; emotion_token_file=$2; shift 2 ;;
     --oidc-client-id) [[ $# -ge 2 ]] || usage; oidc_client_id=$2; shift 2 ;;
     --oidc-client-secret) [[ $# -ge 2 ]] || usage; oidc_client_secret_file=$2; shift 2 ;;
     --admin-emails) [[ $# -ge 2 ]] || usage; admin_emails=$2; shift 2 ;;
@@ -71,6 +74,14 @@ done
 
 licence_token="$keys_directory/token.txt"
 [[ -s "$licence_token" ]] || { echo "Missing $licence_token" >&2; exit 1; }
+if [[ -n "$emotion_token_file" ]]; then
+  [[ "$emotion" -eq 1 ]] || { echo '--emotion-token-file requires --emotion.' >&2; exit 2; }
+  [[ -s "$emotion_token_file" ]] || { echo "Missing Emotion licence token: $emotion_token_file" >&2; exit 1; }
+  [[ "$(wc -c < "$emotion_token_file")" -le 65536 ]] || {
+    echo 'Emotion licence token must not exceed 64 KiB.' >&2
+    exit 1
+  }
+fi
 
 if [[ -n "$oidc_client_id" && -z "$oidc_client_secret_file" ]]; then
   if [[ -n "${GCP_OIDC_CLIENT_SECRET:-}" ]]; then
@@ -137,6 +148,9 @@ fi
 
 gcloud storage buckets describe "gs://$bucket" --project="$project_id" >/dev/null 2>&1 || \
   gcloud storage buckets create "gs://$bucket" --location="$region" --uniform-bucket-level-access --project="$project_id"
+if [[ -n "$emotion_token_file" ]]; then
+  gcloud storage buckets update "gs://$bucket" --versioning >/dev/null
+fi
 file_md5_b64() {
   openssl dgst -md5 -binary "$1" | base64 | tr -d '\n'
 }
@@ -156,9 +170,15 @@ upload_if_changed() {
 }
 
 upload_if_changed "$licence_token" "activation/licence.token"
+if [[ -n "$emotion_token_file" ]]; then
+  upload_if_changed "$emotion_token_file" "activation/emotion.token"
+fi
 
 ensure_service_account "agw-${deployment_id}-gateway"
 ensure_service_account "agw-${deployment_id}-web"
+if [[ "$emotion" -eq 1 ]]; then
+  ensure_service_account "agw-${deployment_id}-emotion"
+fi
 ensure_secret "$jwt_secret"
 ensure_secret "$admin_secret"
 if gcloud secrets versions list "$jwt_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$jwt_secret" --data-file=- --project="$project_id"; fi
@@ -196,6 +216,28 @@ raise SystemExit(0 if any(
     --condition="expression=resource.name == 'projects/_/buckets/$bucket/objects/activation/licence.token',title=Read licence only,description=Limit service activation access to the signed licence token" \
     --quiet >/dev/null
 done
+if [[ -n "$emotion_token_file" ]]; then
+  emotion_sa="agw-${deployment_id}-emotion@${project_id}.iam.gserviceaccount.com"
+  policy="$(gcloud storage buckets get-iam-policy "gs://$bucket" --format=json)"
+  if printf '%s' "$policy" | python3 -c '
+import json,sys
+policy=json.load(sys.stdin)
+member=sys.argv[1]
+raise SystemExit(0 if any(
+    binding.get("role") == "roles/storage.objectViewer"
+    and not binding.get("condition")
+    and member in binding.get("members", [])
+    for binding in policy.get("bindings", [])
+) else 1)
+' "serviceAccount:$emotion_sa"; then
+    gcloud storage buckets remove-iam-policy-binding "gs://$bucket" \
+      --member="serviceAccount:$emotion_sa" --role=roles/storage.objectViewer --quiet >/dev/null
+  fi
+  gcloud storage buckets add-iam-policy-binding "gs://$bucket" \
+    --member="serviceAccount:$emotion_sa" --role=roles/storage.objectViewer \
+    --condition="expression=resource.name == 'projects/_/buckets/$bucket/objects/activation/emotion.token',title=Read Emotion licence only,description=Limit Emotion service access to its signed licence token" \
+    --quiet >/dev/null
+fi
 
 # Allow the bucket's conditional IAM grants to propagate before creating new
 # Cloud Run revisions; the launcher retries transient reads but must start validly.
@@ -204,6 +246,14 @@ sleep 120
 
 image_base="$artifact_repo"
 activation_env="LICENCE_GCS_BUCKET=$bucket,LICENCE_GCS_OBJECT=activation/licence.token,LICENCE_GCS_GENERATION=$(gcloud storage objects describe "gs://$bucket/activation/licence.token" --format='value(generation)')"
+emotion_token_generation=""
+if [[ -n "$emotion_token_file" ]]; then
+  emotion_token_generation="$(gcloud storage objects describe "gs://$bucket/activation/emotion.token" --format='value(generation)')"
+  [[ -n "$emotion_token_generation" && "$emotion_token_generation" != "null" ]] || {
+    echo 'Could not pin a generation for the uploaded Emotion licence token.' >&2
+    exit 1
+  }
+fi
 
 gcloud firestore databases describe --database='(default)' --project="$project_id" >/dev/null 2>&1 || \
   gcloud firestore databases create --database='(default)' --location="$region" --type=firestore-native --project="$project_id"
@@ -283,11 +333,16 @@ gcloud run services update "$gateway_service" --region="$region" --project="$pro
 if [[ "$emotion" -eq 1 ]]; then
   emotion_service="agw-${deployment_id}-emotion"
   emotion_sa="agw-${deployment_id}-emotion@${project_id}.iam.gserviceaccount.com"
-  ensure_service_account "agw-${deployment_id}-emotion"
+  emotion_env="EMOTION_BRIDGE_PORT=8085"
+  emotion_env_args=(--update-env-vars="$emotion_env")
+  if [[ -n "$emotion_token_file" ]]; then
+    emotion_env+=",EMOTION_LICENCE_GCS_BUCKET=$bucket,EMOTION_LICENCE_GCS_OBJECT=activation/emotion.token,EMOTION_LICENCE_GCS_GENERATION=$emotion_token_generation"
+    emotion_env_args=(--set-env-vars="$emotion_env")
+  fi
   gcloud run deploy "$emotion_service" \
     --image="$image_base/agent-gateway-emotion_g:$version" --region="$region" --project="$project_id" \
     --service-account="$emotion_sa" --no-allow-unauthenticated --port=8085 --cpu=2 --memory=4Gi --timeout=180s --concurrency=10 --max-instances=2 \
-    --set-env-vars="EMOTION_BRIDGE_PORT=8085"
+    "${emotion_env_args[@]}"
   gcloud run services add-iam-policy-binding "$emotion_service" --region="$region" --project="$project_id" \
     --member="serviceAccount:$gateway_sa" --role=roles/run.invoker --quiet >/dev/null
   emotion_url="$(gcloud run services describe "$emotion_service" --region="$region" --project="$project_id" --format='value(status.url)')"
