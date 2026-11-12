@@ -231,6 +231,21 @@
           "Version": "2012-10-17",
           "Statement": [
             {
+              "Sid": "ResolveProxyAmiParameter",
+              "Effect": "Allow",
+              "Action": "ssm:GetParameters",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
               "Sid": "CloudFormationLifecycle",
               "Effect": "Allow",
               "Action": [

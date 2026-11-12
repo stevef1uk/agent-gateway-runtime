@@ -49,6 +49,9 @@ class ProxyLifecycle(unittest.TestCase):
  def test_deployment_access_scopes_cloudformation_lifecycle_to_proxy_stack(self):
   template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
   statements=template['Resources']['DeploymentAccess']['Properties']['PolicyDocument']['Statement']
+  ami=next(statement for statement in statements if statement['Sid']=='ResolveProxyAmiParameter')
+  self.assertEqual(ami['Action'],'ssm:GetParameters')
+  self.assertEqual(ami['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'})
   lifecycle=next(statement for statement in statements if statement['Sid']=='CloudFormationLifecycle')
   resources=lifecycle['Resource']
   self.assertIn('cloudformation:ListChangeSets',lifecycle['Action'])
