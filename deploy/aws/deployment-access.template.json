@@ -1371,15 +1371,16 @@
       "Type": "AWS::IAM::ManagedPolicy",
       "Metadata": {
         "com.aws.cloudformation.Context": {
-          "why": "Limits optional proxy instance creation, tagging, and termination to its launch-template resources.",
+          "why": "Limits optional proxy instance lifecycle and Session Manager access to the tagged proxy instance.",
           "must": [
             "RunInstances is restricted to the proxy template, named network resources, Amazon Linux, and bounded instance/disk settings.",
-            "Instance, root volume, and network interface must carry the proxy tags at launch."
+            "Instance, root volume, and network interface must carry the proxy tags at launch.",
+            "Session Manager access is limited to the tagged proxy instance, the AWS port-forwarding document, and the caller's own sessions."
           ]
         }
       },
       "Properties": {
-        "Description": "Scoped EC2 instance lifecycle for the optional proxy VM.",
+        "Description": "Scoped EC2 instance lifecycle and Session Manager access for the optional proxy VM.",
         "Roles": [
           {
             "Ref": "DeploymentRole"
@@ -1618,6 +1619,52 @@
                   "aws:RequestedRegion": {
                     "Ref": "AWS::Region"
                   }
+                }
+              }
+            },
+            {
+              "Sid": "StartSessionToTaggedProxyInstance",
+              "Effect": "Allow",
+              "Action": "ssm:StartSession",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ssm:resourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-proxy"
+                  },
+                  "ssm:resourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "StartProxyPortForwardingSession",
+              "Effect": "Allow",
+              "Action": "ssm:StartSession",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-StartPortForwardingSession"
+              }
+            },
+            {
+              "Sid": "ManageOwnProxySessions",
+              "Effect": "Allow",
+              "Action": [
+                "ssm:ResumeSession",
+                "ssm:TerminateSession",
+                "ssmmessages:OpenDataChannel"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:session/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ssm:resourceTag/aws:ssmmessages:session-id": "${aws:userid}"
                 }
               }
             }

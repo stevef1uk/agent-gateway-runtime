@@ -232,4 +232,21 @@ class ProxyLifecycle(unittest.TestCase):
   tag_instance=next(s for s in instance if s['Sid']=='TagProxyInstanceResourcesOnLaunch')
   self.assertEqual(tag_instance['Condition']['StringEquals']['ec2:CreateAction'],'RunInstances')
   self.assertEqual(tag_instance['Condition']['ForAllValues:StringEquals']['aws:TagKeys'],['Name','agent-gateway-parent'])
+ def test_session_manager_access_is_limited_to_proxy_and_callers_own_sessions(self):
+  template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
+  policy=template['Resources']['ProxyInstanceAccess']['Properties']['PolicyDocument']
+  statements=policy['Statement']
+  instance_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*'}
+  start_instance=next(s for s in statements if s['Sid']=='StartSessionToTaggedProxyInstance')
+  self.assertEqual(start_instance['Action'],'ssm:StartSession')
+  self.assertEqual(start_instance['Resource'],instance_arn)
+  self.assertEqual(start_instance['Condition']['StringEquals']['ssm:resourceTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-proxy'})
+  self.assertEqual(start_instance['Condition']['StringEquals']['ssm:resourceTag/agent-gateway-parent'],{'Ref':'ApplicationStack'})
+  start_document=next(s for s in statements if s['Sid']=='StartProxyPortForwardingSession')
+  self.assertEqual(start_document['Action'],'ssm:StartSession')
+  self.assertEqual(start_document['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-StartPortForwardingSession'})
+  own_sessions=next(s for s in statements if s['Sid']=='ManageOwnProxySessions')
+  self.assertEqual(own_sessions['Action'],['ssm:ResumeSession','ssm:TerminateSession','ssmmessages:OpenDataChannel'])
+  self.assertEqual(own_sessions['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:session/*'})
+  self.assertEqual(own_sessions['Condition']['StringEquals']['ssm:resourceTag/aws:ssmmessages:session-id'],'${aws:userid}')
 if __name__=='__main__':unittest.main()
