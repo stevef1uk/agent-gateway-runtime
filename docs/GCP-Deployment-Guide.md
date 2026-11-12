@@ -8,16 +8,22 @@ For an overview of the deployed services and request flow, see the [GCP architec
 
 - A Google Cloud project with billing enabled.
 - `gcloud` installed and authenticated with `gcloud auth login` and `gcloud auth application-default login`.
-- This repository contains deliberately public **evaluation-only** activation material. `keys/token.txt` is used by the four Agent Gateway service images. By default, the optional Emotion backend uses the model image's bundled evaluation token; it does not require `keys/customer_private.pem`. A vendor-issued customer token can be supplied separately at deployment time.
+- This repository contains deliberately public **evaluation-only** activation material. `keys/token.txt` is used by the four Agent Gateway service images. By default, the optional Emotion backend uses the model image's bundled evaluation token; it does not require `keys/customer_private.pem`. A separate vendor-issued Emotion token can be supplied at deployment time.
 
 Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the Agent Gateway signed licence token to a private Cloud Storage bucket. With `--emotion-token-file`, it also uploads the vendor-issued Emotion token to a versioned object and grants access only to the Emotion service account. Keep that token outside Git; the script does not upload the customer private key for Emotion.
 
-For a licensed Emotion deployment, pass the vendor-issued Emotion token with
-`--emotion-token-file`. Cloud Run fetches that versioned token at startup; it
-does not need to be embedded in the image. The image build does not decrypt
-model files; the vendor runtime writes decryption output to ephemeral `/tmp`,
-not back into the image. All signed-in users share this licensed Emotion
-service and still need their own scoped delegation.
+The Emotion token is separate from `keys/token.txt` and the per-service
+`keys/local-activation/licences/*.token` files. Those are Agent Gateway
+activation files, not Emotion model licences. The deployment command below uses
+the Emotion image's bundled evaluation token, so it does not require an
+`emotion.token` file.
+
+For a licensed Emotion deployment, first obtain a vendor-issued Emotion token.
+Cloud Run fetches it from a versioned private Cloud Storage object at startup;
+the token does not need to be embedded in the image. The image build does not
+decrypt model files; the vendor runtime writes decryption output to ephemeral
+`/tmp`, not back into the image. All signed-in users share this Emotion service
+and still need their own scoped delegation.
 
 The pinned evaluation image can run without an external customer decryption
 key. This is separate from customer-specific model packages, which require
@@ -83,7 +89,7 @@ Run a validation-only pass first:
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-28ac097 \
+  --version gcp-5ca2f36 \
   --keys-directory keys \
   --admin-emails "admin@example.com"
 ```
@@ -94,13 +100,33 @@ Then deploy:
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-28ac097 \
+  --version gcp-5ca2f36 \
   --keys-directory keys \
   --admin-emails "admin@example.com" \
   --emotion \
-  --emotion-token-file keys/local-activation/emotion.token \
   --apply
 ```
+
+The command above does not require `keys/local-activation/emotion.token`.
+Without an external Emotion token, the bundled evaluation token is used. If
+you have a separate vendor-issued Emotion token, copy it into the ignored
+`keys/local-activation/` directory first:
+
+```bash
+install -m 600 /secure/path/to/vendor-issued-emotion.token \
+  keys/local-activation/emotion.token
+test -s keys/local-activation/emotion.token
+```
+
+Then add this option to the deployment command:
+
+```bash
+--emotion-token-file keys/local-activation/emotion.token
+```
+
+Do not use `keys/token.txt` or any `keys/local-activation/licences/*.token`
+file as the Emotion token; they license Agent Gateway components, not the
+Emotion model.
 
 The script enables APIs, creates Firestore, service accounts, Secret Manager secrets, the activation bucket, and the two Cloud Run services. It mirrors the public Docker Hub images into your project’s Artifact Registry with Cloud Build, then deploys Cloud Run from that private project registry. The main services fetch and verify only the signed licence token; the customer key is not mounted into them. Docker is not required on the customer machine.
 
@@ -115,7 +141,7 @@ stevef1uk/agent-gateway-gateway_g:VERSION
 stevef1uk/agent-gateway-web_g:VERSION
 ```
 
-The `latest` tag is a moving alias updated whenever a new GCP image release is published. These examples pin `gcp-28ac097`, so deployments use the same tested images each time. To upgrade, choose a specific published release tag and use it consistently; use `latest` only when you intentionally want the newest published images.
+The `latest` tag is a moving alias updated whenever a new GCP image release is published. These examples pin `gcp-5ca2f36`, so deployments use the same tested images each time. To upgrade, choose a specific published release tag and use it consistently; use `latest` only when you intentionally want the newest published images.
 
 ## Choosing the policy engine for a delegation
 
@@ -193,7 +219,7 @@ want to configure Emotion.
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-28ac097 \
+  --version gcp-5ca2f36 \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -212,7 +238,7 @@ export GCP_OIDC_CLIENT_SECRET
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-28ac097 \
+  --version gcp-5ca2f36 \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -270,7 +296,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
   --deployment-id "$GCP_DEPLOYMENT_ID" \
-  --version gcp-28ac097 \
+  --version gcp-5ca2f36 \
   --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
@@ -279,7 +305,7 @@ scripts/deploy-gcp.sh \
   --apply
 ```
 
-For a customer/vendor-issued Emotion licence, save the token outside source control, for example as `keys/local-activation/emotion.token` (the `keys/` directory is Git-ignored), then add:
+For a customer/vendor-issued Emotion licence, first obtain the separate Emotion token (the Agent Gateway activation files are not valid for this purpose). Save it outside source control, for example as `keys/local-activation/emotion.token` (the `keys/` directory is Git-ignored), then add:
 
 ```bash
   --emotion-token-file keys/local-activation/emotion.token
