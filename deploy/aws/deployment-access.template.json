@@ -32,7 +32,12 @@
     "ProxyGatewayLicenceObject": {
       "Type": "String",
       "Default": "activation/gateway.token",
-      "AllowedPattern": "^activation/[A-Za-z0-9/._-]+$",
+      "AllowedPattern": "^activation/[A-Za-z0-9/._-]+$"
+    },
+    "ProxyAmiId": {
+      "Type": "String",
+      "Default": "ami-00000000000000000",
+      "AllowedPattern": "^ami-[0-9a-f]{8,17}$",
       "Description": "Exact GatewayLicenceObject value used by the proxy."
     },
     "ArtifactStack": {
@@ -1209,7 +1214,7 @@
           "why": "Scopes optional proxy launch-template lifecycle and AMI use to the tagged Amazon Linux template.",
           "must": [
             "The launch template is tagged at creation and all later changes require those tags.",
-            "Instances can use only a public Amazon-owned machine image from the configured region."
+            "RunInstances can use only the exact AMI ID resolved from the public regional SSM parameter."
           ]
         }
       },
@@ -1355,19 +1360,7 @@
               "Effect": "Allow",
               "Action": "ec2:RunInstances",
               "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}::image/*"
-              },
-              "Condition": {
-                "Bool": {
-                  "ec2:Public": "true"
-                },
-                "StringEquals": {
-                  "ec2:Owner": "137112412989",
-                  "ec2:ImageType": "machine",
-                  "aws:RequestedRegion": {
-                    "Ref": "AWS::Region"
-                  }
-                }
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}::image/${ProxyAmiId}"
               }
             }
           ]

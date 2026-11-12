@@ -13,6 +13,8 @@ PLACEHOLDER_API_ID = "notconfigured"
 BUCKET_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
 AUTHZ_URL_PATTERN = re.compile(r"^https://([a-z0-9]+)\.execute-api\.[a-z0-9-]+\.amazonaws\.com$")
 LICENCE_OBJECT_PATTERN = re.compile(r"^activation/[A-Za-z0-9/._-]+$")
+AMI_PARAMETER_NAME = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64"
+AMI_ID_PATTERN = re.compile(r"^ami-[0-9a-f]{8,17}$")
 
 
 def aws(profile, region, *args):
@@ -71,10 +73,19 @@ def parent_proxy_parameters(profile, region, application_stack, expected_account
     return proxy_parameters(config, expected_account, application_stack)
 
 
+def proxy_ami_id(profile, region):
+    parameter = aws(profile, region, "ssm", "get-parameter", "--name", AMI_PARAMETER_NAME)
+    ami_id = parameter.get("Parameter", {}).get("Value", "")
+    if not AMI_ID_PATTERN.fullmatch(ami_id):
+        raise RuntimeError("The public Amazon Linux AMI parameter returned an invalid image ID.")
+    return ami_id
+
+
 def deploy(admin_profile, app_profile, region, account, access_stack, application_stack, artifact_stack, deployment_role, s3_bucket):
     identity = aws(admin_profile, region, "sts", "get-caller-identity")
     if identity.get("Account") != account:
         raise RuntimeError("Administrator profile/account mismatch.")
+    ami_id = proxy_ami_id(admin_profile, region)
     bucket, api_id, licence_object = parent_proxy_parameters(app_profile, region, application_stack, account)
     template_bucket = s3_bucket or ("" if bucket == PLACEHOLDER_BUCKET else bucket)
     if not template_bucket:
@@ -98,6 +109,7 @@ def deploy(admin_profile, app_profile, region, account, access_stack, applicatio
         f"ProxyActivationBucket={bucket}",
         f"ProxyAuthzApiId={api_id}",
         f"ProxyGatewayLicenceObject={licence_object}",
+        f"ProxyAmiId={ami_id}",
         "--no-fail-on-empty-changeset",
     ]
     subprocess.run(command, check=True)
@@ -106,7 +118,7 @@ def deploy(admin_profile, app_profile, region, account, access_stack, applicatio
         print("Parent application stack not found; proxy permissions use nonfunctional placeholders.")
         print("After deploying the application, run this command again before creating the proxy VM.")
     else:
-        print(f"Proxy access scope synchronized from {application_stack} (bucket {bucket}, API {api_id}).")
+        print(f"Proxy access scope synchronized from {application_stack} (bucket {bucket}, API {api_id}, AMI {ami_id}).")
 
 
 def main(argv=None):

@@ -66,6 +66,8 @@ class ProxyLifecycle(unittest.TestCase):
   params=template['Parameters']
   self.assertEqual(params['ProxyActivationBucket']['Default'],'agent-gateway-proxy-not-configured')
   self.assertEqual(params['ProxyAuthzApiId']['Default'],'notconfigured')
+  self.assertEqual(params['ProxyAmiId']['Default'],'ami-00000000000000000')
+  self.assertEqual(params['ProxyAmiId']['AllowedPattern'],'^ami-[0-9a-f]{8,17}$')
   boundary=resources['ProxyRoleBoundary']['Properties']['PolicyDocument']
   access=resources['ProxyRoleAccess']['Properties']['PolicyDocument']
   self.assertLessEqual(len(json.dumps(boundary,separators=(',',':'))),6144)
@@ -214,9 +216,8 @@ class ProxyLifecycle(unittest.TestCase):
   run_from_template=next(s for s in launch if s['Sid']=='RunProxyFromTaggedLaunchTemplate')
   self.assertEqual(run_from_template['Resource'],launch_arn)
   run_from_ami=next(s for s in launch if s['Sid']=='RunProxyFromAmazonLinuxAmi')
-  self.assertEqual(run_from_ami['Condition']['StringEquals']['ec2:Owner'],'137112412989')
-  self.assertEqual(run_from_ami['Condition']['Bool'],{'ec2:Public':'true'})
-  self.assertNotIn('ec2:IsLaunchTemplateResource',run_from_ami['Condition']['Bool'])
+  self.assertEqual(run_from_ami['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}::image/${ProxyAmiId}'})
+  self.assertNotIn('Condition',run_from_ami)
   run_instance=next(s for s in instance if s['Sid']=='RunTaggedProxyInstance')
   self.assertEqual(run_instance['Condition']['StringLike']['ec2:InstanceProfile'],{'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*'})
   self.assertEqual(run_instance['Condition']['StringEquals']['ec2:InstanceType'],['t4g.small','t4g.medium'])

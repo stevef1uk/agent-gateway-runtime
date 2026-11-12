@@ -56,8 +56,22 @@ class AccessDeploy(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "AccessDenied"):
                 access_deploy.parent_proxy_parameters("app", "eu-west-3", "agent-gateway-test", "123456789012")
 
+    def test_reads_and_validates_exact_public_proxy_ami(self):
+        with patch.object(access_deploy, "aws", return_value={"Parameter": {"Value": "ami-0123456789abcdef0"}}) as aws:
+            self.assertEqual(access_deploy.proxy_ami_id("admin", "eu-west-3"), "ami-0123456789abcdef0")
+        aws.assert_called_once_with(
+            "admin", "eu-west-3", "ssm", "get-parameter",
+            "--name", "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64",
+        )
+
+    def test_rejects_invalid_proxy_ami_parameter_value(self):
+        with patch.object(access_deploy, "aws", return_value={"Parameter": {"Value": "not-an-ami"}}):
+            with self.assertRaisesRegex(RuntimeError, "invalid image ID"):
+                access_deploy.proxy_ami_id("admin", "eu-west-3")
+
     def test_deploy_passes_exact_values_to_cloudformation(self):
         with patch.object(access_deploy, "aws", return_value={"Account": "123456789012"}), \
+             patch.object(access_deploy, "proxy_ami_id", return_value="ami-0123456789abcdef0"), \
              patch.object(access_deploy, "parent_proxy_parameters", return_value=(
                  "agent-gateway-artifacts-test-a1b2c3", "abc123", "activation/gateway.token"
              )), \
@@ -71,12 +85,14 @@ class AccessDeploy(unittest.TestCase):
         self.assertIn("ProxyActivationBucket=agent-gateway-artifacts-test-a1b2c3", command)
         self.assertIn("ProxyAuthzApiId=abc123", command)
         self.assertIn("ProxyGatewayLicenceObject=activation/gateway.token", command)
+        self.assertIn("ProxyAmiId=ami-0123456789abcdef0", command)
         self.assertIn("--s3-bucket", command)
         self.assertEqual(command[command.index("--s3-bucket") + 1], "agent-gateway-artifacts-test-a1b2c3")
         self.assertTrue(run.call_args.kwargs["check"])
 
     def test_deploy_requires_real_staging_bucket_before_parent_exists(self):
         with patch.object(access_deploy, "aws", return_value={"Account": "123456789012"}), \
+             patch.object(access_deploy, "proxy_ami_id", return_value="ami-0123456789abcdef0"), \
              patch.object(access_deploy, "parent_proxy_parameters", return_value=(
                  access_deploy.PLACEHOLDER_BUCKET, access_deploy.PLACEHOLDER_API_ID, "activation/gateway.token"
              )), \
@@ -91,6 +107,7 @@ class AccessDeploy(unittest.TestCase):
 
     def test_explicit_staging_bucket_is_used_before_parent_exists(self):
         with patch.object(access_deploy, "aws", return_value={"Account": "123456789012"}), \
+             patch.object(access_deploy, "proxy_ami_id", return_value="ami-0123456789abcdef0"), \
              patch.object(access_deploy, "parent_proxy_parameters", return_value=(
                  access_deploy.PLACEHOLDER_BUCKET, access_deploy.PLACEHOLDER_API_ID, "activation/gateway.token"
              )), \
