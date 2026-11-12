@@ -17,6 +17,22 @@
       "Default": "agent-gateway-dev",
       "AllowedPattern": "^agent-gateway-[a-z0-9-]+$"
     },
+    "ProxyActivationBucket": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+      "Description": "Exact ActivationBucket value from the application stack's DemoConfiguration output."
+    },
+    "ProxyAuthzApiId": {
+      "Type": "String",
+      "AllowedPattern": "^[a-z0-9]+$",
+      "Description": "API ID from the authz_url value in the application stack's DemoConfiguration output."
+    },
+    "ProxyGatewayLicenceObject": {
+      "Type": "String",
+      "Default": "activation/gateway.token",
+      "AllowedPattern": "^activation/[A-Za-z0-9/._-]+$",
+      "Description": "Exact GatewayLicenceObject value used by the proxy."
+    },
     "ArtifactStack": {
       "Type": "String",
       "Default": "agent-gateway-artifacts-dev",
@@ -729,6 +745,264 @@
                 },
                 "Null": {
                   "aws:TagKeys": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProxyRoleBoundary": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Caps the optional proxy EC2 role to Systems Manager and the proxy application's exact data-plane resources.",
+          "must": [
+            "The proxy role must retain this boundary.",
+            "Do not add IAM or deployment mutation permissions.",
+            "Keep runtime access limited to the SSM managed-node APIs and the proxy's exact application resources."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Maximum permissions for the optional Agent Gateway proxy EC2 role.",
+        "ManagedPolicyName": {
+          "Fn::Sub": "${ApplicationStack}-ProxyRoleBoundary"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "SystemsManagerManagedInstanceCore",
+              "Effect": "Allow",
+              "Action": [
+                "ssm:DescribeAssociation",
+                "ssm:GetDeployablePatchSnapshotForInstance",
+                "ssm:GetDocument",
+                "ssm:DescribeDocument",
+                "ssm:GetManifest",
+                "ssm:GetParameter",
+                "ssm:GetParameters",
+                "ssm:ListAssociations",
+                "ssm:ListInstanceAssociations",
+                "ssm:PutInventory",
+                "ssm:PutComplianceItems",
+                "ssm:PutConfigurePackageResult",
+                "ssm:UpdateAssociationStatus",
+                "ssm:UpdateInstanceAssociationStatus",
+                "ssm:UpdateInstanceInformation"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "SystemsManagerChannels",
+              "Effect": "Allow",
+              "Action": [
+                "ssmmessages:CreateControlChannel",
+                "ssmmessages:CreateDataChannel",
+                "ssmmessages:OpenControlChannel",
+                "ssmmessages:OpenDataChannel",
+                "ec2messages:AcknowledgeMessage",
+                "ec2messages:DeleteMessage",
+                "ec2messages:FailMessage",
+                "ec2messages:GetEndpoint",
+                "ec2messages:GetMessages",
+                "ec2messages:SendReply"
+              ],
+              "Resource": "*"
+            },
+            {
+              "Sid": "GatewayActivation",
+              "Effect": "Allow",
+              "Action": "s3:GetObjectVersion",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:s3:::${ProxyActivationBucket}/${ProxyGatewayLicenceObject}"
+              }
+            },
+            {
+              "Sid": "SharedDomainAndSecurityState",
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:ConditionCheckItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:Query",
+                "dynamodb:UpdateItem"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ApplicationStack}-domain"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ApplicationStack}-security"
+                }
+              ]
+            },
+            {
+              "Sid": "CallOnlyAuthorizationAPI",
+              "Effect": "Allow",
+              "Action": "execute-api:Invoke",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ProxyAuthzApiId}/$default/*/*"
+              }
+            },
+            {
+              "Sid": "PullOnlyGatewayImage",
+              "Effect": "Allow",
+              "Action": [
+                "ecr:BatchGetImage",
+                "ecr:GetDownloadUrlForLayer"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ApplicationStack}/gateway"
+              }
+            },
+            {
+              "Sid": "RegionalECRLogin",
+              "Effect": "Allow",
+              "Action": "ecr:GetAuthorizationToken",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "ReportProxyBootstrap",
+              "Effect": "Allow",
+              "Action": "cloudformation:SignalResource",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationStack}-proxy/*"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProxyRoleAccess": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Lets the restricted deployer create and clean up only the bounded proxy role and its instance profile.",
+          "must": [
+            "CreateRole must require ProxyRoleBoundary.",
+            "PassRole must be limited to the generated proxy role and EC2.",
+            "AttachRolePolicy must be limited to AmazonSSMManagedInstanceCore.",
+            "Do not grant role trust-policy mutation or general IAM permissions."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Scoped IAM role and instance-profile lifecycle for the optional proxy VM.",
+        "Roles": [
+          {
+            "Ref": "DeploymentRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "CreateOnlyBoundedProxyRole",
+              "Effect": "Allow",
+              "Action": "iam:CreateRole",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStack}-proxy-ProxyRole-*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "iam:PermissionsBoundary": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${ApplicationStack}-ProxyRoleBoundary"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "ReadManageAndDeleteProxyRole",
+              "Effect": "Allow",
+              "Action": [
+                "iam:DeleteRole",
+                "iam:GetRole",
+                "iam:DeleteRolePolicy",
+                "iam:GetRolePolicy",
+                "iam:ListRolePolicies",
+                "iam:ListAttachedRolePolicies",
+                "iam:TagRole",
+                "iam:UntagRole"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStack}-proxy-ProxyRole-*"
+              }
+            },
+            {
+              "Sid": "ManageOnlyBoundedProxyInlinePolicies",
+              "Effect": "Allow",
+              "Action": [
+                "iam:PutRolePolicy",
+                "iam:PutRolePermissionsBoundary"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStack}-proxy-ProxyRole-*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "iam:PermissionsBoundary": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${ApplicationStack}-ProxyRoleBoundary"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "AttachOnlyProxySsmPolicy",
+              "Effect": "Allow",
+              "Action": [
+                "iam:AttachRolePolicy",
+                "iam:DetachRolePolicy"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStack}-proxy-ProxyRole-*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "iam:PermissionsBoundary": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${ApplicationStack}-ProxyRoleBoundary"
+                  },
+                  "iam:PolicyARN": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "CreateAndManageProxyInstanceProfile",
+              "Effect": "Allow",
+              "Action": [
+                "iam:AddRoleToInstanceProfile",
+                "iam:CreateInstanceProfile",
+                "iam:DeleteInstanceProfile",
+                "iam:GetInstanceProfile",
+                "iam:RemoveRoleFromInstanceProfile",
+                "iam:TagInstanceProfile",
+                "iam:UntagInstanceProfile"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*"
+              }
+            },
+            {
+              "Sid": "PassOnlyProxyRoleToEc2",
+              "Effect": "Allow",
+              "Action": "iam:PassRole",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStack}-proxy-ProxyRole-*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "iam:PassedToService": "ec2.amazonaws.com"
                 }
               }
             }

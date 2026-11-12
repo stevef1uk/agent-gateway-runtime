@@ -38,6 +38,10 @@ class ProxyLifecycle(unittest.TestCase):
    self.assertFalse((pathlib.Path(folder)/'dist/aws-lambda/proxy/overrides.txt').exists())
  def test_template_preserves_source_bootstrap_and_constraints(self):
   template=json.loads((ROOT/'deploy/aws/proxy-vm.template.json').read_text());resources=template['Resources']
+  role=resources['ProxyRole']['Properties']
+  self.assertEqual(role['PermissionsBoundary'],{'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${ApplicationStack}-ProxyRoleBoundary'})
+  self.assertEqual(role['Tags'][1],{'Key':'agent-gateway-parent','Value':{'Ref':'ApplicationStack'}})
+  self.assertEqual(resources['ProxyProfile']['Properties']['Roles'],[{'Ref':'ProxyRole'}])
   userdata=resources['ProxyLaunchTemplate']['Properties']['LaunchTemplateData']['UserData']['Fn::Base64']['Fn::Sub'][0]
   self.assertIn((ROOT/'scripts/proxy-vm-bootstrap.py').read_text().strip(),userdata)
   data=resources['ProxyLaunchTemplate']['Properties']['LaunchTemplateData']
@@ -46,6 +50,38 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertTrue(data['BlockDeviceMappings'][0]['Ebs']['Encrypted'])
   self.assertTrue(data['BlockDeviceMappings'][0]['Ebs']['DeleteOnTermination'])
   self.assertFalse(any(v['Type']=='AWS::AutoScaling::AutoScalingGroup' for v in resources.values()))
+ def test_proxy_role_permissions_are_bounded_and_scoped(self):
+  template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
+  resources=template['Resources']
+  boundary=resources['ProxyRoleBoundary']['Properties']['PolicyDocument']
+  access=resources['ProxyRoleAccess']['Properties']['PolicyDocument']
+  self.assertLessEqual(len(json.dumps(boundary,separators=(',',':'))),6144)
+  self.assertLessEqual(len(json.dumps(access,separators=(',',':'))),6144)
+  activation=next(s for s in boundary['Statement'] if s['Sid']=='GatewayActivation')
+  self.assertEqual(activation['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:s3:::${ProxyActivationBucket}/${ProxyGatewayLicenceObject}'})
+  state=next(s for s in boundary['Statement'] if s['Sid']=='SharedDomainAndSecurityState')
+  self.assertEqual(state['Resource'],[
+   {'Fn::Sub':'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ApplicationStack}-domain'},
+   {'Fn::Sub':'arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${ApplicationStack}-security'}
+  ])
+  authz=next(s for s in boundary['Statement'] if s['Sid']=='CallOnlyAuthorizationAPI')
+  self.assertEqual(authz['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ProxyAuthzApiId}/$default/*/*'})
+  ecr=next(s for s in boundary['Statement'] if s['Sid']=='PullOnlyGatewayImage')
+  self.assertEqual(ecr['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ecr:${AWS::Region}:${AWS::AccountId}:repository/${ApplicationStack}/gateway'})
+  create=next(s for s in access['Statement'] if s['Sid']=='CreateOnlyBoundedProxyRole')
+  role_arn={'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStack}-proxy-ProxyRole-*'}
+  boundary_arn={'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${ApplicationStack}-ProxyRoleBoundary'}
+  self.assertEqual(create['Resource'],role_arn)
+  self.assertEqual(create['Condition']['StringEquals']['iam:PermissionsBoundary'],boundary_arn)
+  attach=next(s for s in access['Statement'] if s['Sid']=='AttachOnlyProxySsmPolicy')
+  self.assertEqual(attach['Resource'],role_arn)
+  self.assertEqual(attach['Condition']['StringEquals']['iam:PolicyARN'],{'Fn::Sub':'arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore'})
+  passed=next(s for s in access['Statement'] if s['Sid']=='PassOnlyProxyRoleToEc2')
+  self.assertEqual(passed['Resource'],role_arn)
+  self.assertEqual(passed['Condition']['StringEquals']['iam:PassedToService'],'ec2.amazonaws.com')
+  profile=next(s for s in access['Statement'] if s['Sid']=='CreateAndManageProxyInstanceProfile')
+  self.assertEqual(profile['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*'})
+  self.assertNotIn('iam:UpdateAssumeRolePolicy',json.dumps(access))
  def test_deployment_access_scopes_cloudformation_lifecycle_to_proxy_stack(self):
   template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
   deployment_access=template['Resources']['DeploymentAccess']['Properties']['PolicyDocument']

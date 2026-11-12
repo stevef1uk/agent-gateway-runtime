@@ -268,6 +268,23 @@
             }
           ]
         },
+        "PermissionsBoundary": {
+          "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${ApplicationStack}-ProxyRoleBoundary"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ApplicationStack}-proxy-role"
+            }
+          },
+          {
+            "Key": "agent-gateway-parent",
+            "Value": {
+              "Ref": "ApplicationStack"
+            }
+          }
+        ],
         "ManagedPolicyArns": [
           {
             "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
@@ -369,6 +386,20 @@
         "Roles": [
           {
             "Ref": "ProxyRole"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ApplicationStack}-proxy-profile"
+            }
+          },
+          {
+            "Key": "agent-gateway-parent",
+            "Value": {
+              "Ref": "ApplicationStack"
+            }
           }
         ]
       }
