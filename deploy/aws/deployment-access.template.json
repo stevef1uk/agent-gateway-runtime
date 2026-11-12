@@ -259,6 +259,47 @@
               }
             },
             {
+              "Sid": "CreateProxyInternetGateway",
+              "Effect": "Allow",
+              "Action": "ec2:CreateInternetGateway",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
+              },
+              "Condition": {
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "TagProxyInternetGatewayOnCreate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "CreateInternetGateway"
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
               "Sid": "CloudFormationLifecycle",
               "Effect": "Allow",
               "Action": [

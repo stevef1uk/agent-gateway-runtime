@@ -56,6 +56,15 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(describe_ami['Action'],'ec2:DescribeImages')
   self.assertEqual(describe_ami['Resource'],'*')
   self.assertEqual(describe_ami['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
+  create_gateway=next(statement for statement in statements if statement['Sid']=='CreateProxyInternetGateway')
+  gateway_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*'}
+  self.assertEqual(create_gateway['Action'],'ec2:CreateInternetGateway')
+  self.assertEqual(create_gateway['Resource'],gateway_arn)
+  self.assertEqual(create_gateway['Condition']['ForAllValues:StringEquals']['aws:TagKeys'],['Name','agent-gateway-parent'])
+  tag_gateway=next(statement for statement in statements if statement['Sid']=='TagProxyInternetGatewayOnCreate')
+  self.assertEqual(tag_gateway['Action'],'ec2:CreateTags')
+  self.assertEqual(tag_gateway['Resource'],gateway_arn)
+  self.assertEqual(tag_gateway['Condition']['StringEquals']['ec2:CreateAction'],'CreateInternetGateway')
   lifecycle=next(statement for statement in statements if statement['Sid']=='CloudFormationLifecycle')
   resources=lifecycle['Resource']
   self.assertIn('cloudformation:ListChangeSets',lifecycle['Action'])
