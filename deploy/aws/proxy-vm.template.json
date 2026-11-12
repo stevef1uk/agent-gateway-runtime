@@ -222,12 +222,6 @@
           "Ref": "ProxyVPC"
         },
         "SecurityGroupIngress": [],
-        "SecurityGroupEgress": [
-          {
-            "IpProtocol": "-1",
-            "CidrIp": "0.0.0.0/0"
-          }
-        ],
         "Tags": [
           {
             "Key": "Name",
@@ -448,6 +442,25 @@
                 {
                   "Ref": "ProxySecurityGroup"
                 }
+              ],
+              "TagSpecifications": [
+                {
+                  "ResourceType": "network-interface",
+                  "Tags": [
+                    {
+                      "Key": "Name",
+                      "Value": {
+                        "Fn::Sub": "${AWS::StackName}-network-interface"
+                      }
+                    },
+                    {
+                      "Key": "agent-gateway-parent",
+                      "Value": {
+                        "Ref": "ApplicationStack"
+                      }
+                    }
+                  ]
+                }
               ]
             }
           ],
@@ -504,7 +517,26 @@
           "Monitoring": {
             "Enabled": false
           }
-        }
+        },
+        "TagSpecifications": [
+          {
+            "ResourceType": "launch-template",
+            "Tags": [
+              {
+                "Key": "Name",
+                "Value": {
+                  "Fn::Sub": "${AWS::StackName}-launch-template"
+                }
+              },
+              {
+                "Key": "agent-gateway-parent",
+                "Value": {
+                  "Ref": "ApplicationStack"
+                }
+              }
+            ]
+          }
+        ]
       }
     },
     "ProxyInstance": {

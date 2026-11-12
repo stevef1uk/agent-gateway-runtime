@@ -585,6 +585,27 @@
               }
             },
             {
+              "Sid": "DescribeProxyVpcAttributes",
+              "Effect": "Allow",
+              "Action": "ec2:DescribeVpcAttribute",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
               "Sid": "DeleteProxyVpc",
               "Effect": "Allow",
               "Action": "ec2:DeleteVpc",
@@ -609,6 +630,37 @@
               "Resource": "*",
               "Condition": {
                 "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "AttachProxyInternetGateway",
+              "Effect": "Allow",
+              "Action": "ec2:AttachInternetGateway",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+                }
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "ec2:ResourceTag/Name": [
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-internet"
+                    },
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                    }
+                  ],
                   "aws:RequestedRegion": {
                     "Ref": "AWS::Region"
                   }
@@ -768,6 +820,812 @@
                 },
                 "Null": {
                   "aws:TagKeys": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProxySubnetRouteAccess": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Grants the optional proxy only the subnet, route-table, route, and security-group operations defined in proxy-vm.template.json.",
+          "must": [
+            "Create permissions require exact proxy resource tags and the tagged proxy VPC.",
+            "Read-only describe calls are restricted to the configured region.",
+            "Mutation and cleanup permissions are limited to expected proxy tags and resource types."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Scoped subnet, route-table, route and security-group lifecycle for the optional proxy VM.",
+        "Roles": [
+          {
+            "Ref": "DeploymentRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DescribeProxySubnetsRoutesAndSecurityGroups",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DescribeRouteTables",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeSubnets"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxySubnet",
+              "Effect": "Allow",
+              "Action": "ec2:CreateSubnet",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-subnet"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxySubnetInTaggedVpc",
+              "Effect": "Allow",
+              "Action": "ec2:CreateSubnet",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "TagProxySubnetOnCreate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "CreateSubnet",
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-subnet"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "ModifyAndDeleteProxySubnet",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DeleteSubnet",
+                "ec2:ModifySubnetAttribute"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-subnet"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxyRouteTable",
+              "Effect": "Allow",
+              "Action": "ec2:CreateRouteTable",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-routes"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxyRouteTableInTaggedVpc",
+              "Effect": "Allow",
+              "Action": "ec2:CreateRouteTable",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "TagProxyRouteTableOnCreate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "CreateRouteTable",
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-routes"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "ManageProxyRoutesAndDeleteRouteTable",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DeleteRouteTable",
+                "ec2:DeleteRoute",
+                "ec2:CreateRoute"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-routes"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxySecurityGroup",
+              "Effect": "Allow",
+              "Action": "ec2:CreateSecurityGroup",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-security"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxySecurityGroupInTaggedVpc",
+              "Effect": "Allow",
+              "Action": "ec2:CreateSecurityGroup",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "TagProxySecurityGroupOnCreate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "CreateSecurityGroup",
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-security"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "DeleteProxySecurityGroup",
+              "Effect": "Allow",
+              "Action": "ec2:DeleteSecurityGroup",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-security"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "AssociateProxySubnetAndRouteTable",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:AssociateRouteTable",
+                "ec2:DisassociateRouteTable"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
+                }
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "ec2:ResourceTag/Name": [
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-routes"
+                    },
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-subnet"
+                    }
+                  ],
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProxyLaunchTemplateAccess": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Scopes optional proxy launch-template lifecycle and AMI use to the tagged Amazon Linux template.",
+          "must": [
+            "The launch template is tagged at creation and all later changes require those tags.",
+            "Instances can use only a public Amazon-owned machine image from the configured region."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Scoped launch-template lifecycle for the optional proxy VM.",
+        "Roles": [
+          {
+            "Ref": "DeploymentRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DescribeProxyLaunchTemplates",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DescribeLaunchTemplateVersions",
+                "ec2:DescribeLaunchTemplates"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxyLaunchTemplate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateLaunchTemplate",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-launch-template"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "TagProxyLaunchTemplateOnCreate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "CreateLaunchTemplate",
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-launch-template"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "ManageTaggedProxyLaunchTemplate",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:CreateLaunchTemplateVersion",
+                "ec2:DeleteLaunchTemplate",
+                "ec2:DeleteLaunchTemplateVersions",
+                "ec2:ModifyLaunchTemplate"
+              ],
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-launch-template"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "RunProxyFromTaggedLaunchTemplate",
+              "Effect": "Allow",
+              "Action": "ec2:RunInstances",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*"
+              },
+              "Condition": {
+                "Bool": {
+                  "ec2:IsLaunchTemplateResource": "true"
+                },
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-launch-template"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "RunProxyFromAmazonLinuxAmi",
+              "Effect": "Allow",
+              "Action": "ec2:RunInstances",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}::image/*"
+              },
+              "Condition": {
+                "Bool": {
+                  "ec2:IsLaunchTemplateResource": "true",
+                  "ec2:Public": "true"
+                },
+                "StringEquals": {
+                  "ec2:Owner": "137112412989",
+                  "ec2:ImageType": "machine",
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProxyInstanceAccess": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Limits optional proxy instance creation, tagging, and termination to its launch-template resources.",
+          "must": [
+            "RunInstances is restricted to the proxy template, named network resources, Amazon Linux, and bounded instance/disk settings.",
+            "Instance, root volume, and network interface must carry the proxy tags at launch."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Scoped EC2 instance lifecycle for the optional proxy VM.",
+        "Roles": [
+          {
+            "Ref": "DeploymentRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DescribeProxyInstances",
+              "Effect": "Allow",
+              "Action": [
+                "ec2:DescribeInstanceStatus",
+                "ec2:DescribeInstances"
+              ],
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "RunTaggedProxyInstance",
+              "Effect": "Allow",
+              "Action": "ec2:RunInstances",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+              },
+              "Condition": {
+                "Bool": {
+                  "ec2:IsLaunchTemplateResource": "true"
+                },
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-proxy"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "ec2:InstanceType": [
+                    "t4g.small",
+                    "t4g.medium"
+                  ],
+                  "ec2:MetadataHttpTokens": "required",
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "StringLike": {
+                  "ec2:InstanceProfile": {
+                    "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*"
+                  }
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "RunTaggedProxyRootVolume",
+              "Effect": "Allow",
+              "Action": "ec2:RunInstances",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+              },
+              "Condition": {
+                "Bool": {
+                  "ec2:IsLaunchTemplateResource": "true",
+                  "ec2:Encrypted": "true"
+                },
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-root"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "ec2:VolumeType": "gp3",
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "NumericLessThanEquals": {
+                  "ec2:VolumeSize": "12"
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "RunTaggedProxyNetworkInterface",
+              "Effect": "Allow",
+              "Action": "ec2:RunInstances",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+              },
+              "Condition": {
+                "Bool": {
+                  "ec2:IsLaunchTemplateResource": "true",
+                  "ec2:AssociatePublicIpAddress": "true"
+                },
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-network-interface"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "RunProxyInTaggedSubnetAndSecurityGroup",
+              "Effect": "Allow",
+              "Action": "ec2:RunInstances",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "ec2:IsLaunchTemplateResource": "true"
+                },
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": [
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-subnet"
+                    },
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-security"
+                    }
+                  ],
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "TagProxyInstanceResourcesOnLaunch",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+                }
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "RunInstances",
+                  "aws:RequestTag/Name": [
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-proxy"
+                    },
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-root"
+                    },
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-network-interface"
+                    }
+                  ],
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "TerminateTaggedProxyInstance",
+              "Effect": "Allow",
+              "Action": "ec2:TerminateInstances",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-proxy"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
                 }
               }
             }

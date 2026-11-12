@@ -43,6 +43,7 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(role['Tags'][1],{'Key':'agent-gateway-parent','Value':{'Ref':'ApplicationStack'}})
   self.assertEqual(resources['ProxyProfile']['Properties']['Roles'],[{'Ref':'ProxyRole'}])
   self.assertNotIn('Tags',resources['ProxyProfile']['Properties'])
+  self.assertNotIn('SecurityGroupEgress',resources['ProxySecurityGroup']['Properties'])
   userdata=resources['ProxyLaunchTemplate']['Properties']['LaunchTemplateData']['UserData']['Fn::Base64']['Fn::Sub'][0]
   self.assertIn((ROOT/'scripts/proxy-vm-bootstrap.py').read_text().strip(),userdata)
   data=resources['ProxyLaunchTemplate']['Properties']['LaunchTemplateData']
@@ -50,6 +51,15 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(data['CreditSpecification']['CpuCredits'],'standard')
   self.assertTrue(data['BlockDeviceMappings'][0]['Ebs']['Encrypted'])
   self.assertTrue(data['BlockDeviceMappings'][0]['Ebs']['DeleteOnTermination'])
+  launch_template=resources['ProxyLaunchTemplate']['Properties']
+  template_tags=launch_template['TagSpecifications']
+  self.assertEqual(template_tags[0]['ResourceType'],'launch-template')
+  self.assertEqual(template_tags[0]['Tags'][1],{'Key':'agent-gateway-parent','Value':{'Ref':'ApplicationStack'}})
+  launch_tags=data['TagSpecifications']
+  self.assertEqual({tag['ResourceType'] for tag in launch_tags},{'instance','volume'})
+  interface_tags=data['NetworkInterfaces'][0]['TagSpecifications'][0]
+  self.assertEqual(interface_tags['ResourceType'],'network-interface')
+  self.assertEqual(interface_tags['Tags'][1],{'Key':'agent-gateway-parent','Value':{'Ref':'ApplicationStack'}})
   self.assertFalse(any(v['Type']=='AWS::AutoScaling::AutoScalingGroup' for v in resources.values()))
  def test_proxy_role_permissions_are_bounded_and_scoped(self):
   template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
@@ -100,8 +110,14 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(describe_ami['Resource'],'*')
   self.assertEqual(describe_ami['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
   proxy_network=template['Resources']['ProxyNetworkAccess']['Properties']['PolicyDocument']
+  proxy_subnet_route=template['Resources']['ProxySubnetRouteAccess']['Properties']['PolicyDocument']
+  proxy_launch_template=template['Resources']['ProxyLaunchTemplateAccess']['Properties']['PolicyDocument']
+  proxy_instance=template['Resources']['ProxyInstanceAccess']['Properties']['PolicyDocument']
   self.assertLessEqual(len(json.dumps(deployment_access,separators=(',',':'))),6144)
   self.assertLessEqual(len(json.dumps(proxy_network,separators=(',',':'))),6144)
+  self.assertLessEqual(len(json.dumps(proxy_subnet_route,separators=(',',':'))),6144)
+  self.assertLessEqual(len(json.dumps(proxy_launch_template,separators=(',',':'))),6144)
+  self.assertLessEqual(len(json.dumps(proxy_instance,separators=(',',':'))),6144)
   proxy_statements=proxy_network['Statement']
   vpc_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}
   describe_vpcs=next(statement for statement in proxy_statements if statement['Sid']=='DescribeProxyVpcs')
@@ -150,9 +166,68 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(tag_vpc['Action'],'ec2:CreateTags')
   self.assertEqual(tag_vpc['Resource'],vpc_arn)
   self.assertEqual(tag_vpc['Condition']['StringEquals']['ec2:CreateAction'],'CreateVpc')
+  subnet_statements=proxy_subnet_route['Statement']
+  describe_network=next(statement for statement in subnet_statements if statement['Sid']=='DescribeProxySubnetsRoutesAndSecurityGroups')
+  self.assertEqual(describe_network['Action'],['ec2:DescribeRouteTables','ec2:DescribeSecurityGroups','ec2:DescribeSubnets'])
+  self.assertEqual(describe_network['Resource'],'*')
+  self.assertEqual(describe_network['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
+  create_subnet=next(statement for statement in subnet_statements if statement['Sid']=='CreateProxySubnet')
+  self.assertEqual(create_subnet['Action'],'ec2:CreateSubnet')
+  self.assertEqual(create_subnet['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*'})
+  self.assertEqual(create_subnet['Condition']['StringEquals']['aws:RequestTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-subnet'})
+  create_subnet_vpc=next(statement for statement in subnet_statements if statement['Sid']=='CreateProxySubnetInTaggedVpc')
+  self.assertEqual(create_subnet_vpc['Resource'],vpc_arn)
+  self.assertEqual(create_subnet_vpc['Condition']['StringEquals']['ec2:ResourceTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-vpc'})
+  create_routes=next(statement for statement in subnet_statements if statement['Sid']=='CreateProxyRouteTable')
+  self.assertEqual(create_routes['Action'],'ec2:CreateRouteTable')
+  self.assertEqual(create_routes['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:route-table/*'})
+  self.assertEqual(create_routes['Condition']['StringEquals']['aws:RequestTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-routes'})
+  create_routes_vpc=next(statement for statement in subnet_statements if statement['Sid']=='CreateProxyRouteTableInTaggedVpc')
+  self.assertEqual(create_routes_vpc['Resource'],vpc_arn)
+  self.assertEqual(create_routes_vpc['Condition']['StringEquals']['ec2:ResourceTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-vpc'})
+  create_sg=next(statement for statement in subnet_statements if statement['Sid']=='CreateProxySecurityGroup')
+  self.assertEqual(create_sg['Action'],'ec2:CreateSecurityGroup')
+  self.assertEqual(create_sg['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'})
+  self.assertEqual(create_sg['Condition']['StringEquals']['aws:RequestTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-security'})
+  create_sg_vpc=next(statement for statement in subnet_statements if statement['Sid']=='CreateProxySecurityGroupInTaggedVpc')
+  self.assertEqual(create_sg_vpc['Resource'],vpc_arn)
+  self.assertEqual(create_sg_vpc['Condition']['StringEquals']['ec2:ResourceTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-vpc'})
+  attach_gateway=next(statement for statement in proxy_statements if statement['Sid']=='AttachProxyInternetGateway')
+  self.assertEqual(attach_gateway['Action'],'ec2:AttachInternetGateway')
+  self.assertEqual(attach_gateway['Resource'],[
+   gateway_arn,
+   {'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}
+  ])
+  self.assertEqual(attach_gateway['Condition']['StringEquals']['ec2:ResourceTag/agent-gateway-parent'],{'Ref':'ApplicationStack'})
   lifecycle=next(statement for statement in statements if statement['Sid']=='CloudFormationLifecycle')
   resources=lifecycle['Resource']
   self.assertIn('cloudformation:ListChangeSets',lifecycle['Action'])
   self.assertIn({'Fn::Sub':'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationStack}-proxy/*'},resources)
   self.assertNotIn('*',resources)
+ def test_proxy_compute_access_is_scoped_to_the_launch_template(self):
+  template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
+  launch=template['Resources']['ProxyLaunchTemplateAccess']['Properties']['PolicyDocument']['Statement']
+  instance=template['Resources']['ProxyInstanceAccess']['Properties']['PolicyDocument']['Statement']
+  launch_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/*'}
+  create_template=next(s for s in launch if s['Sid']=='CreateProxyLaunchTemplate')
+  self.assertEqual(create_template['Resource'],launch_arn)
+  self.assertEqual(create_template['Condition']['StringEquals']['aws:RequestTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-launch-template'})
+  run_from_template=next(s for s in launch if s['Sid']=='RunProxyFromTaggedLaunchTemplate')
+  self.assertEqual(run_from_template['Resource'],launch_arn)
+  run_from_ami=next(s for s in launch if s['Sid']=='RunProxyFromAmazonLinuxAmi')
+  self.assertEqual(run_from_ami['Condition']['StringEquals']['ec2:Owner'],'137112412989')
+  run_instance=next(s for s in instance if s['Sid']=='RunTaggedProxyInstance')
+  self.assertEqual(run_instance['Condition']['StringLike']['ec2:InstanceProfile'],{'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*'})
+  self.assertEqual(run_instance['Condition']['StringEquals']['ec2:InstanceType'],['t4g.small','t4g.medium'])
+  run_volume=next(s for s in instance if s['Sid']=='RunTaggedProxyRootVolume')
+  self.assertEqual(run_volume['Condition']['StringEquals']['ec2:VolumeType'],'gp3')
+  self.assertEqual(run_volume['Condition']['NumericLessThanEquals']['ec2:VolumeSize'],'12')
+  run_network=next(s for s in instance if s['Sid']=='RunProxyInTaggedSubnetAndSecurityGroup')
+  self.assertEqual(run_network['Resource'],[
+   {'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*'},
+   {'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*'}
+  ])
+  tag_instance=next(s for s in instance if s['Sid']=='TagProxyInstanceResourcesOnLaunch')
+  self.assertEqual(tag_instance['Condition']['StringEquals']['ec2:CreateAction'],'RunInstances')
+  self.assertEqual(tag_instance['Condition']['ForAllValues:StringEquals']['aws:TagKeys'],['Name','agent-gateway-parent'])
 if __name__=='__main__':unittest.main()
