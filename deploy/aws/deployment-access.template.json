@@ -261,6 +261,9 @@
                 },
                 {
                   "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationStack}-demo-*/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationStack}-proxy/*"
                 }
               ],
               "Condition": {

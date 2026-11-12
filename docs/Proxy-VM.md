@@ -6,20 +6,20 @@
 
 Complete the parent deployment using the [customer guide](Deployment-Guide.md), and install the AWS Session Manager plugin. The template and scripts are already in this repository; **do not create or edit `proxy-vm.template.json`**.
 
-The VM needs AWS permissions beyond the normal application deployment role. Ask your AWS administrator which non-root profile is approved to create the proxy resources. It must have permission to create the proxy CloudFormation stack, its EC2/VPC resources and its instance role/profile. Use the same profile for both settings only if the administrator confirms it has those permissions. In ignored `aws-config.mk`, set:
+The VM uses the existing restricted deployment profile for the proxy stack. In ignored `aws-config.mk`, the current setup uses:
 
 ```make
-AWS_PROFILE = your-existing-deployer-profile
-AWS_VM_PROFILE = your-approved-vm-profile
+AWS_PROFILE = agent-gateway-dev
+AWS_VM_PROFILE = agent-gateway-dev
 ```
 
-Check that this profile is signed in to the correct account:
+Before creating the VM, an administrator must update the `agent-gateway-access-dev` stack with the latest `deploy/aws/deployment-access.template.json`, as described in [Optional proxy VM permissions](Deployment-Guide.md#optional-proxy-vm-permissions). That grants the missing CloudFormation lifecycle scope for `agent-gateway-dev-proxy`. If the create command then reports another `AccessDenied`, stop and inspect the proxy stack's CloudFormation Events for the exact denied action; do not add broad policies or switch to root for the create command.
 
 ```bash
-aws --profile your-approved-vm-profile --region eu-west-3 sts get-caller-identity
+aws --profile agent-gateway-dev --region eu-west-3 sts get-caller-identity
 ```
 
-If creation reports `AccessDenied` (the AWS CLI may show an unhelpful JSON parsing error), the profile is not authorized. Stop and ask your AWS administrator for an approved VM profile or the required scoped permissions; a deployment role cannot grant itself access. Do not switch to root. The create script reads the live parent configuration and checks the account; you do not need to copy deployment IDs or secrets into the template.
+The create script reads the live parent configuration and checks the account; you do not need to copy deployment IDs or secrets into the template.
 
 ## Create and connect
 

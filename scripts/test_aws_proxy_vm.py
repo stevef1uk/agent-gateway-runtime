@@ -30,4 +30,12 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertTrue(data['BlockDeviceMappings'][0]['Ebs']['Encrypted'])
   self.assertTrue(data['BlockDeviceMappings'][0]['Ebs']['DeleteOnTermination'])
   self.assertFalse(any(v['Type']=='AWS::AutoScaling::AutoScalingGroup' for v in resources.values()))
+ def test_deployment_access_scopes_cloudformation_lifecycle_to_proxy_stack(self):
+  template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
+  statements=template['Resources']['DeploymentAccess']['Properties']['PolicyDocument']['Statement']
+  lifecycle=next(statement for statement in statements if statement['Sid']=='CloudFormationLifecycle')
+  resources=lifecycle['Resource']
+  self.assertIn('cloudformation:ListChangeSets',lifecycle['Action'])
+  self.assertIn({'Fn::Sub':'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationStack}-proxy/*'},resources)
+  self.assertNotIn('*',resources)
 if __name__=='__main__':unittest.main()
