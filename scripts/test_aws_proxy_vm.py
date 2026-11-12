@@ -48,7 +48,8 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertFalse(any(v['Type']=='AWS::AutoScaling::AutoScalingGroup' for v in resources.values()))
  def test_deployment_access_scopes_cloudformation_lifecycle_to_proxy_stack(self):
   template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
-  statements=template['Resources']['DeploymentAccess']['Properties']['PolicyDocument']['Statement']
+  deployment_access=template['Resources']['DeploymentAccess']['Properties']['PolicyDocument']
+  statements=deployment_access['Statement']
   ami=next(statement for statement in statements if statement['Sid']=='ResolveProxyAmiParameter')
   self.assertEqual(ami['Action'],'ssm:GetParameters')
   self.assertEqual(ami['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'})
@@ -56,15 +57,42 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(describe_ami['Action'],'ec2:DescribeImages')
   self.assertEqual(describe_ami['Resource'],'*')
   self.assertEqual(describe_ami['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
-  create_gateway=next(statement for statement in statements if statement['Sid']=='CreateProxyInternetGateway')
+  proxy_network=template['Resources']['ProxyNetworkAccess']['Properties']['PolicyDocument']
+  self.assertLessEqual(len(json.dumps(deployment_access,separators=(',',':'))),6144)
+  self.assertLessEqual(len(json.dumps(proxy_network,separators=(',',':'))),6144)
+  proxy_statements=proxy_network['Statement']
   gateway_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*'}
+  create_gateway=next(statement for statement in proxy_statements if statement['Sid']=='CreateProxyInternetGateway')
   self.assertEqual(create_gateway['Action'],'ec2:CreateInternetGateway')
   self.assertEqual(create_gateway['Resource'],gateway_arn)
   self.assertEqual(create_gateway['Condition']['ForAllValues:StringEquals']['aws:TagKeys'],['Name','agent-gateway-parent'])
-  tag_gateway=next(statement for statement in statements if statement['Sid']=='TagProxyInternetGatewayOnCreate')
+  self.assertEqual(create_gateway['Condition']['StringEquals']['aws:RequestTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-internet'})
+  self.assertEqual(create_gateway['Condition']['StringEquals']['aws:RequestTag/agent-gateway-parent'],{'Ref':'ApplicationStack'})
+  tag_gateway=next(statement for statement in proxy_statements if statement['Sid']=='TagProxyInternetGatewayOnCreate')
   self.assertEqual(tag_gateway['Action'],'ec2:CreateTags')
   self.assertEqual(tag_gateway['Resource'],gateway_arn)
   self.assertEqual(tag_gateway['Condition']['StringEquals']['ec2:CreateAction'],'CreateInternetGateway')
+  describe_gateway=next(statement for statement in proxy_statements if statement['Sid']=='DescribeProxyInternetGateways')
+  self.assertEqual(describe_gateway['Action'],'ec2:DescribeInternetGateways')
+  self.assertEqual(describe_gateway['Resource'],'*')
+  self.assertEqual(describe_gateway['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
+  detach_gateway=next(statement for statement in proxy_statements if statement['Sid']=='DetachProxyInternetGateway')
+  self.assertEqual(detach_gateway['Action'],'ec2:DetachInternetGateway')
+  self.assertEqual(detach_gateway['Resource'],[gateway_arn,{'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}])
+  delete_gateway=next(statement for statement in proxy_statements if statement['Sid']=='DeleteProxyInternetGateway')
+  self.assertEqual(delete_gateway['Action'],'ec2:DeleteInternetGateway')
+  self.assertEqual(delete_gateway['Resource'],gateway_arn)
+  create_vpc=next(statement for statement in proxy_statements if statement['Sid']=='CreateProxyVpc')
+  vpc_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}
+  self.assertEqual(create_vpc['Action'],'ec2:CreateVpc')
+  self.assertEqual(create_vpc['Resource'],vpc_arn)
+  self.assertEqual(create_vpc['Condition']['ForAllValues:StringEquals']['aws:TagKeys'],['Name','agent-gateway-parent'])
+  self.assertEqual(create_vpc['Condition']['StringEquals']['aws:RequestTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-vpc'})
+  self.assertEqual(create_vpc['Condition']['StringEquals']['aws:RequestTag/agent-gateway-parent'],{'Ref':'ApplicationStack'})
+  tag_vpc=next(statement for statement in proxy_statements if statement['Sid']=='TagProxyVpcOnCreate')
+  self.assertEqual(tag_vpc['Action'],'ec2:CreateTags')
+  self.assertEqual(tag_vpc['Resource'],vpc_arn)
+  self.assertEqual(tag_vpc['Condition']['StringEquals']['ec2:CreateAction'],'CreateVpc')
   lifecycle=next(statement for statement in statements if statement['Sid']=='CloudFormationLifecycle')
   resources=lifecycle['Resource']
   self.assertIn('cloudformation:ListChangeSets',lifecycle['Action'])

@@ -259,47 +259,6 @@
               }
             },
             {
-              "Sid": "CreateProxyInternetGateway",
-              "Effect": "Allow",
-              "Action": "ec2:CreateInternetGateway",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
-              },
-              "Condition": {
-                "ForAllValues:StringEquals": {
-                  "aws:TagKeys": [
-                    "Name",
-                    "agent-gateway-parent"
-                  ]
-                },
-                "Null": {
-                  "aws:TagKeys": "false"
-                }
-              }
-            },
-            {
-              "Sid": "TagProxyInternetGatewayOnCreate",
-              "Effect": "Allow",
-              "Action": "ec2:CreateTags",
-              "Resource": {
-                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
-              },
-              "Condition": {
-                "StringEquals": {
-                  "ec2:CreateAction": "CreateInternetGateway"
-                },
-                "ForAllValues:StringEquals": {
-                  "aws:TagKeys": [
-                    "Name",
-                    "agent-gateway-parent"
-                  ]
-                },
-                "Null": {
-                  "aws:TagKeys": "false"
-                }
-              }
-            },
-            {
               "Sid": "CloudFormationLifecycle",
               "Effect": "Allow",
               "Action": [
@@ -544,6 +503,201 @@
                   "aws:RequestedRegion": {
                     "Ref": "AWS::Region"
                   }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ProxyNetworkAccess": {
+      "Type": "AWS::IAM::ManagedPolicy",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Grants scoped proxy-network creation and cleanup permissions for the optional proxy VM.",
+          "must": [
+            "Administrator reviews and applies this stack separately.",
+            "No ability to modify the deployment role or other managed policies.",
+            "Network creation and cleanup are constrained by resource types and exact resource tags."
+          ]
+        }
+      },
+      "Properties": {
+        "Description": "Scoped VPC and Internet Gateway lifecycle permissions for the optional proxy deployment.",
+        "Roles": [
+          {
+            "Ref": "DeploymentRole"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DescribeProxyInternetGateways",
+              "Effect": "Allow",
+              "Action": "ec2:DescribeInternetGateways",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "DetachProxyInternetGateway",
+              "Effect": "Allow",
+              "Action": "ec2:DetachInternetGateway",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+                }
+              ],
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "ec2:ResourceTag/Name": [
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-internet"
+                    },
+                    {
+                      "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "Sid": "DeleteProxyInternetGateway",
+              "Effect": "Allow",
+              "Action": "ec2:DeleteInternetGateway",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-internet"
+                  }
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxyInternetGateway",
+              "Effect": "Allow",
+              "Action": "ec2:CreateInternetGateway",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-internet"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "TagProxyInternetGatewayOnCreate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "CreateInternetGateway",
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-internet"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "CreateProxyVpc",
+              "Effect": "Allow",
+              "Action": "ec2:CreateVpc",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
+                }
+              }
+            },
+            {
+              "Sid": "TagProxyVpcOnCreate",
+              "Effect": "Allow",
+              "Action": "ec2:CreateTags",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:CreateAction": "CreateVpc",
+                  "aws:RequestTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                  },
+                  "aws:RequestTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  }
+                },
+                "ForAllValues:StringEquals": {
+                  "aws:TagKeys": [
+                    "Name",
+                    "agent-gateway-parent"
+                  ]
+                },
+                "Null": {
+                  "aws:TagKeys": "false"
                 }
               }
             }
