@@ -4,7 +4,16 @@
 
 ## Prerequisites
 
-Complete the parent deployment using the [customer guide](Deployment-Guide.md), and install the AWS Session Manager plugin. The template and scripts are already in this repository; **do not create or edit `proxy-vm.template.json`**.
+Complete the parent deployment using the [customer guide](Deployment-Guide.md), and install the AWS Session Manager plugin on the workstation where you run `make aws-proxy-connect`. AWS CLI alone is not enough; the plugin is required to open the SSM tunnel. On Ubuntu/Debian x86-64, install and verify it with:
+
+```bash
+curl -o /tmp/session-manager-plugin.deb \
+  https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
+sudo dpkg -i /tmp/session-manager-plugin.deb
+session-manager-plugin --version
+```
+
+For Ubuntu/Debian ARM64, use the `ubuntu_arm64` package path. For other platforms, follow the [official AWS installation instructions](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html). The template and scripts are already in this repository; **do not create or edit `proxy-vm.template.json`**.
 
 The VM uses the existing restricted deployment profile for the proxy stack. In ignored `aws-config.mk`, the current setup uses:
 
