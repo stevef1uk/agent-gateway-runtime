@@ -215,6 +215,14 @@ Then redeploy with the client ID and secret file. The examples below include
 `--emotion` to retain the optional Emotion upstream; omit it if you do not
 want to configure Emotion.
 
+`--keys-directory keys` is still required: the deploy script reads the
+Agent Gateway activation token from `keys/token.txt` on every deployment,
+including OIDC redeployments. This is separate from the Google OAuth client
+secret passed with `--oidc-client-secret`; neither is an Emotion licence.
+The optional Emotion service uses its bundled evaluation token unless you
+separately supply a vendor-issued Emotion token with
+`--emotion-token-file`.
+
 ```bash
 scripts/deploy-gcp.sh \
   --project-id "$GCP_PROJECT_ID" \
