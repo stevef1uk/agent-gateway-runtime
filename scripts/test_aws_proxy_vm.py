@@ -103,12 +103,18 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertLessEqual(len(json.dumps(deployment_access,separators=(',',':'))),6144)
   self.assertLessEqual(len(json.dumps(proxy_network,separators=(',',':'))),6144)
   proxy_statements=proxy_network['Statement']
+  vpc_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}
   describe_vpcs=next(statement for statement in proxy_statements if statement['Sid']=='DescribeProxyVpcs')
   self.assertEqual(describe_vpcs['Action'],'ec2:DescribeVpcs')
   self.assertEqual(describe_vpcs['Resource'],'*')
   self.assertEqual(describe_vpcs['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
+  modify_vpc=next(statement for statement in proxy_statements if statement['Sid']=='ModifyProxyVpcAttributes')
+  self.assertEqual(modify_vpc['Action'],'ec2:ModifyVpcAttribute')
+  self.assertEqual(modify_vpc['Resource'],vpc_arn)
+  self.assertEqual(modify_vpc['Condition']['StringEquals']['ec2:ResourceTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-vpc'})
+  self.assertEqual(modify_vpc['Condition']['StringEquals']['ec2:ResourceTag/agent-gateway-parent'],{'Ref':'ApplicationStack'})
+  self.assertEqual(modify_vpc['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
   delete_vpc=next(statement for statement in proxy_statements if statement['Sid']=='DeleteProxyVpc')
-  vpc_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}
   self.assertEqual(delete_vpc['Action'],'ec2:DeleteVpc')
   self.assertEqual(delete_vpc['Resource'],vpc_arn)
   self.assertEqual(delete_vpc['Condition']['StringEquals']['ec2:ResourceTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-vpc'})

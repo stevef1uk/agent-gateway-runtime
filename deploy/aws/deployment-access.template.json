@@ -564,6 +564,27 @@
               }
             },
             {
+              "Sid": "ModifyProxyVpcAttributes",
+              "Effect": "Allow",
+              "Action": "ec2:ModifyVpcAttribute",
+              "Resource": {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "ec2:ResourceTag/Name": {
+                    "Fn::Sub": "${ApplicationStack}-proxy-vpc"
+                  },
+                  "ec2:ResourceTag/agent-gateway-parent": {
+                    "Ref": "ApplicationStack"
+                  },
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
               "Sid": "DeleteProxyVpc",
               "Effect": "Allow",
               "Action": "ec2:DeleteVpc",
