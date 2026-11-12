@@ -6,6 +6,7 @@ AWS_ACCOUNT ?=
 AWS_STACK ?= agent-gateway-dev
 AWS_ARTIFACT_STACK ?= agent-gateway-artifacts-dev
 AWS_ACCESS_STACK ?= agent-gateway-access-dev
+AWS_ACCESS_S3_BUCKET ?=
 AWS_DEPLOYMENT_ROLE_NAME ?= AgentGatewayDev
 AWS_ADMIN_PROFILE ?=
 AWS_VM_PROFILE ?=
@@ -64,7 +65,7 @@ aws-preflight: aws-release-check
 	@echo 'Local release/config/activation checks passed. No AWS resources created.'
 aws-access-deploy:
 	@test -n "$(AWS_ADMIN_PROFILE)" -a -n "$(AWS_ACCOUNT)" || { echo 'Set AWS_ADMIN_PROFILE and AWS_ACCOUNT explicitly in aws-config.mk.' >&2; exit 2; }
-	python3 -B scripts/aws-access-deploy.py --admin-profile "$(AWS_ADMIN_PROFILE)" --app-profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --account "$(AWS_ACCOUNT)" --access-stack "$(AWS_ACCESS_STACK)" --application-stack "$(AWS_STACK)" --artifact-stack "$(AWS_ARTIFACT_STACK)" --deployment-role "$(AWS_DEPLOYMENT_ROLE_NAME)"
+	python3 -B scripts/aws-access-deploy.py --admin-profile "$(AWS_ADMIN_PROFILE)" --app-profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --account "$(AWS_ACCOUNT)" --access-stack "$(AWS_ACCESS_STACK)" --application-stack "$(AWS_STACK)" --artifact-stack "$(AWS_ARTIFACT_STACK)" --deployment-role "$(AWS_DEPLOYMENT_ROLE_NAME)" --s3-bucket "$(AWS_ACCESS_S3_BUCKET)"
 aws-access-outputs:
 	@test -n "$(AWS_ADMIN_PROFILE)" || { echo 'Set AWS_ADMIN_PROFILE for access-stack inspection.' >&2; exit 2; }
 	aws cloudformation describe-stacks --profile "$(AWS_ADMIN_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_ACCESS_STACK)" --query 'Stacks[0].Outputs' --output table --no-cli-pager

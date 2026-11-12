@@ -65,13 +65,43 @@ class AccessDeploy(unittest.TestCase):
             access_deploy.deploy(
                 "admin", "app", "eu-west-3", "123456789012",
                 "agent-gateway-access-test", "agent-gateway-test",
-                "agent-gateway-artifacts-test", "AgentGatewayTest",
+                "agent-gateway-artifacts-test", "AgentGatewayTest", "",
             )
         command = run.call_args.args[0]
         self.assertIn("ProxyActivationBucket=agent-gateway-artifacts-test-a1b2c3", command)
         self.assertIn("ProxyAuthzApiId=abc123", command)
         self.assertIn("ProxyGatewayLicenceObject=activation/gateway.token", command)
+        self.assertIn("--s3-bucket", command)
+        self.assertEqual(command[command.index("--s3-bucket") + 1], "agent-gateway-artifacts-test-a1b2c3")
         self.assertTrue(run.call_args.kwargs["check"])
+
+    def test_deploy_requires_real_staging_bucket_before_parent_exists(self):
+        with patch.object(access_deploy, "aws", return_value={"Account": "123456789012"}), \
+             patch.object(access_deploy, "parent_proxy_parameters", return_value=(
+                 access_deploy.PLACEHOLDER_BUCKET, access_deploy.PLACEHOLDER_API_ID, "activation/gateway.token"
+             )), \
+             patch.object(access_deploy.subprocess, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "AWS_ACCESS_S3_BUCKET"):
+                access_deploy.deploy(
+                    "admin", "app", "eu-west-3", "123456789012",
+                    "agent-gateway-access-test", "agent-gateway-test",
+                    "agent-gateway-artifacts-test", "AgentGatewayTest", "",
+                )
+            run.assert_not_called()
+
+    def test_explicit_staging_bucket_is_used_before_parent_exists(self):
+        with patch.object(access_deploy, "aws", return_value={"Account": "123456789012"}), \
+             patch.object(access_deploy, "parent_proxy_parameters", return_value=(
+                 access_deploy.PLACEHOLDER_BUCKET, access_deploy.PLACEHOLDER_API_ID, "activation/gateway.token"
+             )), \
+             patch.object(access_deploy.subprocess, "run") as run:
+            access_deploy.deploy(
+                "admin", "app", "eu-west-3", "123456789012",
+                "agent-gateway-access-test", "agent-gateway-test",
+                "agent-gateway-artifacts-test", "AgentGatewayTest", "template-staging-bucket",
+            )
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index("--s3-bucket") + 1], "template-staging-bucket")
 
 
 if __name__ == "__main__":

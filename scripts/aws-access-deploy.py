@@ -71,17 +71,26 @@ def parent_proxy_parameters(profile, region, application_stack, expected_account
     return proxy_parameters(config, expected_account, application_stack)
 
 
-def deploy(admin_profile, app_profile, region, account, access_stack, application_stack, artifact_stack, deployment_role):
+def deploy(admin_profile, app_profile, region, account, access_stack, application_stack, artifact_stack, deployment_role, s3_bucket):
     identity = aws(admin_profile, region, "sts", "get-caller-identity")
     if identity.get("Account") != account:
         raise RuntimeError("Administrator profile/account mismatch.")
     bucket, api_id, licence_object = parent_proxy_parameters(app_profile, region, application_stack, account)
+    template_bucket = s3_bucket or ("" if bucket == PLACEHOLDER_BUCKET else bucket)
+    if not template_bucket:
+        raise RuntimeError(
+            "The access template exceeds CloudFormation's direct-upload limit and no application bucket exists yet. "
+            "Set AWS_ACCESS_S3_BUCKET to an existing S3 bucket in this account where the administrator can upload."
+        )
+    if not BUCKET_PATTERN.fullmatch(template_bucket):
+        raise RuntimeError(f"Invalid CloudFormation template staging bucket name: {template_bucket!r}.")
     command = [
         "aws", "--profile", admin_profile, "--region", region, "--no-cli-pager",
         "cloudformation", "deploy",
         "--stack-name", access_stack,
         "--template-file", str(ROOT / "deploy/aws/deployment-access.template.json"),
         "--capabilities", "CAPABILITY_NAMED_IAM",
+        "--s3-bucket", template_bucket,
         "--parameter-overrides",
         f"ApplicationStack={application_stack}",
         f"ArtifactStack={artifact_stack}",
@@ -92,6 +101,7 @@ def deploy(admin_profile, app_profile, region, account, access_stack, applicatio
         "--no-fail-on-empty-changeset",
     ]
     subprocess.run(command, check=True)
+    print(f"CloudFormation will stage the access template in S3 bucket {template_bucket}.")
     if bucket == PLACEHOLDER_BUCKET:
         print("Parent application stack not found; proxy permissions use nonfunctional placeholders.")
         print("After deploying the application, run this command again before creating the proxy VM.")
@@ -109,6 +119,7 @@ def main(argv=None):
     parser.add_argument("--application-stack", required=True)
     parser.add_argument("--artifact-stack", required=True)
     parser.add_argument("--deployment-role", required=True)
+    parser.add_argument("--s3-bucket", default="")
     args = parser.parse_args(argv)
     deploy(
         args.admin_profile,
@@ -119,6 +130,7 @@ def main(argv=None):
         args.application_stack,
         args.artifact_stack,
         args.deployment_role,
+        args.s3_bucket,
     )
 
 
