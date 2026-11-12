@@ -3,6 +3,7 @@
 This guide deploys the published signed-licence Agent Gateway images into your own Google Cloud project. You do not need the Agent Gateway application source, Go, Terraform, or Docker.
 
 For an overview of the deployed services and request flow, see the [GCP architecture](gcp/architecture.md). For indicative operating costs, see the [GCP pricing estimate](gcp/serverless-pricing.md).
+For the configured demo routes, approval walkthrough, and limits of advanced demos, see the [GCP demo guide](GCP-Demos.md).
 
 ## What you need
 

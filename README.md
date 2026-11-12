@@ -1,6 +1,6 @@
 # Agent Gateway — GCP deployment
 
-The **`gcp` branch** deploys Agent Gateway into your own Google Cloud Platform (GCP) project using published container images with signed-licence verification. Application source, Terraform, Docker, and a Go compiler are not required for customer deployment. The `main` branch contains the separate local/container demos.
+The **`gcp` branch** deploys Agent Gateway into your own Google Cloud Platform (GCP) project using published container images with signed-licence verification. Application source, Terraform, Docker, and a Go compiler are not required for customer deployment. See the [GCP demo guide](docs/GCP-Demos.md) for the configured routes, live weather walkthrough, and compatibility with the `main` demos. The `main` branch contains separate local/container demos.
 
 ## Target Serverless Architecture (`europe-west9` Paris)
 
