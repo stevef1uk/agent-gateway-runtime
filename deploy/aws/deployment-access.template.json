@@ -987,9 +987,7 @@
                 "iam:CreateInstanceProfile",
                 "iam:DeleteInstanceProfile",
                 "iam:GetInstanceProfile",
-                "iam:RemoveRoleFromInstanceProfile",
-                "iam:TagInstanceProfile",
-                "iam:UntagInstanceProfile"
+                "iam:RemoveRoleFromInstanceProfile"
               ],
               "Resource": {
                 "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*"

@@ -387,20 +387,6 @@
           {
             "Ref": "ProxyRole"
           }
-        ],
-        "Tags": [
-          {
-            "Key": "Name",
-            "Value": {
-              "Fn::Sub": "${ApplicationStack}-proxy-profile"
-            }
-          },
-          {
-            "Key": "agent-gateway-parent",
-            "Value": {
-              "Ref": "ApplicationStack"
-            }
-          }
         ]
       }
     },

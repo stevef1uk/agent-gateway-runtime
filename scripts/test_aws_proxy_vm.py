@@ -42,6 +42,7 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(role['PermissionsBoundary'],{'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${ApplicationStack}-ProxyRoleBoundary'})
   self.assertEqual(role['Tags'][1],{'Key':'agent-gateway-parent','Value':{'Ref':'ApplicationStack'}})
   self.assertEqual(resources['ProxyProfile']['Properties']['Roles'],[{'Ref':'ProxyRole'}])
+  self.assertNotIn('Tags',resources['ProxyProfile']['Properties'])
   userdata=resources['ProxyLaunchTemplate']['Properties']['LaunchTemplateData']['UserData']['Fn::Base64']['Fn::Sub'][0]
   self.assertIn((ROOT/'scripts/proxy-vm-bootstrap.py').read_text().strip(),userdata)
   data=resources['ProxyLaunchTemplate']['Properties']['LaunchTemplateData']
@@ -84,6 +85,8 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(passed['Condition']['StringEquals']['iam:PassedToService'],'ec2.amazonaws.com')
   profile=next(s for s in access['Statement'] if s['Sid']=='CreateAndManageProxyInstanceProfile')
   self.assertEqual(profile['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/${ApplicationStack}-proxy-ProxyProfile-*'})
+  self.assertNotIn('iam:TagInstanceProfile',profile['Action'])
+  self.assertNotIn('iam:UntagInstanceProfile',profile['Action'])
   self.assertNotIn('iam:UpdateAssumeRolePolicy',json.dumps(access))
  def test_deployment_access_scopes_cloudformation_lifecycle_to_proxy_stack(self):
   template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
