@@ -53,6 +53,9 @@ class ProxyLifecycle(unittest.TestCase):
  def test_proxy_role_permissions_are_bounded_and_scoped(self):
   template=json.loads((ROOT/'deploy/aws/deployment-access.template.json').read_text())
   resources=template['Resources']
+  params=template['Parameters']
+  self.assertEqual(params['ProxyActivationBucket']['Default'],'agent-gateway-proxy-not-configured')
+  self.assertEqual(params['ProxyAuthzApiId']['Default'],'notconfigured')
   boundary=resources['ProxyRoleBoundary']['Properties']['PolicyDocument']
   access=resources['ProxyRoleAccess']['Properties']['PolicyDocument']
   self.assertLessEqual(len(json.dumps(boundary,separators=(',',':'))),6144)

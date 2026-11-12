@@ -46,6 +46,7 @@ check:
 	python3 -B scripts/test_teardown_aws.py
 	python3 -B scripts/test_aws_customer.py
 	python3 -B scripts/test_emotion_activation.py
+	python3 -B scripts/test_aws_access_deploy.py
 	python3 -B scripts/test_aws_proxy_vm.py
 
 demo:
@@ -63,8 +64,7 @@ aws-preflight: aws-release-check
 	@echo 'Local release/config/activation checks passed. No AWS resources created.'
 aws-access-deploy:
 	@test -n "$(AWS_ADMIN_PROFILE)" -a -n "$(AWS_ACCOUNT)" || { echo 'Set AWS_ADMIN_PROFILE and AWS_ACCOUNT explicitly in aws-config.mk.' >&2; exit 2; }
-	@test "$$(aws sts get-caller-identity --profile "$(AWS_ADMIN_PROFILE)" --query Account --output text)" = "$(AWS_ACCOUNT)" || { echo 'Administrator profile/account mismatch.' >&2; exit 2; }
-	aws cloudformation deploy --profile "$(AWS_ADMIN_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_ACCESS_STACK)" --template-file deploy/aws/deployment-access.template.json --capabilities CAPABILITY_NAMED_IAM --parameter-overrides ApplicationStack="$(AWS_STACK)" ArtifactStack="$(AWS_ARTIFACT_STACK)" DeploymentRole="$(AWS_DEPLOYMENT_ROLE_NAME)" --no-fail-on-empty-changeset
+	python3 -B scripts/aws-access-deploy.py --admin-profile "$(AWS_ADMIN_PROFILE)" --app-profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --account "$(AWS_ACCOUNT)" --access-stack "$(AWS_ACCESS_STACK)" --application-stack "$(AWS_STACK)" --artifact-stack "$(AWS_ARTIFACT_STACK)" --deployment-role "$(AWS_DEPLOYMENT_ROLE_NAME)"
 aws-access-outputs:
 	@test -n "$(AWS_ADMIN_PROFILE)" || { echo 'Set AWS_ADMIN_PROFILE for access-stack inspection.' >&2; exit 2; }
 	aws cloudformation describe-stacks --profile "$(AWS_ADMIN_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_ACCESS_STACK)" --query 'Stacks[0].Outputs' --output table --no-cli-pager

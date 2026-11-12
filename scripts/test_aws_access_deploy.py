@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+import importlib.util
+import unittest
+from unittest.mock import patch
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("access_deploy", ROOT / "scripts/aws-access-deploy.py")
+access_deploy = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(access_deploy)
+
+
+class AccessDeploy(unittest.TestCase):
+    def setUp(self):
+        self.config = {
+            "account": "123456789012",
+            "stack": "agent-gateway-test",
+            "bucket": "agent-gateway-artifacts-test-a1b2c3",
+            "authz_url": "https://abc123.execute-api.eu-west-3.amazonaws.com",
+            "gateway_licence_object": "activation/gateway.token",
+        }
+
+    def test_reads_exact_proxy_scope_from_parent_configuration(self):
+        self.assertEqual(
+            access_deploy.proxy_parameters(self.config, "123456789012", "agent-gateway-test"),
+            ("agent-gateway-artifacts-test-a1b2c3", "abc123", "activation/gateway.token"),
+        )
+
+    def test_rejects_malformed_bucket_instead_of_emitting_invalid_parameter(self):
+        self.config["bucket"] = "ProxyActivationBucket=agent-gateway-artifacts-test"
+        with self.assertRaisesRegex(RuntimeError, "invalid S3 bucket name"):
+            access_deploy.proxy_parameters(self.config, "123456789012", "agent-gateway-test")
+
+    def test_rejects_cross_account_or_wrong_parent_configuration(self):
+        self.config["account"] = "999999999999"
+        with self.assertRaisesRegex(RuntimeError, "account does not match"):
+            access_deploy.proxy_parameters(self.config, "123456789012", "agent-gateway-test")
+        self.config["account"] = "123456789012"
+        self.config["stack"] = "agent-gateway-other"
+        with self.assertRaisesRegex(RuntimeError, "stack does not match"):
+            access_deploy.proxy_parameters(self.config, "123456789012", "agent-gateway-test")
+
+    def test_missing_parent_uses_nonfunctional_defaults(self):
+        with patch.object(access_deploy, "aws", side_effect=RuntimeError("Stack with id agent-gateway-test does not exist")):
+            self.assertEqual(
+                access_deploy.parent_proxy_parameters("app", "eu-west-3", "agent-gateway-test", "123456789012"),
+                (
+                    access_deploy.PLACEHOLDER_BUCKET,
+                    access_deploy.PLACEHOLDER_API_ID,
+                    "activation/gateway.token",
+                ),
+            )
+
+    def test_parent_permissions_errors_are_not_silently_ignored(self):
+        with patch.object(access_deploy, "aws", side_effect=RuntimeError("AccessDenied")):
+            with self.assertRaisesRegex(RuntimeError, "AccessDenied"):
+                access_deploy.parent_proxy_parameters("app", "eu-west-3", "agent-gateway-test", "123456789012")
+
+    def test_deploy_passes_exact_values_to_cloudformation(self):
+        with patch.object(access_deploy, "aws", return_value={"Account": "123456789012"}), \
+             patch.object(access_deploy, "parent_proxy_parameters", return_value=(
+                 "agent-gateway-artifacts-test-a1b2c3", "abc123", "activation/gateway.token"
+             )), \
+             patch.object(access_deploy.subprocess, "run") as run:
+            access_deploy.deploy(
+                "admin", "app", "eu-west-3", "123456789012",
+                "agent-gateway-access-test", "agent-gateway-test",
+                "agent-gateway-artifacts-test", "AgentGatewayTest",
+            )
+        command = run.call_args.args[0]
+        self.assertIn("ProxyActivationBucket=agent-gateway-artifacts-test-a1b2c3", command)
+        self.assertIn("ProxyAuthzApiId=abc123", command)
+        self.assertIn("ProxyGatewayLicenceObject=activation/gateway.token", command)
+        self.assertTrue(run.call_args.kwargs["check"])
+
+
+if __name__ == "__main__":
+    unittest.main()

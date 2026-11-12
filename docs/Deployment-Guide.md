@@ -222,7 +222,7 @@ make aws-access-deploy AWS_ADMIN_PROFILE=agent-gateway-admin
 make aws-access-outputs AWS_ADMIN_PROFILE=agent-gateway-admin
 ```
 
-The first command executes a change set and waits. **Expected:** `CREATE_COMPLETE` or `UPDATE_COMPLETE`.
+The first command executes a change set and waits. Before the application exists, it uses nonfunctional placeholder values for optional proxy permissions; after deploying the application, run it again to synchronize those permissions from the parent's `DemoConfiguration` output. **Expected:** `CREATE_COMPLETE` or `UPDATE_COMPLETE`.
 
 **Console:** in CloudFormation, Paris (`eu-west-3`), create the stack `agent-gateway-access-dev` by uploading the template. If it already exists, choose **Update stack → Create a change set → Replace existing template → Upload a template file** instead. Keep `DeploymentRole=AgentGatewayDev`, `ApplicationStack=agent-gateway-dev` and `ArtifactStack=agent-gateway-artifacts-dev`. Review the changes, acknowledge named IAM resources, and execute the change set. Then read the outputs from the stack's **Outputs** tab and put `WorkloadBoundaryArn` into `WORKLOAD_BOUNDARY_ARN`.
 
@@ -245,23 +245,15 @@ The optional [proxy VM](Proxy-VM.md) is not part of the normal application deplo
 
 **An administrator must do this update.** Sign in to the AWS Console with an account administrator identity that can update CloudFormation and IAM; the restricted `agent-gateway-dev` deployment role cannot update its own access stack. This is a CloudFormation template upload, not an IAM inline-policy edit: do not paste this template or the separate `Test` policy into **IAM → Roles → AgentGatewayDev → Add inline policy**.
 
-To apply the proxy-stack permission:
+After the application stack is deployed, use the CLI command below instead of manually entering the proxy parameters in the CloudFormation console. It reads the exact bucket, API ID and licence object from `DemoConfiguration`, validates them, and passes them to CloudFormation; this avoids copy/paste and parameter-pattern errors:
 
-1. Update the administrator's runtime checkout to the latest `aws` branch. The file to upload is `deploy/aws/deployment-access.template.json` inside that checkout; do not use the example proxy configuration or an IAM policy JSON.
-2. In the AWS Console, switch to **Europe (Paris), `eu-west-3`**, open **CloudFormation**, and select **`agent-gateway-access-dev`** (not `agent-gateway-dev`).
-3. Choose **Update stack → Create a change set → Replace existing template → Upload a template file**, then select `deploy/aws/deployment-access.template.json` from the updated checkout on the administrator's computer.
-4. Keep the existing parameters, including `DeploymentRole=AgentGatewayDev`. Set the new `ProxyActivationBucket` and `ProxyAuthzApiId` parameters to the matching values from the parent stack's `DemoConfiguration` output. `ProxyGatewayLicenceObject` defaults to `activation/gateway.token`; change it only if the proxy uses a different gateway licence object. To print the required values without exposing secrets, run:
+```bash
+make aws-access-deploy AWS_ADMIN_PROFILE=agent-gateway-admin
+```
 
-   ```bash
-   aws cloudformation describe-stacks --profile agent-gateway-dev \
-     --region eu-west-3 --stack-name agent-gateway-dev \
-     --query "Stacks[0].Outputs[?OutputKey=='DemoConfiguration'].OutputValue | [0]" \
-     --output text |
-     python3 -c 'import json,sys; c=json.load(sys.stdin); print("ProxyActivationBucket="+c["bucket"]); print("ProxyAuthzApiId="+c["authz_url"].split("://",1)[1].split(".",1)[0]); print("ProxyGatewayLicenceObject="+c["gateway_licence_object"])'
-   ```
+The command uses `AWS_PROFILE` (normally `agent-gateway-dev`) only to read the application stack and uses `AWS_ADMIN_PROFILE` to update the access stack. Ensure both profiles target the same `AWS_ACCOUNT`. Review the CloudFormation change set and wait for `UPDATE_COMPLETE`. The parameter defaults in the template are deliberately nonfunctional placeholders; don't use the console to apply them after the application exists.
 
-   Review the change set: it should update `DeploymentAccess` and create `ProxyNetworkAccess`, `ProxyRoleBoundary`, and `ProxyRoleAccess`. Execute it and wait for the access stack to show `UPDATE_COMPLETE`; creating the change set alone does not apply the permission.
-5. If a failed `agent-gateway-dev-proxy` stack already exists, first retry `make aws-proxy-delete` so CloudFormation can clean up its resources with the updated permissions. For a stack already in `ROLLBACK_FAILED` or `DELETE_FAILED`, the current template includes `ec2:DescribeVpcs` and `ec2:DeleteVpc` for the tagged proxy VPC. Do not manually delete stack-owned resources. Once the proxy stack is gone, retry `make aws-proxy-create` with `AWS_VM_PROFILE=agent-gateway-dev`.
+If a failed `agent-gateway-dev-proxy` stack already exists, first retry `make aws-proxy-delete` so CloudFormation can clean up its resources with the updated permissions. For a stack already in `ROLLBACK_FAILED` or `DELETE_FAILED`, the current template includes `ec2:DescribeVpcs` and `ec2:DeleteVpc` for the tagged proxy VPC. Do not manually delete stack-owned resources. Once the proxy stack is gone, retry `make aws-proxy-create` with `AWS_VM_PROFILE=agent-gateway-dev`.
 
 The update adds lifecycle access only for the `agent-gateway-dev-proxy` stack name, read access to the public AMI parameter, and permissions for the proxy's VPC and Internet Gateway lifecycle, scoped by resource type, region and expected tags. It does not grant administrator access, general EC2/VPC resource-creation permissions, role trust-policy editing, or unrestricted role passing. The proxy role cannot exceed its boundary, even if its inline permissions are changed. If a later operation is denied, inspect the proxy stack's CloudFormation **Events** for the exact action and resource before changing any other policy. Do not add `AdministratorAccess`, `AmazonEC2FullAccess` or `IAMFullAccess`. The `aws-proxy-plan` command is offline sample output and does not check permissions.
 

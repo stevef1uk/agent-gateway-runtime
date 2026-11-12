@@ -19,13 +19,15 @@
     },
     "ProxyActivationBucket": {
       "Type": "String",
+      "Default": "agent-gateway-proxy-not-configured",
       "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
-      "Description": "Exact ActivationBucket value from the application stack's DemoConfiguration output."
+      "Description": "Set automatically by make aws-access-deploy from the application stack; the default is a nonfunctional placeholder."
     },
     "ProxyAuthzApiId": {
       "Type": "String",
+      "Default": "notconfigured",
       "AllowedPattern": "^[a-z0-9]+$",
-      "Description": "API ID from the authz_url value in the application stack's DemoConfiguration output."
+      "Description": "Set automatically by make aws-access-deploy from the application stack; the default is a nonfunctional placeholder."
     },
     "ProxyGatewayLicenceObject": {
       "Type": "String",
