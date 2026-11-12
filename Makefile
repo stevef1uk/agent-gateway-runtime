@@ -25,7 +25,7 @@ PROXY_INSTANCE_TYPE ?= t4g.small
 PROXY_LOCAL_PORT ?= 8088
 PROXY_CONFIG ?= deploy/aws/demo-config.example.json
 CFN_LINT_BIN ?= cfn-lint
-.PHONY: help check demo aws-identity aws-release-check aws-preflight aws-access-deploy aws-access-outputs aws-deploy aws-outputs aws-demo aws-demo-url aws-demo-list aws-demo-delete aws-demo-delete-all aws-emotion-token-upload aws-emotion-activate aws-proxy-plan aws-proxy-create aws-proxy-connect aws-proxy-status aws-proxy-delete aws-cleanup aws-ecr-cleanup aws-access-delete aws-validate
+.PHONY: help check demo aws-identity aws-release-check aws-preflight aws-access-deploy aws-access-outputs aws-deploy aws-outputs aws-demo aws-demo-url aws-demo-list aws-demo-delete aws-demo-delete-all aws-emotion-token-upload aws-emotion-activate aws-emotion-restore-bundled aws-proxy-plan aws-proxy-create aws-proxy-connect aws-proxy-status aws-proxy-delete aws-cleanup aws-ecr-cleanup aws-access-delete aws-validate
 help:
 	@echo 'Start with docs/Deployment-Guide.md (customer deployment and testing).'
 	@echo 'make check: offline checks; creates no AWS resources'
@@ -86,6 +86,8 @@ aws-demo-delete-all:
 aws-emotion-activate:
 	@test -n "$(EMOTION_TOKEN_FILE)" || { echo 'Set EMOTION_TOKEN_FILE to your vendor-issued licence token.' >&2; exit 2; }
 	python3 -B scripts/aws-emotion-activate.py --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --token "$(EMOTION_TOKEN_FILE)" $(if $(strip $(EMOTION_IMAGE_URI)),--image-uri "$(EMOTION_IMAGE_URI)")
+aws-emotion-restore-bundled:
+	python3 -B scripts/aws-emotion-activate.py --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --bundled-token $(if $(strip $(EMOTION_IMAGE_URI)),--image-uri "$(EMOTION_IMAGE_URI)")
 aws-emotion-token-upload:
 	AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AWS_STACK="$(AWS_STACK)" TOKEN_FILE="$(TOKEN_FILE)" bash scripts/aws-licence-upload.sh
 aws-proxy-plan:

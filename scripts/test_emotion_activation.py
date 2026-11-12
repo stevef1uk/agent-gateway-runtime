@@ -55,4 +55,27 @@ class Activation(unittest.TestCase):
  def test_missing_files_stop_before_cloud_calls(self):
   with patch.object(sys,'argv',['activate','--profile','p','--region','eu-west-3','--stack','s','--token','/missing/token']),patch.object(module.subprocess,'run') as run,contextlib.redirect_stderr(io.StringIO()),self.assertRaises(SystemExit):module.main()
   run.assert_not_called()
+ def test_restores_bundled_token_without_uploading_token(self):
+  with tempfile.TemporaryDirectory() as folder:
+   folder=pathlib.Path(folder);template={'Resources':{'EmotionFunction':{'Properties':{'Code':{'ImageUri':'old-image'},'Environment':{'Variables':{'EMOTION_LICENCE_BUCKET':'private-bucket','EMOTION_LICENCE_OBJECT':'activation/emotion.token','EMOTION_LICENCE_VERSION':'old-version'}}}}}}
+   calls=[];captured={}
+   def run(args,**kwargs):
+    calls.append(args)
+    if 'get-caller-identity' in args:data={'Account':'123456789012','Arn':'arn:aws:iam::123456789012:user/operator'}
+    elif 'describe-stacks' in args:data={'Stacks':[{'StackId':'arn:aws:cloudformation:eu-west-3:123456789012:stack/agent-gateway-test-demo-mcp-emotion/id','Parameters':[]}]}
+    elif 'get-template' in args:data={'TemplateBody':template}
+    elif 'update-stack' in args:
+     captured['template']=json.loads(pathlib.Path(args[args.index('--template-body')+1][7:]).read_text());data={}
+    elif 'describe-stack-resource' in args:data={'StackResourceDetail':{'PhysicalResourceId':'agent-gateway-test-demo-mcp-emotion-backend'}}
+    elif 'invoke' in args:
+     pathlib.Path(args[args.index('--output')-1]).write_text(json.dumps({'statusCode':204}));data={}
+    else:data={}
+    return subprocess.CompletedProcess(args,0,json.dumps(data),'')
+   argv=['activate','--profile','operator','--region','eu-west-3','--stack','agent-gateway-test','--bundled-token']
+   with patch.object(sys,'argv',argv),patch.object(module.subprocess,'run',side_effect=run),contextlib.redirect_stdout(io.StringIO()):
+    module.main()
+   env=captured['template']['Resources']['EmotionFunction']['Properties']['Environment']['Variables']
+   self.assertEqual(env['EMOTION_LICENCE_VERSION'],'')
+   self.assertFalse(any('put-object' in call for call in calls))
+   self.assertFalse(any('--body' in call for call in calls))
 if __name__=='__main__':unittest.main()
