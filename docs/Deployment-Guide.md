@@ -239,6 +239,18 @@ Pulling a newer template does **not** update live IAM policies. If deployment re
 
 If it still fails, inspect IAM → Roles → **AgentGatewayDev → Permissions** as administrator: the access stack's `DeploymentAccess` managed policy must be attached and its default version must include the missing action. Changing only the IAM user's permissions, or recreating the application, does not update the assumed role.
 
+### Optional proxy VM permissions
+
+The optional [proxy VM](Proxy-VM.md) is not part of the normal application deployment. The restricted `AgentGatewayDev` role is **not currently authorized to create it**: the existing deployment policy scopes CloudFormation operations to the parent, artifact and `*-demo-*` stacks, while the proxy stack is named `<application-stack>-proxy` (for example, `agent-gateway-dev-proxy`). The current proxy creation command also asks CloudFormation to create EC2/VPC resources and an IAM instance role/profile without passing a dedicated CloudFormation execution role. Adding only the missing proxy stack name will therefore not grant all permissions required to create the VM.
+
+Do not attach `AdministratorAccess`, `AmazonEC2FullAccess` or `IAMFullAccess` to `AgentGatewayDev`, and do not use the root profile for `make aws-proxy-create`. The safe implementation is to update the proxy provisioning workflow to use a dedicated CloudFormation execution role:
+
+* `AgentGatewayDev` should receive only CloudFormation lifecycle/change-set permissions scoped to the exact proxy stack name and `iam:PassRole` for that one proxy execution role, conditioned on `iam:PassedToService` being `cloudformation.amazonaws.com`.
+* The dedicated execution role should trust CloudFormation and receive only the EC2/VPC, launch-template/instance, and IAM role/instance-profile actions required by `deploy/aws/proxy-vm.template.json`, scoped to the proxy resources where AWS supports resource-level permissions. Its `iam:PassRole` should be limited to the proxy instance role and conditioned on `iam:PassedToService` being `ec2.amazonaws.com`.
+* The human/operator profile used for `aws-proxy-status`, `aws-proxy-connect` and `aws-proxy-delete` separately needs the read, SSM session and stack-delete operations for this proxy stack. Keep these out of the application workload role.
+
+These proxy-specific permissions are **not included in the current access template**, and the current create script does not yet pass a dedicated execution role. An administrator must not add the statements above to the live role as a workaround; first update and review the access template and proxy provisioning workflow together. Until that change is available and the access stack has been updated by an administrator, `make aws-proxy-create` with `AWS_VM_PROFILE=agent-gateway-dev` will fail with an authorization error. The `aws-proxy-plan` command is offline sample output and does not check these permissions.
+
 These read-only checks use the default profile and stack names; adjust them if you chose others. They discover the policy ARN and version automatically:
 
 ```bash
