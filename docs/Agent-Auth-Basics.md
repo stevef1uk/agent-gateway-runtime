@@ -80,6 +80,19 @@ flowchart LR
    tokensvc will not mint more JWTs, and the gateway's revocation checks also
    reject JWTs that were already issued.
 
+### Why does the JWT expire so quickly?
+
+A Bearer JWT can be used by whoever holds it. Its short lifetime limits how
+long a stolen JWT can be used: by default, it lasts 5 minutes (the requested
+and configured lifetime can differ). When it expires, the agent does not need
+a new human delegation; it asks tokensvc for another JWT using the same
+`delegation_id` and `agent_secret`, as long as the delegation is still active.
+
+Keep the `agent_secret` especially safe. Unlike an expired JWT, a stolen
+`agent_secret` could be used to mint more JWTs while its delegation remains
+active. Revoking the delegation stops new mints and causes already-issued
+JWTs to be rejected by the gateway.
+
 **Remember:** human grants scoped permission → agent receives a
 `delegation_id` and `agent_secret` (plus an initial JWT) → agent exchanges
 the ID and secret for short-lived JWTs → agent presents a JWT on each request.
