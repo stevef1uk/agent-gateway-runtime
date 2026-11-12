@@ -88,6 +88,8 @@ The walkthrough covers sign-in, delegation, agent activity, a held action, a hum
 
 You can also explore the live CRM demonstration at [agw.sjfisher.com](https://agw.sjfisher.com) using the [Claude CRM tutorial](docs/Claude-CRM-Tutorial.md). See [Claude integration](docs/Claude-Integration.md) for the wiring details.
 
+Recently added are **aws** and **gcp** branches to this repository which provide the ability to host Agent Gateway on your own Cloud infrastructure.
+
 ## Use it with your own systems
 
 Agent Gateway is designed to govern access to systems you already have, including:
