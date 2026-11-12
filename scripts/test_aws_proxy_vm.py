@@ -65,6 +65,12 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(describe_vpcs['Action'],'ec2:DescribeVpcs')
   self.assertEqual(describe_vpcs['Resource'],'*')
   self.assertEqual(describe_vpcs['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
+  delete_vpc=next(statement for statement in proxy_statements if statement['Sid']=='DeleteProxyVpc')
+  vpc_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}
+  self.assertEqual(delete_vpc['Action'],'ec2:DeleteVpc')
+  self.assertEqual(delete_vpc['Resource'],vpc_arn)
+  self.assertEqual(delete_vpc['Condition']['StringEquals']['ec2:ResourceTag/Name'],{'Fn::Sub':'${ApplicationStack}-proxy-vpc'})
+  self.assertEqual(delete_vpc['Condition']['StringEquals']['ec2:ResourceTag/agent-gateway-parent'],{'Ref':'ApplicationStack'})
   gateway_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:internet-gateway/*'}
   create_gateway=next(statement for statement in proxy_statements if statement['Sid']=='CreateProxyInternetGateway')
   self.assertEqual(create_gateway['Action'],'ec2:CreateInternetGateway')
@@ -87,7 +93,6 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(delete_gateway['Action'],'ec2:DeleteInternetGateway')
   self.assertEqual(delete_gateway['Resource'],gateway_arn)
   create_vpc=next(statement for statement in proxy_statements if statement['Sid']=='CreateProxyVpc')
-  vpc_arn={'Fn::Sub':'arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/*'}
   self.assertEqual(create_vpc['Action'],'ec2:CreateVpc')
   self.assertEqual(create_vpc['Resource'],vpc_arn)
   self.assertEqual(create_vpc['Condition']['ForAllValues:StringEquals']['aws:TagKeys'],['Name','agent-gateway-parent'])
