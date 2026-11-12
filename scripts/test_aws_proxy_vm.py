@@ -56,9 +56,8 @@ class ProxyLifecycle(unittest.TestCase):
   self.assertEqual(template_tags[0]['ResourceType'],'launch-template')
   self.assertEqual(template_tags[0]['Tags'][1],{'Key':'agent-gateway-parent','Value':{'Ref':'ApplicationStack'}})
   launch_tags=data['TagSpecifications']
-  self.assertEqual({tag['ResourceType'] for tag in launch_tags},{'instance','volume'})
-  interface_tags=data['NetworkInterfaces'][0]['TagSpecifications'][0]
-  self.assertEqual(interface_tags['ResourceType'],'network-interface')
+  self.assertEqual({tag['ResourceType'] for tag in launch_tags},{'instance','volume','network-interface'})
+  interface_tags=next(tag for tag in launch_tags if tag['ResourceType']=='network-interface')
   self.assertEqual(interface_tags['Tags'][1],{'Key':'agent-gateway-parent','Value':{'Ref':'ApplicationStack'}})
   self.assertFalse(any(v['Type']=='AWS::AutoScaling::AutoScalingGroup' for v in resources.values()))
  def test_proxy_role_permissions_are_bounded_and_scoped(self):

@@ -442,25 +442,6 @@
                 {
                   "Ref": "ProxySecurityGroup"
                 }
-              ],
-              "TagSpecifications": [
-                {
-                  "ResourceType": "network-interface",
-                  "Tags": [
-                    {
-                      "Key": "Name",
-                      "Value": {
-                        "Fn::Sub": "${AWS::StackName}-network-interface"
-                      }
-                    },
-                    {
-                      "Key": "agent-gateway-parent",
-                      "Value": {
-                        "Ref": "ApplicationStack"
-                      }
-                    }
-                  ]
-                }
               ]
             }
           ],
@@ -503,6 +484,23 @@
                   "Key": "Name",
                   "Value": {
                     "Fn::Sub": "${AWS::StackName}-root"
+                  }
+                },
+                {
+                  "Key": "agent-gateway-parent",
+                  "Value": {
+                    "Ref": "ApplicationStack"
+                  }
+                }
+              ]
+            },
+            {
+              "ResourceType": "network-interface",
+              "Tags": [
+                {
+                  "Key": "Name",
+                  "Value": {
+                    "Fn::Sub": "${AWS::StackName}-network-interface"
                   }
                 },
                 {
