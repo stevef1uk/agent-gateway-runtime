@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import contextlib,importlib.util,io,json,pathlib,unittest
+import contextlib,importlib.util,io,json,pathlib,tempfile,unittest
 from unittest.mock import patch
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('vm',ROOT/'scripts/aws-proxy-vm.py');vm=importlib.util.module_from_spec(spec);spec.loader.exec_module(vm)
@@ -20,6 +20,22 @@ class ProxyLifecycle(unittest.TestCase):
    vm.run(['delete','--vm-profile','test','--stack','agent-gateway-test'])
    self.assertEqual(aws.call_args_list[1].args[-1],'agent-gateway-test-proxy')
    self.assertIn('stack-delete-complete',run.call_args.args[0])
+ def test_create_writes_cli_json_parameter_overrides(self):
+  config={'account':'123456789012','stack':'agent-gateway-test','gateway_image':'example/gateway:latest','authz_url':'https://abc.execute-api.eu-west-3.amazonaws.com','console_url':'https://console.example.com','table':'agent-gateway-test-domain','security_table':'agent-gateway-test-security','bucket':'agent-gateway-artifacts-test','key_object':'activation/customer.key','key_version':'key-version','gateway_licence_object':'activation/gateway.token','gateway_licence_version':'licence-version'}
+  captured={}
+  def deploy(command,check):
+   parameter_file=pathlib.Path(command[command.index('--parameter-overrides')+1][7:])
+   captured['command']=command
+   captured['overrides']=json.loads(parameter_file.read_text())
+   captured['mode']=parameter_file.stat().st_mode & 0o777
+   self.assertTrue(check)
+  with tempfile.TemporaryDirectory() as folder,patch.object(vm,'ROOT',pathlib.Path(folder)),patch.object(vm,'deploy_secrets',return_value={'jwt':'test-secret-value'}),patch.object(vm,'call',side_effect=[{'Account':'123456789012','Arn':'arn:aws:sts::123456789012:assumed-role/VM/test'},{'Stacks':[{'Outputs':[{'OutputKey':'DemoConfiguration','OutputValue':json.dumps(config)}]}]},{'Stacks':[{'Outputs':[]}]}]),patch.object(vm.subprocess,'run',side_effect=deploy),contextlib.redirect_stdout(io.StringIO()):
+   vm.run(['create','--profile','app','--vm-profile','vm','--stack','agent-gateway-test'])
+   self.assertIn('JwtSecretValue=test-secret-value',captured['overrides'])
+   self.assertIn('InstanceType=t4g.small',captured['overrides'])
+   self.assertEqual(captured['mode'],0o600)
+   self.assertNotIn('test-secret-value',' '.join(captured['command']))
+   self.assertFalse((pathlib.Path(folder)/'dist/aws-lambda/proxy/overrides.txt').exists())
  def test_template_preserves_source_bootstrap_and_constraints(self):
   template=json.loads((ROOT/'deploy/aws/proxy-vm.template.json').read_text());resources=template['Resources']
   userdata=resources['ProxyLaunchTemplate']['Properties']['LaunchTemplateData']['UserData']['Fn::Base64']['Fn::Sub'][0]

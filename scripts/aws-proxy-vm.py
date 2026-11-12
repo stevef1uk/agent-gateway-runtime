@@ -36,13 +36,15 @@ def run(argv=None):
   if config['account']!=identity['Account']:raise RuntimeError('VM profile and parent stack must be in the same account.')
   config['jwt_secret']=deploy_secrets()['jwt']
   folder=ROOT/'dist/aws-lambda/proxy';folder.mkdir(parents=True,exist_ok=True)
-  params=folder/'parameters.json';params.write_text(json.dumps(parameters(config,a.instance_type),indent=2)+'\n')
+  (folder/'parameters.json').unlink(missing_ok=True)
   overrides=folder/'overrides.txt'
   fd=os.open(overrides,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
-  with os.fdopen(fd,'w') as f:f.write(' '.join(v['ParameterKey']+'='+v['ParameterValue'] for v in parameters(config,a.instance_type))+'\n')
+  os.fchmod(fd,0o600)
+  with os.fdopen(fd,'w') as f:json.dump([v['ParameterKey']+'='+v['ParameterValue'] for v in parameters(config,a.instance_type)],f);f.write('\n')
   # aws cloudformation deploy handles create/update/no-change and waits. This is the only billable create path.
   command=['aws','--profile',a.vm_profile,'--region',a.region,'cloudformation','deploy','--stack-name',vm_stack,'--template-file',str(ROOT/'deploy/aws/proxy-vm.template.json'),'--parameter-overrides','file://'+str(overrides),'--capabilities','CAPABILITY_IAM','--no-fail-on-empty-changeset']
-  subprocess.run(command,check=True)
+  try:subprocess.run(command,check=True)
+  finally:overrides.unlink(missing_ok=True)
   print(json.dumps({'stack':vm_stack,'outputs':describe().get('Outputs',[])},indent=2));return
  if a.action=='delete':
   try:describe()
