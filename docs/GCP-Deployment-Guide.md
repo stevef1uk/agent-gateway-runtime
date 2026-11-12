@@ -12,12 +12,19 @@ For an overview of the deployed services and request flow, see the [GCP architec
 
 Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the Agent Gateway signed licence token to a private Cloud Storage bucket. With `--emotion-token-file`, it also uploads the vendor-issued Emotion token to a versioned object and grants access only to the Emotion service account. Keep that token outside Git; the script does not upload the customer private key for Emotion.
 
-The published GCP Emotion wrapper uses a pinned evaluation image, which can run
-without an external customer key. This is separate from customer-specific model
-packages, which require their matching private key and licence token. If an
-earlier deployment uploaded `activation/customer_private.pem` or granted the
-Emotion service account bucket access, those existing resources are not removed
-automatically; review them before removing them if they are no longer needed.
+For a licensed Emotion deployment, pass the vendor-issued Emotion token with
+`--emotion-token-file`. Cloud Run fetches that versioned token at startup; it
+does not need to be embedded in the image. The image build does not decrypt
+model files; the vendor runtime writes decryption output to ephemeral `/tmp`,
+not back into the image. All signed-in users share this licensed Emotion
+service and still need their own scoped delegation.
+
+The pinned evaluation image can run without an external customer decryption
+key. This is separate from customer-specific model packages, which require
+their matching private key and licence token. If an earlier deployment uploaded
+`activation/customer_private.pem` or granted the Emotion service account bucket
+access, those existing resources are not removed automatically; review them
+before removing them if they are no longer needed.
 
 ## 1. Prepare the project
 
@@ -91,6 +98,7 @@ scripts/deploy-gcp.sh \
   --keys-directory keys \
   --admin-emails "admin@example.com" \
   --emotion \
+  --emotion-token-file keys/local-activation/emotion.token \
   --apply
 ```
 
