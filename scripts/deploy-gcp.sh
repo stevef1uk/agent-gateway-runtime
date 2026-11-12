@@ -306,7 +306,7 @@ gcloud firestore indexes composite create --collection-group=agw_domains \
   --database='(default)' --project="$project_id" >/dev/null 2>&1 || true
 echo "Descending Firestore index request complete. Deploying Cloud Run services..."
 
-gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,GATEWAY_IGNORE_AGENT_OVERRIDES=1,GCP_REGO_ENABLED=1,$activation_env"
+gateway_env="SERVICE_NAME=gateway,CONSOLIDATED_CONTROL_PLANE=1,GCP_SERVERLESS_PROFILE=1,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id,FIRESTORE_DATABASE_ID=(default),FIRESTORE_NAMESPACE=$deployment_id,FIRESTORE_SECURITY_NAMESPACE=${deployment_id}-sec,INTERNAL_GCP_IAM=1,GCP_INTERNAL_AUDIENCE=https://bootstrap.invalid,GCP_INTERNAL_CALLER_EMAILS=$web_sa,GATEWAY_IGNORE_AGENT_OVERRIDES=1,GCP_REGO_ENABLED=1,$activation_env"
 gateway_env+=",UPSTREAM_URL=https://api.open-meteo.com,UPSTREAM_GEOCODING_URL=https://geocoding-api.open-meteo.com,UPSTREAM_DEMO_API_URL=https://jsonplaceholder.typicode.com,UPSTREAM_STRIP_CREDENTIALS=1"
 if [[ "$emotion" -eq 1 ]]; then
   gateway_env+=",GCP_EMOTION_DETAILED_APPROVAL=1"
