@@ -6,14 +6,86 @@ the gateway's **egress proxy** (used with NVIDIA OpenShell sandboxes). If
 you already know the system, see [Architecture.md](Architecture.md) for
 the deeper story.
 
-## The four players
+## One-paragraph summary
 
-| Player | Port | Role in the story |
-|---|---|---|
-| **authz** | 8081 | Keeps the *delegations*. When a human grants permission, this service issues the two credentials the agent will use. |
-| **tokensvc** | 8082 | The *mint*. Takes the two credentials for a short-lived JWT. |
-| **gateway** | 8080 | The *tool gateway* (policy enforcement point). Every tool call must present the JWT here. |
-| **gateway (proxy mode)** | 8088 | The *egress proxy*. Outbound traffic from OpenShell sandboxes passes through here, authenticated with the same kind of JWT. |
+A human grants a scoped **delegation**, and the agent receives a
+`delegation_id`, an `agent_secret`, and an initial short-lived **JWT**. The
+agent can exchange the ID and secret with **tokensvc** for fresh JWTs, then
+present a JWT on each request to the **tool gateway** or, for OpenShell, the
+**egress proxy**. Each request is checked against the delegation and policy:
+it can be allowed, held for human approval, or denied. Revoking the
+delegation prevents new tokens from being minted and causes already-issued
+JWTs to be rejected by the gateway.
+
+## The flow at a glance
+
+```mermaid
+flowchart LR
+    Human["Human"] -->|"Creates scoped delegation"| Authz["authz<br/>stores permission"]
+    Authz -->|"delegation_id + agent_secret<br/>and an initial JWT"| Agent["Agent"]
+
+    Agent -->|"delegation_id + agent_secret"| TokenSvc["tokensvc :8082<br/>mints short-lived JWT"]
+    TokenSvc -->|"JWT (5 min by default)"| Agent
+
+    Agent -->|"Authorization: Bearer JWT"| Gateway["Tool gateway :8080"]
+    Agent -->|"Proxy Basic username = JWT"| Proxy["Egress proxy :8088<br/>for OpenShell"]
+    Gateway --> Policy["Check each request<br/>against delegation + policy"]
+    Proxy --> Policy
+    Policy --> Allow["Allow"]
+    Policy --> Approval["Require human approval"]
+    Policy --> Deny["Deny"]
+
+    Authz -.->|"Revocation blocks new mints"| TokenSvc
+    Authz -.->|"Revocation also rejects issued JWTs"| Policy
+
+    classDef person fill:#f3e8ff,stroke:#7e22ce,color:#3b0764,stroke-width:2px
+    classDef service fill:#e0f2fe,stroke:#0284c7,color:#082f49,stroke-width:2px
+    classDef agent fill:#dcfce7,stroke:#16a34a,color:#052e16,stroke-width:2px
+    classDef decision fill:#fef3c7,stroke:#d97706,color:#451a03,stroke-width:2px
+    classDef outcome fill:#f8fafc,stroke:#64748b,color:#0f172a
+    classDef blocked fill:#fee2e2,stroke:#dc2626,color:#450a0a
+
+    class Human person
+    class Authz,TokenSvc,Gateway,Proxy service
+    class Agent agent
+    class Policy decision
+    class Allow,Approval outcome
+    class Deny blocked
+```
+
+## New here? The short version
+
+1. **A human grants permission.** The human creates a scoped delegation:
+   permission for a named agent to perform specified actions on specified
+   resources, possibly with limits or approval requirements. authz returns a
+   `delegation_id`, an `agent_secret`, and an initial short-lived JWT. The
+   `delegation_id` identifies the grant; the `agent_secret` proves the agent
+   is allowed to mint tokens for it. Deliver the secret to the agent securely:
+   it is shown only when the delegation is created.
+2. **The agent gets a temporary JWT.** When it needs a fresh token, it sends
+   the `delegation_id` and `agent_secret` to tokensvc (`POST /token`, normally
+   on port 8082). The default JWT lifetime is 5 minutes; the actual lifetime
+   depends on the token request and deployment configuration.
+3. **The agent presents the JWT on each request.**
+   - For a tool/API call through the gateway, send it as
+     `Authorization: Bearer <JWT>`.
+   - For an OpenShell sandbox using the egress proxy, put the JWT in the
+     username field of the proxy's Basic-auth file; OpenShell sends it as
+     proxy credentials. The password field can be an arbitrary value.
+4. **Each request is checked against the delegation and policy.** Depending
+   on the request, the system allows it, holds it for human approval, or
+   denies it.
+5. **Renew or revoke.** When a JWT expires, the agent can mint another while
+   the delegation remains active. If the human revokes the delegation,
+   tokensvc will not mint more JWTs, and the gateway's revocation checks also
+   reject JWTs that were already issued.
+
+**Remember:** human grants scoped permission → agent receives a
+`delegation_id` and `agent_secret` (plus an initial JWT) → agent exchanges
+the ID and secret for short-lived JWTs → agent presents a JWT on each request.
+The ID and secret are credentials for minting; the JWT is the temporary
+credential presented to the gateway. Revocation ends the delegation even if
+a JWT has not yet reached its expiry time.
 
 ## The two credentials an agent receives
 
@@ -176,12 +248,11 @@ unaffected. Full wiring instructions are in
 | `407` from the egress proxy | Proxy Basic auth is not enabled, your source IP is not in `PROXY_BASIC_AUTH_CIDRS`, or the token in `upstream-proxy-auth` is stale. |
 | Token expires mid-session | Expected — mint a fresh one. Tokens re-mint while the delegation is alive; revoking the delegation kills all future mints. |
 
-## One-paragraph summary
+## The four players
 
-A human grants a **delegation**; that grants the agent its two
-credentials (`delegation_id` + `agent_secret`). The agent trades them at
-**tokensvc** for a short-lived **JWT**. It uses that JWT to call the
-**tool gateway** (`Authorization: Bearer ...`) or to authenticate at the
-**egress proxy** (Basic username = token, for OpenShell supervisors).
-Every single call is independently re-authorized against the
-delegation: allowed, held for human approval, or denied.
+| Player | Port | Role in the story |
+|---|---|---|
+| **authz** | 8081 | Keeps the *delegations*. When a human grants permission, this service issues the two credentials the agent will use. |
+| **tokensvc** | 8082 | The *mint*. Takes the two credentials for a short-lived JWT. |
+| **gateway** | 8080 | The *tool gateway* (policy enforcement point). Every tool call must present the JWT here. |
+| **gateway (proxy mode)** | 8088 | The *egress proxy*. Outbound traffic from OpenShell sandboxes passes through here, authenticated with the same kind of JWT. |
