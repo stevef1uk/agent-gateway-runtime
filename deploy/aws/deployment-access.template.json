@@ -246,6 +246,19 @@
               }
             },
             {
+              "Sid": "DescribeProxyAmi",
+              "Effect": "Allow",
+              "Action": "ec2:DescribeImages",
+              "Resource": "*",
+              "Condition": {
+                "StringEquals": {
+                  "aws:RequestedRegion": {
+                    "Ref": "AWS::Region"
+                  }
+                }
+              }
+            },
+            {
               "Sid": "CloudFormationLifecycle",
               "Effect": "Allow",
               "Action": [

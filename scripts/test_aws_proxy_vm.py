@@ -52,6 +52,10 @@ class ProxyLifecycle(unittest.TestCase):
   ami=next(statement for statement in statements if statement['Sid']=='ResolveProxyAmiParameter')
   self.assertEqual(ami['Action'],'ssm:GetParameters')
   self.assertEqual(ami['Resource'],{'Fn::Sub':'arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64'})
+  describe_ami=next(statement for statement in statements if statement['Sid']=='DescribeProxyAmi')
+  self.assertEqual(describe_ami['Action'],'ec2:DescribeImages')
+  self.assertEqual(describe_ami['Resource'],'*')
+  self.assertEqual(describe_ami['Condition']['StringEquals']['aws:RequestedRegion'],{'Ref':'AWS::Region'})
   lifecycle=next(statement for statement in statements if statement['Sid']=='CloudFormationLifecycle')
   resources=lifecycle['Resource']
   self.assertIn('cloudformation:ListChangeSets',lifecycle['Action'])
