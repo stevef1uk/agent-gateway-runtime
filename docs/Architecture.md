@@ -19,9 +19,10 @@ flowchart TB
  Control --> State[(DynamoDB domain + security state)]
  Authz --> State
  PEP --> State
- Client[Optional forward-proxy client] --> Tunnel[Local SSM tunnel]
- Tunnel --> VM[One EC2 proxy instance]
+ Client[Optional client using http://127.0.0.1:8088 and a scoped proxy token] --> Tunnel[Local SSM port-forward]
+ Tunnel --> VM[One EC2 proxy instance: loopback :8088]
  VM --> Authz
+ VM --> State
  VM --> Destination[HTTP / HTTPS CONNECT destination]
 ```
 
@@ -32,7 +33,7 @@ flowchart TB
 * **Application** (`serverless-images.template.json`): four plain-binary ARM64 Lambda images (web, gateway, authz, tokensvc) with signed vendor-licence verification, public console/gateway HTTP APIs, three IAM-protected internal HTTP APIs, Cognito, DynamoDB domain/security tables and execution roles. The Authz Lambda contains the built-in policy engine and, when `EnableRegoPolicy=true`, the optional OPA/Rego engine. Rego-selected delegations are evaluated by OPA; the admin-managed, versioned Rego policy is stored in DynamoDB and loaded by authorization workers. JWT and operator tokens are generated at deploy time and passed as CloudFormation `NoEcho` parameters; AWS Secrets Manager is the recommended production option but is intentionally not used in this demo to avoid its per-secret monthly cost. The baseline weather routes remain available.
 * **Demo children**: one dedicated gateway Lambda and public HTTP API per API/MCP demo, sharing authorization and durable domain/security state. Public routes contain only that demo's governed path; operator routes are not exposed. Weather/geocoding/users/refunds use public HTTPS providers. Refunds is a JSONPlaceholder simulation.
 * **Emotion child**: the dedicated gateway invokes a private Lambda directly through IAM `lambda:InvokeFunction`. That backend packages the actual published Emotion API and MCP binaries; it has no public function URL or API integration. The native container enforces its licence. A missing/expired licence may produce a native MCP tool error after the gateway allows the call. No gateway Emotion licence gate is added.
-* **Optional proxy** (`proxy-vm.template.json`): one ARM64 EC2 instance in one subnet/AZ, an encrypted disposable root disk, its own small VPC/internet route, SSM instance role and no security-group ingress. SSM port forwarding provides local access to the proxy. It shares the application's authorization and state but does not host arbitrary demo databases/connectors.
+* **Optional proxy** (`proxy-vm.template.json`): one ARM64 EC2 instance in one subnet/AZ, an encrypted disposable root disk, its own small VPC/internet route, SSM instance role and no security-group ingress. The local client connects to `127.0.0.1:8088` with a scoped proxy delegation; Session Manager forwards that connection to the instance's loopback-only listener. The proxy uses the shared authorization API and DynamoDB state before sending traffic outbound. It does not host arbitrary demo databases/connectors. See the [proxy local-test flow](Proxy-VM.md#local-test-traffic).
 
 The AI Wizard retains the Bedrock Converse integration, EU Nova Micro inference profile, SigV4 signing and required model permissions in both the web identity policy and workload boundary. EU inference routing is model-service routing; it does not provide cross-region failover for this application.
 

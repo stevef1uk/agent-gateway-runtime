@@ -46,6 +46,40 @@ Keep the `aws-proxy-connect` terminal open while testing. It forwards `http://12
 
 The default is one `t4g.small` ARM64 instance, standard CPU credits and a 12 GiB encrypted gp3 root disk deleted on termination. `PROXY_INSTANCE_TYPE=t4g.medium` is available. The VM owns a small VPC/public subnet/internet route and uses a public IPv4 address for outbound access. No NAT gateway, load balancer or Auto Scaling group is created. It has **single-instance, single-AZ availability**, with only systemd process restart; active connections are lost on host failure/restart.
 
+## Local test traffic
+
+The local proxy URL is a listener created by the Session Manager plugin, not a public endpoint on the EC2 instance. The AWS CLI/plugin starts an authenticated SSM session; the plugin and the instance's SSM Agent carry the forwarded TCP connection through Session Manager. The client separately supplies its delegation token to the proxy:
+
+```mermaid
+flowchart LR
+  subgraph Workstation
+    Client["curl or proxy-aware client<br/>proxy: http://127.0.0.1:8088<br/>Proxy-Authorization: Bearer (delegation token)"]
+    Local["SSM plugin local listener<br/>127.0.0.1:8088"]
+    CLI["AWS CLI + Session Manager plugin"]
+    Client -->|"HTTP proxy request"| Local
+  end
+
+  subgraph AWS
+    SSM["AWS Systems Manager<br/>Session Manager"]
+    Agent["SSM Agent on EC2"]
+    Proxy["Gateway forward-proxy<br/>EC2 loopback:8088"]
+    Authz["Shared Authz API<br/>SigV4"]
+    State[("Shared DynamoDB domain/security/approval/audit state")]
+    Destination["Internet destination"]
+    Agent -->|"forwarded TCP"| Proxy
+    Proxy -->|"delegation decision"| Authz
+    Authz --> State
+    Proxy -->|"approval, audit and shared state"| State
+    Proxy -->|"HTTP request or HTTPS CONNECT"| Destination
+  end
+
+  CLI -. "StartSession / authenticated setup" .-> SSM
+  Local -->|"forwarded TCP via session"| SSM
+  SSM --> Agent
+```
+
+The token authorizes the destination through the shared policy pipeline; it is not an AWS credential. For HTTPS CONNECT, authorization applies to the destination host when the tunnel is opened. TLS remains end-to-end, so the proxy cannot inspect the inner HTTP path, method, or body.
+
 ## Tutorial: call a real HTTPS API through the proxy
 
 This example calls the public [Open-Meteo forecast API](https://open-meteo.com/) over HTTPS. It needs no upstream API key; the Agent Gateway egress token is still required.
