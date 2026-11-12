@@ -35,6 +35,7 @@ help:
 	@echo 'make aws-outputs: print your actual console and baseline gateway URLs'
 	@echo 'make aws-demo-url DEMO=users: print the selected child gateway URL'
 	@echo 'make aws-demo DEMO=users: run a client using GATEWAY_URL; prompt for agent token'
+	@echo 'make aws-emotion-activate EMOTION_TOKEN_FILE=...: securely upload and activate a vendor Emotion licence'
 	@echo 'make aws-cleanup CONFIRM_ACCOUNT=...: owned demos then parent; retains data'
 check:
 	bash -n demo/public-weather-tutorial.sh demo/run-aws-weather-demo.sh scripts/deploy-aws.sh scripts/aws-licence-upload.sh scripts/cleanup-aws-demo-images.sh
@@ -83,8 +84,8 @@ aws-demo-delete:
 aws-demo-delete-all:
 	python3 -B scripts/aws-demo-stacks.py delete-all --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --confirm-account "$(CONFIRM_ACCOUNT)"
 aws-emotion-activate:
-	@test -n "$(EMOTION_TOKEN_FILE)" -a -n "$(EMOTION_KEY_FILE)" || { echo 'Set EMOTION_TOKEN_FILE and EMOTION_KEY_FILE to your vendor-issued files.' >&2; exit 2; }
-	python3 -B scripts/aws-emotion-activate.py --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --token "$(EMOTION_TOKEN_FILE)" --key "$(EMOTION_KEY_FILE)"
+	@test -n "$(EMOTION_TOKEN_FILE)" || { echo 'Set EMOTION_TOKEN_FILE to your vendor-issued licence token.' >&2; exit 2; }
+	python3 -B scripts/aws-emotion-activate.py --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)" --token "$(EMOTION_TOKEN_FILE)" $(if $(strip $(EMOTION_IMAGE_URI)),--image-uri "$(EMOTION_IMAGE_URI)")
 aws-emotion-token-upload:
 	AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AWS_STACK="$(AWS_STACK)" TOKEN_FILE="$(TOKEN_FILE)" bash scripts/aws-licence-upload.sh
 aws-proxy-plan:

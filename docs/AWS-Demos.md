@@ -29,7 +29,7 @@ The Delegation Wizard's **Authorization policy engine** choice is saved on each 
 
 ## Emotion image and licence renewal
 
-Use the dedicated `linux/arm64` Lambda Emotion wrapper for AWS; it retrieves the signed token and customer key from versioned S3 objects. Do not substitute a different-architecture wrapper or one that expects another activation store. A renewed licence is activated through the existing `make aws-emotion-activate` workflow; licence material is not baked into the image. Use only a token and key compatible with the vendor runtime bundled in the selected AWS release.
+Use the dedicated `linux/arm64` Lambda Emotion wrapper for AWS; it retrieves the vendor-issued signed licence token from a versioned S3 object. The model image is not encrypted and does not require a customer private key. A renewed licence is activated through `make aws-emotion-activate`; licence material is not baked into the image.
 
 ## Provision API/MCP demos
 
@@ -43,23 +43,22 @@ If you do not yet have a console/invitation, start with [Self-hosting prerequisi
 
 ## Paid Emotion activation
 
-Emotion inference requires a purchased licence and the matching customer private key, issued by the vendor after payment. Contact [Emotion Service API sales](https://emotion-service-api.sjfisher.com) or sales@sjfisher.com. Publishing or pulling the encrypted image does not grant a paid licence. Customers never receive the vendor signing key, and another customer's activation files must never be reused or published.
+Emotion inference requires a vendor-issued licence token. Contact [Emotion Service API sales](https://emotion-service-api.sjfisher.com) or sales@sjfisher.com. Publishing or pulling the image does not grant a paid licence. Customers never receive the vendor signing key, and another customer's activation files must never be reused or published.
 
 1. Deploy the **Emotion** MCP preset in the Wizard and wait for success.
-2. Save your issued token as `keys/local-activation/emotion.token` and matching PEM private key as `keys/local-activation/emotion_customer_private.pem`. This directory is Git-ignored; do not overwrite tracked example keys or paste credentials into the console tester.
+2. Save your issued token as `keys/local-activation/emotion.token`. This directory is Git-ignored; do not overwrite tracked example files or paste credentials into the console tester.
 3. From this checkout, activate your own deployment:
 
 ```bash
 make aws-emotion-activate \
-  EMOTION_TOKEN_FILE=keys/local-activation/emotion.token \
-  EMOTION_KEY_FILE=keys/local-activation/emotion_customer_private.pem
+  EMOTION_TOKEN_FILE=keys/local-activation/emotion.token
 ```
 
-The command uploads the files privately to your account's encrypted, versioned activation bucket, pins only the Emotion backend to the new versions, and warms the model. Gateway signing values and existing gateway key versions are preserved. Only the vendor runtime validates the licence and decrypts the model. No private file enters an image or public manifest.
+The Wizard creates the backend, but licensed inference is not ready until this activation command succeeds. It uploads the token privately to your account's encrypted, versioned activation bucket, pins only the Emotion backend to that version, and warms the model. The script refuses to continue if the bucket does not return a real object version. To deploy a newly published wrapper image at the same time, pass its immutable ECR digest with `EMOTION_IMAGE_URI=...`. Gateway signing values and existing gateway key versions are preserved. Only the vendor runtime validates the licence. The token stays outside Git, images, and public manifests.
 
 4. Use your Emotion delegation's agent token in the Console Endpoint Tester or the Emotion client. Payment/licensing does not replace gateway authorization; a public gateway URL alone does not grant inference access.
 
-First activation/cold startup decrypts and loads the model. A verified AWS warmup took approximately 103 seconds; subsequent inference took approximately 0.2 seconds for a short sample. These are observations, not latency guarantees. The activation command waits for both API and model readiness. A concurrent console call can start a second cold Lambda environment, so wait for warmup to finish before testing.
+First activation/cold startup loads the model and can take tens of seconds or longer; one AWS warmup took approximately 55 seconds. Subsequent inference can be much faster. These are observations, not latency guarantees. The activation command waits for both API and model readiness. A concurrent console call can start a second cold Lambda environment, so wait for warmup to finish before testing. If a tool call arrives before readiness, the backend returns HTTP 503 with `Retry-After` instead of forwarding it into a connection-refused response.
 
 If you recreate/redeploy the Emotion demo in the Wizard, rerun activation. Renew expired licences through the vendor and rerun the same command. A `License Required` MCP response can also wrap a backend connection failure: inspect its parenthesized detail. `127.0.0.1:8080/completion: connection refused` indicates the model server is unavailable, not proof that the token expired. Use the current release, which aligns API/model ports and readiness checks.
 
