@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-13",
+  "region": "francecentral",
+  "currency": "USD",
+  "month_hours": 730,
+  "rates": {
+    "container_apps_vcpu_active_per_second": "0.000024",
+    "container_apps_vcpu_idle_per_second": "0.000003",
+    "container_apps_gib_active_per_second": "0.000003",
+    "container_apps_gib_idle_per_second": "0.000003",
+    "container_apps_request_per_million": "0.40",
+    "postgres_b1ms_per_hour": "0.019",
+    "postgres_general_purpose_vcore_per_hour": "0.103",
+    "postgres_storage_per_gb_month": "0.133"
+  },
+  "allowances": {
+    "container_apps_vcpu_seconds": 180000,
+    "container_apps_gib_seconds": 360000,
+    "container_apps_requests": 2000000
+  },
+  "workload": {
+    "replica_vcpu": "0.25",
+    "replica_gib": "0.5",
+    "web_min_replicas": 1,
+    "hops_per_action": "2.1",
+    "seconds_per_hop": "1",
+    "actions_per_month": [0, 10000, 100000, 1000000]
+  },
+  "postgres": {
+    "storage_gb": 32,
+    "general_purpose_vcores": 2
+  },
+  "sources": {
+    "container_apps_retail_api": "https://prices.azure.com/api/retail/prices?api-version=2023-01-01-preview&%24filter=serviceName%20eq%20%27Azure%20Container%20Apps%27%20and%20armRegionName%20eq%20%27francecentral%27",
+    "postgres_retail_api": "https://prices.azure.com/api/retail/prices?api-version=2023-01-01-preview&%24filter=serviceName%20eq%20%27Azure%20Database%20for%20PostgreSQL%27%20and%20armRegionName%20eq%20%27francecentral%27"
+  }
+}
