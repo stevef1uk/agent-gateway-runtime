@@ -21,10 +21,15 @@
   "workload": {
     "replica_vcpu": "0.25",
     "replica_gib": "0.5",
-    "web_min_replicas": 1,
+    "web_min_replicas": 0,
     "hops_per_action": "2.1",
     "seconds_per_hop": "1",
     "actions_per_month": [0, 10000, 100000, 1000000]
+  },
+  "database_default": {
+    "provider": "Neon",
+    "azure_monthly_cost_assumption": "0",
+    "note": "User-provided existing Neon plan; not a generally free Neon price"
   },
   "postgres": {
     "storage_gb": 32,

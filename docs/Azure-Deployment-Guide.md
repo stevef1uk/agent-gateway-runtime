@@ -14,9 +14,9 @@ reproducible assumptions, see the
 
 Choose a subscription and region (the estimate uses `francecentral`). Install
 Azure CLI, authenticate, select the subscription, and register the
-`Microsoft.App`, `Microsoft.OperationalInsights`, and
-`Microsoft.DBforPostgreSQL` resource providers if the selected design needs
-them.
+`Microsoft.App` and `Microsoft.OperationalInsights` resource providers.
+Register `Microsoft.DBforPostgreSQL` only if you explicitly choose Azure
+Database for PostgreSQL instead of the default Neon database.
 
 Obtain the current licensed image tags/digests, customer private key, and
 per-service signed licence tokens from the vendor. Keep activation material
@@ -52,25 +52,43 @@ revision (the pricing model assumes `0.25` vCPU and `0.5` GiB per replica):
    verify that the ingress preserves the request path, authorization, and
    Agent Gateway headers.
 
-Set `web` to one minimum and one maximum replica. Set the other apps to zero
-minimum replicas and begin with a small maximum while measuring startup,
-memory, and concurrency. Keep `authz` to one maximum replica when using
-memory-only state. Scale-out with `PERSISTENCE=memory` can create inconsistent
-per-replica state and does not provide durable audit records.
+For the lowest-cost default, set all four apps' minimum replicas to zero and
+begin with a small maximum while measuring startup, memory, and concurrency.
+The web console stores OIDC sign-in session state in process memory, so a
+scale-down between sign-in and identity-provider callback can cause the
+callback to fail. If dependable console sign-in outweighs idle cost, configure
+`web` with one minimum and one maximum replica. A warm replica reduces but
+does not eliminate loss on process restart; durable shared web sessions would
+require an application change. The target low-cost design is to persist OIDC
+state and sessions in Neon and then run `web` with zero minimum replicas; the
+current web image does not yet support that session-store configuration.
 
 ## 4. Configure state, secrets, and identity
 
-For an evaluation-only deployment, use `PERSISTENCE=memory` and accept that
-state is lost when the process restarts. Do not treat this configuration as a
-durable audit system.
+Use the existing Neon PostgreSQL database by default. Configure
+`PERSISTENCE=postgres` and a TLS-enabled `DATABASE_URL` for the Agent Gateway
+services that use PostgreSQL. Use Neon's pooled endpoint for runtime only
+after verifying that it is compatible with the selected image's connection
+and startup-migration behavior. Restrict connection counts as replicas scale,
+and review Neon plan limits, region, backups, retention, and availability.
+This proposal assumes the user's existing Neon plan has no additional charge;
+Neon pricing, cross-cloud latency and Azure egress are not included.
 
-For durable state, provision Azure Database for PostgreSQL Flexible Server,
-create the application database, and configure `PERSISTENCE=postgres` and a
-TLS-enabled `DATABASE_URL`. Grant network access only from the Container Apps
-environment. Schema creation and migration are handled by the application on
-startup. The estimate's Burstable configuration is for non-production
-testing; production should use a suitably sized General Purpose tier and
-availability/backup settings.
+The long-term goal is to store the web console's OIDC state and server-side
+session in that shared Neon database too, so sign-in can survive scale-to-zero
+and replica changes. This needs an application/image change; the current web
+image keeps OIDC session state in process memory. Do not assume that setting
+`DATABASE_URL` persists web sessions. Until a release supports shared session
+storage, keep one web replica warm when reliable sign-in is required, or accept
+that a callback after scale-to-zero can fail and require a retry.
+
+If Azure-managed database hosting is explicitly required, provision Azure
+Database for PostgreSQL Flexible Server, create the application database, and
+configure the same PostgreSQL persistence settings. Grant network access only
+from the Container Apps environment. Schema creation and migration are
+handled by the application on startup. The estimate's Burstable configuration
+is for non-production testing; production should use a suitably sized General
+Purpose tier and availability/backup settings.
 
 Set the same strong `JWT_SECRET` on `authz`, `tokensvc`, and `gateway`. Supply
 the customer private key under `/keys` and each service's vendor licence under

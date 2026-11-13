@@ -12,9 +12,11 @@ Start here:
 - [Indicative pricing and assumptions](docs/azure/serverless-pricing.md)
 - [Azure documentation index](docs/azure/README.md)
 
-The estimate favors Azure Container Apps Consumption, with the web console
-kept at one replica and the other services able to scale to zero. Durable
-PostgreSQL is shown as a separately costed option. See the architecture and
-pricing documents for limitations, exclusions, and assumptions.
+The proposal favors Azure Container Apps Consumption with scale-to-zero and
+uses an existing Neon PostgreSQL database by default. Shared Neon-backed web
+OIDC sessions are a target design that requires application support; the
+current web image still stores those sessions in memory. Azure Database for
+PostgreSQL is an optional, separately costed alternative. See the architecture
+and pricing documents for limitations, exclusions, and assumptions.
 
 This is a proposal only. No Azure resources are deployed by this branch.
