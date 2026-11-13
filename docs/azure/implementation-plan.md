@@ -5,9 +5,10 @@ provide a non-secret environment/account config; scripts provision or select
 the Neon database and drive Terraform for Azure. Application behavior,
 database integration, and container composition are tested locally before any
 Azure apply. This checkout has no Agent Gateway application source, container
-build files, Terraform, or complete installer. Phase 1 has started with a
-non-secret Neon config validator and read-only existing-project status helper;
-this is not database provisioning or application integration.
+build files, Terraform, or complete installer. Phase 1 now includes
+config-driven Neon project/database/role provisioning and ownership-checked
+teardown. It does not provide Azure deployment automation or Agent Gateway
+database integration.
 
 ## Design review and decisions
 
@@ -110,15 +111,16 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
 
 **Current implementation baseline**
 
-- `config/neon.example.json` defines the initial non-secret Neon selection
-  contract. `scripts/neon_setup.py ... validate` validates that contract, and
-  `... status` reads sanitized metadata for an existing project using
-  `NEON_API_KEY` from the process environment.
-- Project/database/role creation, secret delivery, database migrations, and
-  Agent Gateway PostgreSQL and OIDC/session adapters are not implemented.
-  Application-side work is blocked until the corresponding application source
-  and release/image contract are available in this repository or an identified
-  upstream repository.
+- `config/neon.example.json` defines the non-secret Neon selection contract.
+  `scripts/neon_setup.py ... validate`, `status`, and `setup` validate config,
+  inspect sanitized project metadata, and provision/select the configured
+  project, database, and application role. `destroy` deletes only a project
+  recorded as created by this tool, with explicit project-ID confirmation.
+- Agent Gateway PostgreSQL persistence and shared OIDC/session state are
+  implemented in the sibling `agent-gateway` application repository, including
+  local PostgreSQL and cross-instance tests. Key Vault secret delivery is
+  implemented there as `scripts/azure_secrets.py`; it has not yet been run
+  against the user's vault.
 
 **Work**
 
@@ -126,17 +128,17 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
   support selecting an existing project/database or creating a dedicated
   non-production project/database and least-privilege app role. Use the Neon
   API or a maintained provider/CLI after confirming it supports the required
-  operations. The initial status-only helper is not a substitute for these
   operations. Read the Neon API key from the process environment or a secure
   interactive login, never from the committed example config.
 - Make create/status operations safe to repeat and report resource IDs and
-  non-secret connection metadata. Require explicit confirmation for
-  billable-project creation and destructive database/project deletion. Never
-  print generated passwords or full connection strings.
-- Provision generated database credentials directly to the configured Key
-  Vault when Azure identity is available. For local development, store
-  credentials in an ignored local secret file with restrictive permissions or
-  a secret manager; never write them to tracked config or Terraform state.
+  non-secret connection metadata. Require exact-name confirmation for
+  project creation, exact-ID confirmation for mutations to existing projects,
+  and exact locally recorded project-ID confirmation for destroy. Never print
+  generated passwords or full connection strings.
+- For local development, store the generated database URL in an ignored local
+  credentials file with mode `0600`; never write it to tracked config or
+  Terraform state. The sibling application's secret uploader can copy this
+  URL to Key Vault without printing it or adding it to Terraform state.
 - Implement/test Agent Gateway PostgreSQL persistence and migrations against a
   disposable local PostgreSQL first, then the dedicated Neon development
   database. Use TLS, verify the Neon direct endpoint for migrations and select
@@ -162,8 +164,9 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
 **Local and Neon test gate**
 
 - Neon config validation, create/select, status, and safe rerun tests pass with
-  mocked API responses. Tests cover permission errors, wrong account/project,
-  partial failure, and refusal to delete without confirmation.
+  mocked API responses. Tests cover permission errors, wrong project/region,
+  partial failure, ownership-only teardown, and refusal to delete without
+  exact confirmation.
 - Run all SQL migrations and persistence tests against a local PostgreSQL
   container from an empty database and an upgrade fixture.
 - Run the same migration and CRUD/restart tests against a dedicated Neon

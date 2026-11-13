@@ -14,13 +14,15 @@ Start here:
 - [Azure documentation index](docs/azure/README.md)
 
 The target proposal uses Azure Container Apps Consumption and Neon PostgreSQL.
-Neon provisioning and persistence/session integration are planned early, with
-a scripted installer driven by a user-created environment/account config.
+Neon provisioning is available in the Phase 1 helper; application persistence,
+OIDC session integration, and a scripted Azure installer remain planned.
+Configuration is driven by a user-created environment/account config.
 Persisting web OIDC state and sessions in Neon is required before safely
 scaling the web app to zero; the current web image still stores those sessions
-in memory. The initial Phase 1 helper validates a non-secret Neon config and
-reads metadata for an existing project; it does not create Neon resources or
-change the application database. Azure Database for PostgreSQL is an optional,
+in memory. The helper validates Neon config, provisions/selects a project,
+database and application role, and can delete projects it created after
+explicit confirmation. It does not change the Agent Gateway application
+database. Azure Database for PostgreSQL is an optional,
 separately costed alternative. See the architecture, implementation plan, and
 pricing documents for test gates, limitations, exclusions, and assumptions.
 

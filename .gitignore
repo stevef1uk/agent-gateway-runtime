@@ -1,6 +1,8 @@
 # User-local cloud configuration and credentials
 /azure-config.json
 /config/neon.json
+/config/neon-state.json
+/config/neon-credentials.json
 **/.env
 **/*.env
 !**/*.env.example

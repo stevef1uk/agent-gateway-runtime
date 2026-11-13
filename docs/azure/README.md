@@ -10,9 +10,9 @@ or a promise that Azure resources have been created**.
 - [Implementation plan and test gates](implementation-plan.md)
 
 The target design uses Azure Container Apps Consumption and Neon PostgreSQL.
-Phase 1 has started with a non-secret config validator and read-only Neon
-project-status command in `scripts/neon_setup.py`; provisioning and application
-database integration remain to be implemented. Web OIDC state and sessions
+Phase 1 includes config-driven Neon project/database/role setup and
+ownership-checked teardown in `scripts/neon_setup.py`; application database
+integration remains to be implemented. Web OIDC state and sessions
 must be persisted in Neon before `web` can safely scale to zero; until that
 application/image change passes its cold-callback tests, keep one replica
 warm. Azure Database for PostgreSQL is an optional, separately costed

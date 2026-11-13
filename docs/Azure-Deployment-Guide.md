@@ -49,15 +49,79 @@ against the dedicated Neon development database using TLS. Use a direct Neon
 endpoint for schema changes unless pooled-endpoint compatibility is verified;
 test the selected runtime endpoint and connection limits separately.
 
-The current Phase 1 helper is an initial, read-only milestone. Copy
-`config/neon.example.json` to the ignored `config/neon.json`. Run
-`python scripts/neon_setup.py --config config/neon.json validate` to check its
-non-secret fields. To inspect an existing project, run
-`python scripts/neon_setup.py --config config/neon.json status` with
-`NEON_API_KEY` supplied in the process environment. It reports only project
-metadata. It does not create projects, databases, or roles, and it does not
-configure Agent Gateway persistence; do not treat this check as evidence that
-database integration is complete.
+Phase 1 includes a config-driven Neon setup helper. Copy
+`config/neon.example.json` to the ignored `config/neon.json`. For an existing
+project, set `mode` to `existing`, set its `project_id`, and leave
+`project_name` empty. For a new development project, set `mode` to `create`,
+leave `project_id` empty, and provide a project name. Validate before
+provisioning:
+
+```bash
+python3 -B scripts/neon_setup.py --config config/neon.json validate
+```
+
+Set `NEON_API_KEY` in the process environment (do not put it in either config
+file), then explicitly confirm project creation or mutation of an existing
+project:
+
+```bash
+read -r -s -p "Neon API key: " NEON_API_KEY
+echo
+export NEON_API_KEY
+
+# New project (exact confirmation must match project_name):
+python3 -B scripts/neon_setup.py --config config/neon.json setup \
+  --confirm-create "agent-gateway-development"
+
+# Existing project (exact confirmation must match project_id):
+# python3 -B scripts/neon_setup.py --config config/neon.json setup \
+#   --confirm-existing-project "YOUR_NEON_PROJECT_ID"
+```
+
+The helper creates or selects the configured database and application role,
+waits for Neon operations, and stores the connection URL in the ignored
+`config/neon-credentials.json` with owner-only permissions. Never print or
+commit that file. To upload it and other runtime secrets directly to Key Vault,
+use `scripts/azure_secrets.py` from the `agent-gateway` application repository
+after preparing that repository's ignored Azure config:
+
+```bash
+python3 scripts/azure_secrets.py \
+  --config deploy/azure/azure-config.json \
+  upload \
+  --neon-credentials-file /path/to/agent-gateway-runtime/config/neon-credentials.json \
+  --licence-token-file /path/to/signed-licence-token
+```
+
+The uploader generates JWT/admin secrets locally, reads only the configured
+secret names from Key Vault, and transfers values from protected temporary
+files using Azure CLI's file upload option. It does not print, download, or
+place values in Terraform inputs/state. The user must have Key Vault secret
+write permission. Secret names already present are never overwritten by
+default; explicit rotation requires `--replace` and a second confirmation.
+See the application repository's Azure deployment README for details,
+including the optional private-registry token file. Entra OIDC uses PKCE and
+does not require a client secret.
+
+The `status` command only reports non-secret Neon project metadata.
+
+To delete a project created by this helper and remove its local credentials,
+use the exact locally recorded project ID as confirmation:
+
+```bash
+python3 -B scripts/neon_setup.py --config config/neon.json status
+# Review the project ID shown above before proceeding.
+python3 -B scripts/neon_setup.py --config config/neon.json destroy \
+  --confirm-project-id "THE_REVIEWED_PROJECT_ID"
+```
+
+Destroy refuses to delete projects that are not recorded as created by this
+helper. It does not delete or suspend resources in an existing user project.
+Review Neon billing and stop/delete those resources separately if you selected
+an existing project. Azure resource teardown will be added with the Azure
+installer; no Azure resources are currently managed by this branch. Neon
+provisioning does not implement Agent Gateway persistence or OIDC sessions;
+do not treat it as evidence that database integration is complete.
 
 ## 2. Create the Container Apps environment
 

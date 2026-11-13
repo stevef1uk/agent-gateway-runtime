@@ -110,10 +110,11 @@ callback state validation and authenticated session access; it must not fall
 back to process-local sessions. See
 [Web scale-to-zero and OIDC](#web-scale-to-zero-and-oidc).
 
-Phase 1 currently has only a local config validator and read-only project
-status command. They do not provision Neon resources, create database roles,
+Phase 1 now includes a local config validator, project/database/role
+provisioning, local credential-file output, and ownership-checked deletion of
+projects created by the helper. These tools do not provision Azure resources
 or enable application persistence; those remain implementation and acceptance
-gates.
+gates. Existing Neon projects are never deleted by the helper.
 
 The estimate treats the user's existing Neon plan as having no additional
 database charge for this deployment. This is a user-specific assumption, not
