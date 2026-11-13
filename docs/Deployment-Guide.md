@@ -472,6 +472,41 @@ gateway / authz / tokensvc ──private network────────► Post
 gateway ──approved private route────────────────────► protected tools/APIs
 ```
 
+#### Proposed zoned BFF/API integration pattern
+
+This is **one proposed way to integrate Agent Gateway into an existing
+customer estate**: retain the existing public frontend/BFF entry and private
+Business Services and Data Services APIs, adding an Agent Gateway
+enforcement tier for agent-governed calls. It is an illustrative pattern,
+not a mandate to replace existing API gateways, network zones, or security
+controls. The customer decides whether and how to adapt it to their landing
+zone, trust boundaries, requirements, and platform choices.
+
+The default deployment examples do not create this enterprise topology.
+Docker Compose is a single-host quickstart, and the k3s manifests target the
+selected Kubernetes cluster. The provider-specific `aws` and `gcp` branches
+also have deployment defaults scoped to a target AWS account or Google Cloud
+project and region; they do not automatically integrate Agent Gateway into
+an existing customer's zoned network. Implementing the proposal requires
+adapting deployment automation/IaC for the target environment, network
+connectivity, routing, and firewall controls.
+
+The highlighted path in each provider diagram is for agent-governed calls.
+Ordinary browser or mobile user requests can keep their existing end-user
+authentication path unless they also need delegation-based authorization.
+The PEP evaluates the operation that reaches its configured upstream. If
+each downstream operation needs a separate policy decision, route that path
+through a PEP too; BFF fan-out is not independently evaluated automatically.
+
+The provider diagrams are **representative placement proposals, not
+deployment blueprints**. “Zones” indicate logical trust boundaries; the
+customer must implement them with actual routing, firewall policies,
+identities, and service endpoints. For the provider-specific patterns and
+deployment-script scope, see the [AWS branch architecture
+guide](https://github.com/stevef1uk/agent-gateway-runtime/blob/aws/docs/Architecture.md)
+and [Google Cloud branch architecture
+guide](https://github.com/stevef1uk/agent-gateway-runtime/blob/gcp/docs/gcp/architecture.md).
+
 The exact routes depend on how agents and operators create delegations and
 obtain tokens. Publish only the required endpoints: agents need the gateway
 for governed calls and tokensvc to mint tokens; human users need the console,
