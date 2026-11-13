@@ -24,6 +24,46 @@ flowchart TB
   Gateway --> Licence
 ```
 
+## Proposed integration with an existing enterprise estate
+
+The diagram proposes **one way to place Agent Gateway in an existing Google
+Cloud estate**: retain the customer's public frontend/BFF entry and private
+Business Services and Data Services APIs, and route agent-governed operations
+through the gateway PEP. It is an illustrative integration pattern, not a
+required topology. The customer decides whether and how to adapt it.
+
+![Representative Google Cloud zoned architecture with Agent Gateway: external Application Load Balancer and Cloud Armor, Shared VPC private tiers, business APIs, and data APIs.](../../images/gcp-agent-gateway-zones.svg)
+
+The diagram shows logical component roles and trust boundaries, not a
+resource-for-resource picture of the default GCP deployment. This branch's
+script deploys the serverless control plane into one selected Google Cloud
+project and region (the default is Paris, `europe-west9`). It creates Cloud
+Run services and application state, but does not provision the customer's
+Shared VPC, enterprise firewall policies, frontend/BFF, or private ingress
+to backend APIs. Fitting the deployment into an existing estate requires
+customer-specific changes to deployment scripts/IaC, IAM, routing, and
+network access.
+
+For example, the customer's public API edge may route only agent-governed
+requests to the Agent Gateway endpoint, while ordinary user traffic retains
+its existing route. If a protected backend must remain private, configure
+and validate the required Cloud Run ingress/egress and private service path;
+do not assume that Shared VPC or firewall boundaries are created by the
+default deployment. Keep a route through the PEP for every operation
+requiring its own policy decision; BFF fan-out is not evaluated separately
+unless each downstream call is routed through a PEP.
+
+“Zones” in the diagram are logical trust boundaries. Implement them using
+the customer's actual routing and hierarchical/VPC firewall policies. The
+diagram does not require the customer to replace existing API management or
+firewall products.
+
+For Google Cloud design background, see the
+[landing zone design overview](https://cloud.google.com/architecture/landing-zones),
+[external Application Load Balancer](https://cloud.google.com/load-balancing/docs/https),
+[internal Application Load Balancer](https://cloud.google.com/load-balancing/docs/l7-internal),
+and [VPC firewall guidance](https://cloud.google.com/vpc/docs/firewalls).
+
 ## Core resources
 
 - **Cloud Run:** `web` is publicly reachable for the console; `gateway` requires Cloud Run IAM authentication. The gateway embeds the `authz` and `tokensvc` functions. Both services use 1 vCPU, 512 MiB memory, concurrency 80, and scale from zero by default (`min=0`). The web service is capped at one instance and the gateway at ten.
