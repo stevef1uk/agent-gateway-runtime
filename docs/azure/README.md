@@ -7,6 +7,7 @@ or a promise that Azure resources have been created**.
 - [Architecture and Azure service choices](architecture.md)
 - [Deployment proposal](../Azure-Deployment-Guide.md)
 - [Indicative pricing and assumptions](serverless-pricing.md)
+- [Implementation plan and test gates](implementation-plan.md)
 
 The default design uses Azure Container Apps Consumption for the four existing
 service containers, with all four able to scale to zero, and an existing Neon

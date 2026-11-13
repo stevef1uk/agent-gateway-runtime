@@ -10,6 +10,7 @@ Start here:
 - [Azure deployment proposal](docs/Azure-Deployment-Guide.md)
 - [Architecture and Azure service choices](docs/azure/architecture.md)
 - [Indicative pricing and assumptions](docs/azure/serverless-pricing.md)
+- [Implementation plan and test gates](docs/azure/implementation-plan.md)
 - [Azure documentation index](docs/azure/README.md)
 
 The proposal favors Azure Container Apps Consumption with scale-to-zero and
