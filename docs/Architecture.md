@@ -26,6 +26,45 @@ flowchart TB
  VM --> Destination[HTTP / HTTPS CONNECT destination]
 ```
 
+## Proposed integration with an existing enterprise estate
+
+The diagram proposes **one way to place Agent Gateway in an existing AWS
+estate**: retain the customer's public frontend/BFF entry and private Business
+Services and Data Services APIs, and route agent-governed operations through
+the gateway PEP. It is an illustrative integration pattern, not a required
+topology. The customer decides whether and how to adapt it.
+
+![Representative AWS zoned architecture with Agent Gateway: public API edge, private Agent Gateway tier, business APIs, and data APIs.](../images/aws-agent-gateway-zones.svg)
+
+The diagram shows logical component roles and trust boundaries, not a
+resource-for-resource picture of the default AWS deployment. This branch's
+deployment creates a single-region serverless control plane in one selected
+AWS account (the supported scripted region is Paris, `eu-west-3`). It does
+not provision the customer's existing VPC zones, firewall segmentation,
+frontend/BFF, or private ingress to backend APIs. The default stack's
+serverless components and demo endpoints are described above; fitting them
+into an existing estate requires customer-specific changes to deployment
+templates/scripts, IAM, routing, and network access.
+
+For example, the customer's public API edge may route only agent-governed
+requests to the Agent Gateway endpoint, while ordinary user traffic retains
+its existing route. If a protected backend must remain private, configure
+and validate a supported private integration and the gateway's network path
+to that backend; do not assume that a VPC or subnet boundary exists or is
+created by the default deployment. Keep a route through the PEP for every
+operation requiring its own policy decision; BFF fan-out is not evaluated
+separately unless each downstream call is routed through a PEP.
+
+“Zones” in the diagram are logical trust boundaries. Implement them using
+the customer's actual routing and security controls, such as security groups
+and, where required, AWS Network Firewall. The diagram does not require the
+customer to replace existing API management or firewall products.
+
+For AWS design background, see the
+[Well-Architected infrastructure protection guidance](https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/infrastructure-protection.html),
+[API Gateway private APIs](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-private-apis.html),
+and [API Gateway VPC links](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-vpc-links-v2.html).
+
 ## Stack ownership and components
 
 * **Deployment access** (`deployment-access.template.json`): bounded deployment policies, workload permissions boundary and a fixed CloudFormation role for child demos. Applying named IAM resources is an explicit administrator operation. Web runtime permissions allow only application-owned demo stack lifecycle and passing this reviewed role; child templates do not create IAM roles.
