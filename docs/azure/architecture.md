@@ -31,7 +31,7 @@ one **Consumption-plan** Container Apps environment:
 
 | Service | Ingress | Low-cost default | Reliability option |
 |---|---|---|---|
-| `web` | External HTTPS | Minimum 0; scale to zero | Set minimum 1 and maximum 1 if reliable Entra ID OIDC sign-in is more important than idle cost. |
+| `web` | External HTTPS | Minimum 0 only after Neon-backed OIDC session support passes cold-callback tests; otherwise minimum 1 | Zero minimum is the target cost setting after durable session support is released and verified. |
 | `gateway` | External HTTPS | Minimum 0 | This is the policy enforcement point for agent requests. Scale-to-zero trades idle cost for cold-start latency. |
 | `tokensvc` | External HTTPS | Minimum 0 | Restrict access to intended agent clients at the edge or with app authentication where appropriate. |
 | `authz` | Internal only | Minimum 0 | Only the other Agent Gateway services should call the authorization API. Use the environment's generated internal service DNS name in `AUTHZ_URL`. |
@@ -54,11 +54,6 @@ Keeping one replica warm reduces this risk but costs approximately $5.91/month
 at the modeled idle rates; it does not make the session durable across a
 restart.
 
-The low-cost default therefore allows `web` to scale to zero and accepts
-possible sign-in retries after idle periods. For a production console that
-needs dependable sign-in, set `web` minimum and maximum replicas to one until
-the application uses shared, durable OIDC session storage.
-
 **Target design:** extend the web application to persist its short-lived
 OIDC state/nonce and server-side sign-in session in the same Neon PostgreSQL
 database, then configure the web service to use that shared session store.
@@ -67,8 +62,12 @@ With that code and image support, the web app can scale to zero and any
 replica can complete the callback or resume a session. The current web image
 does not provide this storage option: setting its existing `DATABASE_URL`
 for Agent Gateway domain data does **not** make OIDC sessions persistent.
-Until a release adds and documents shared session storage, keep one replica
-warm when reliable console sign-in is required.
+Treat this Neon integration as an early implementation and test phase, before
+building the full Azure environment. Until a release adds and documents shared
+session storage and it passes a cold-start callback test, configure `web` with
+at least one minimum replica. Once verified, the intended Azure configuration
+sets `web` minimum replicas to zero and tests OIDC state creation, scale-down,
+cold callback completion, and session continuation across instances.
 
 This differs from the other cloud implementations. The GCP branch sets the
 Cloud Run web service to `min=0` and stores sessions and application state in
@@ -83,23 +82,38 @@ the fixed cost of a private Azure Container Registry for a small evaluation.
 Mirror images to ACR for production supply-chain control if required; registry
 storage and transfer are not included in the estimate.
 
+If an Azure-specific image must be built, tag the release with the `_a` suffix
+(for example `<version>_a`); `latest_a` may be published as a convenience
+alias. Deployment configuration must use the tested immutable image digest,
+not the mutable alias. Rebuild only the services whose source or runtime
+contract changes.
+
 ## State and availability choices
 
 ### Default: Neon PostgreSQL
 
-Use the existing Neon PostgreSQL database as the default durable-state
-backend. Configure `PERSISTENCE=postgres` and `DATABASE_URL` for the
-Agent Gateway services that use PostgreSQL. Use the Neon connection details
-for the selected project, database, and role; require TLS, use the pooled
-endpoint for runtime only after verifying compatibility with the current
-Agent Gateway image, and keep connection limits in mind when Container Apps
-scales out. The image's startup schema migration behavior must be validated
-with the chosen Neon connection mode.
+Use Neon PostgreSQL as the default durable-state backend. Configure
+`PERSISTENCE=postgres` and `DATABASE_URL` only for Agent Gateway services whose
+release contract requires PostgreSQL. Use a dedicated least-privilege role for
+each database consumer; keep web OIDC/session tables in a separate schema and
+grant the web session role access only to that schema. Require TLS, use a
+direct endpoint for schema migrations, and use a pooled runtime endpoint only
+after verifying compatibility with the selected image. Keep connection limits
+in mind when Container Apps scales out. Startup migration behavior and
+concurrent replica safety must be validated with the selected connection mode.
 
 Neon is also the proposed low-cost backing store for shared web OIDC
-sessions, but that requires a web application change and a release that
-supports a session-storage configuration. It is not enabled merely by
-setting `DATABASE_URL`. See [Web scale-to-zero and OIDC](#web-scale-to-zero-and-oidc).
+transactions and sessions, but that requires a web application change and a
+release that supports a session-storage configuration. It is not enabled
+merely by setting `DATABASE_URL`. Database failure must fail closed for
+callback state validation and authenticated session access; it must not fall
+back to process-local sessions. See
+[Web scale-to-zero and OIDC](#web-scale-to-zero-and-oidc).
+
+Phase 1 currently has only a local config validator and read-only project
+status command. They do not provision Neon resources, create database roles,
+or enable application persistence; those remain implementation and acceptance
+gates.
 
 The estimate treats the user's existing Neon plan as having no additional
 database charge for this deployment. This is a user-specific assumption, not
@@ -158,10 +172,11 @@ would require an application storage adapter and migration work.
   tokens. Mount the matching customer private key and each service's signed
   licence token read-only at the paths expected by its image. Never place
   production activation material in Git.
-- Scale-to-zero can add cold-start latency. The web console can scale to zero
-  for lowest cost, but its in-memory OIDC state can make sign-in unreliable
-  after idle periods. Set its minimum replica to one when reliability takes
-  priority, or adopt shared durable session storage in the application.
+- Scale-to-zero can add cold-start latency. Do not set the web console's
+  minimum replicas to zero until Neon-backed OIDC state/session storage is
+  implemented and cold-callback behavior passes acceptance testing. Until then
+  keep its minimum at one; a warm instance still does not protect against
+  process restart.
 - Validate the current image startup paths, health checks, mounted-secret
   filenames, OIDC callback behavior, and Container Apps resource limits with a
   non-production deployment before committing to this design.

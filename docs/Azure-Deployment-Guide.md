@@ -12,8 +12,14 @@ reproducible assumptions, see the
 
 ## 1. Prepare
 
-Choose a subscription and region (the estimate uses `francecentral`). Install
-Azure CLI, authenticate, select the subscription, and register the
+Copy `azure-config.example.json` to `azure-config.json` and enter your Azure
+tenant ID, subscription ID, and Key Vault name. The local file is ignored by
+Git. Keep secrets such as client credentials, Neon API keys, database
+passwords, customer keys, and licence tokens out of this config; use the
+environment or Key Vault as appropriate.
+
+The estimate uses `francecentral`; update `location` if you choose another
+region. Install Azure CLI, authenticate, select the subscription, and register the
 `Microsoft.App` and `Microsoft.OperationalInsights` resource providers.
 Register `Microsoft.DBforPostgreSQL` only if you explicitly choose Azure
 Database for PostgreSQL instead of the default Neon database.
@@ -22,6 +28,36 @@ Obtain the current licensed image tags/digests, customer private key, and
 per-service signed licence tokens from the vendor. Keep activation material
 outside the repository and restrict access to the Azure operators who need it.
 Use Entra ID OIDC for the web console and configure an administrator allowlist.
+
+The planned installer is driven by a user-created, non-secret environment
+config file. It will record Azure tenant/subscription, region/resource names,
+Neon project/database selection or creation settings, service endpoints,
+replica bounds, image digests, and Key Vault secret references. API keys,
+database passwords, customer keys, and licence tokens must be supplied through
+environment-based authentication or a secret manager, never config-file
+values. The template is committed, but no Azure deploy script or IaC currently
+consumes it; the installer must be implemented and validated before Azure
+deployment. See the [implementation plan](azure/implementation-plan.md) for
+the script's validation, confirmation, and test requirements.
+
+Provision or select the non-production Neon database and verify application
+persistence and web OIDC-session migrations before creating the Azure
+Container Apps environment. The planned script should make Neon project and
+database setup repeatable, support an existing Neon project, and avoid printing
+credentials. Test migrations against local PostgreSQL first, then run them
+against the dedicated Neon development database using TLS. Use a direct Neon
+endpoint for schema changes unless pooled-endpoint compatibility is verified;
+test the selected runtime endpoint and connection limits separately.
+
+The current Phase 1 helper is an initial, read-only milestone. Copy
+`config/neon.example.json` to the ignored `config/neon.json`. Run
+`python scripts/neon_setup.py --config config/neon.json validate` to check its
+non-secret fields. To inspect an existing project, run
+`python scripts/neon_setup.py --config config/neon.json status` with
+`NEON_API_KEY` supplied in the process environment. It reports only project
+metadata. It does not create projects, databases, or roles, and it does not
+configure Agent Gateway persistence; do not treat this check as evidence that
+database integration is complete.
 
 ## 2. Create the Container Apps environment
 
@@ -52,20 +88,19 @@ revision (the pricing model assumes `0.25` vCPU and `0.5` GiB per replica):
    verify that the ingress preserves the request path, authorization, and
    Agent Gateway headers.
 
-For the lowest-cost default, set all four apps' minimum replicas to zero and
-begin with a small maximum while measuring startup, memory, and concurrency.
-The web console stores OIDC sign-in session state in process memory, so a
-scale-down between sign-in and identity-provider callback can cause the
-callback to fail. If dependable console sign-in outweighs idle cost, configure
-`web` with one minimum and one maximum replica. A warm replica reduces but
-does not eliminate loss on process restart; durable shared web sessions would
-require an application change. The target low-cost design is to persist OIDC
-state and sessions in Neon and then run `web` with zero minimum replicas; the
-current web image does not yet support that session-store configuration.
+Set `gateway`, `tokensvc`, and `authz` replica bounds from local integration
+tests, starting with conservative maxima. Do not configure `web` with zero
+minimum replicas until the Neon-backed OIDC state/session implementation is in
+the deployed image and passes the cold-start callback acceptance test. Until
+then, set `web` minimum replicas to one; this mitigates scale-down but does not
+survive process restart. Once the Neon session implementation is verified,
+`web` can use zero minimum replicas and be tested for scale-down between OIDC
+start and callback.
 
 ## 4. Configure state, secrets, and identity
 
-Use the existing Neon PostgreSQL database by default. Configure
+Use the existing or installer-created Neon PostgreSQL database by default.
+Configure
 `PERSISTENCE=postgres` and a TLS-enabled `DATABASE_URL` for the Agent Gateway
 services that use PostgreSQL. Use Neon's pooled endpoint for runtime only
 after verifying that it is compatible with the selected image's connection
@@ -74,13 +109,14 @@ and review Neon plan limits, region, backups, retention, and availability.
 This proposal assumes the user's existing Neon plan has no additional charge;
 Neon pricing, cross-cloud latency and Azure egress are not included.
 
-The long-term goal is to store the web console's OIDC state and server-side
-session in that shared Neon database too, so sign-in can survive scale-to-zero
-and replica changes. This needs an application/image change; the current web
-image keeps OIDC session state in process memory. Do not assume that setting
-`DATABASE_URL` persists web sessions. Until a release supports shared session
-storage, keep one web replica warm when reliable sign-in is required, or accept
-that a callback after scale-to-zero can fail and require a retry.
+Implement OIDC transaction state (including nonce and PKCE verifier when used)
+and server-side web sessions in that shared Neon database as an early
+application/database integration phase. Keep only a protected opaque session
+identifier in the browser, expire and clean up records, and consume callback
+state atomically to prevent replay. Do not assume that setting `DATABASE_URL`
+for domain persistence automatically persists OIDC sessions. Until the new
+image passes integration and cold-start callback tests, keep one web replica
+warm.
 
 If Azure-managed database hosting is explicitly required, provision Azure
 Database for PostgreSQL Flexible Server, create the application database, and
@@ -102,6 +138,12 @@ Configure Entra ID OIDC issuer, client ID/secret, callback URL, and the
 administrator allowlist using the names and formats supported by the selected
 Agent Gateway image release. The exact image configuration is release
 specific and must be checked against its accompanying manifest.
+
+Use the generated web callback URL in the Entra app registration and the
+matching callback value in the user config. If Azure-specific images need to
+be built, suffix release tags with `_a` (for example `<version>_a` and
+optionally `latest_a`); deployment config must pin the verified immutable
+digest rather than the mutable `latest_a` alias.
 
 Leave `REDIS_URL` unset in the minimum-cost design. Add a managed Redis
 service only if its immediate-revocation or decision-cache benefit justifies

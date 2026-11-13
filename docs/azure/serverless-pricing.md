@@ -4,14 +4,15 @@ Prepared **13 November 2026** for Azure region **`francecentral` (Paris)**,
 USD/month, on-demand, before tax. This is a planning model, not an Azure quote,
 a capacity guarantee, or a spending cap. It creates no Azure resources.
 
-The recommended low-cost shape uses Azure Container Apps Consumption for the
-four existing service containers, with all four able to scale to zero. The
-default durable database assumption is the user's existing Neon PostgreSQL
+The target low-cost shape uses Azure Container Apps Consumption for the four
+service containers, with all four able to scale to zero after the Neon-backed
+web OIDC session implementation is built and passes its cold-callback tests.
+The default durable database assumption is the user's existing Neon PostgreSQL
 plan, which adds no Azure database charge in this model. Azure Database for
 PostgreSQL Flexible Server is an explicit, separately costed alternative.
-The web console's in-memory OIDC session can make sign-in unreliable after
-scale-to-zero; keeping one replica warm is an optional reliability trade-off,
-not the default.
+Until shared OIDC state/session support is deployed and verified, keep one web
+replica warm; the current web image's in-memory state is not safe for
+scale-to-zero sign-in.
 
 ## 1. Monthly estimates
 
@@ -28,13 +29,13 @@ guarantee that every Neon plan remains free. Check plan limits and actual
 billing. Azure outbound data transfer to Neon may also be billable and is
 excluded.
 
-The zero-cost scale-to-zero estimates assume the future shared-session design
-only with respect to sign-in reliability: **the current web image does not
-persist OIDC sessions in Neon**. Until an application release adds that
-capability, sign-in state can be lost when `web` scales to zero. The modeled
-Container Apps cost is the same after shared-session support is implemented;
-Neon compute/storage costs for the added session records are not separately
-modeled and may affect the user's Neon bill.
+The scale-to-zero estimates are conditional on implementing and testing shared
+OIDC state/session storage in Neon: **the current web image does not persist
+OIDC sessions there**. Until the application release adds that capability,
+sign-in state can be lost when `web` scales to zero. The modeled Container Apps
+cost is the same after shared-session support is implemented; Neon
+compute/storage costs for the added session records and any Neon project/plan
+charges are not separately modeled and may affect the user's bill.
 
 The Azure PostgreSQL column adds **$18.13/month** for a single B1ms Burstable
 Flexible Server and 32 GB storage. This is an indicative development/staging
@@ -43,11 +44,11 @@ Burstable for production. A minimal illustrative 2-vCore General Purpose
 server at the same region's retail rate adds about **$154.64/month** including
 32 GB storage.
 
-The Container Apps estimates assume every app has a zero minimum replica and
-model only active compute/request usage for the gateway/authz/token service
-hop pattern. The optional warm web replica adds approximately **$5.91/month**
-at the modeled idle rates; its sign-in reliability trade-off is described in
-the [architecture](architecture.md). “After modeled unused grants” assumes
+The target Container Apps estimates assume every app has a zero minimum
+replica and model only active compute/request usage for the gateway/authz/token
+service hop pattern. Until Neon-backed OIDC session support passes acceptance,
+the web minimum must be one; that warm replica adds approximately
+**$5.91/month** at modeled idle rates. “After modeled unused grants” assumes
 that none of the subscription's free grants have been consumed elsewhere.
 Actual billing depends on subscription-level usage and traffic.
 
@@ -73,7 +74,7 @@ storage support and a new estimate.
 | Container Apps plan | Consumption, one environment; no Dedicated profile |
 | Container size | `0.25` vCPU and `0.5` GiB per replica |
 | Always-on allocation | None in the low-cost default; optional `web` minimum replica adds about $5.91/month |
-| Scale-to-zero services | `web`, `gateway`, `tokensvc`, `authz`; zero minimum replicas |
+| Target scale-to-zero services | `web`, `gateway`, `tokensvc`, `authz`; zero minimum replicas after Neon-backed web OIDC sessions pass acceptance (until then web minimum is one) |
 | Request work model | 2.1 one-second container hops per external action: gateway + authz per action and one tokensvc call per 10 actions |
 | Free grants | 180,000 vCPU-seconds, 360,000 GiB-seconds, and 2 million requests per subscription/month |
 | Default database assumption | Existing user Neon plan, modeled as $0 additional database cost for this user; Azure egress excluded |

@@ -1,0 +1,8 @@
+{
+  "provider": "neon",
+  "mode": "existing",
+  "project_id": "replace-with-neon-project-id",
+  "region_id": "aws-eu-west-2",
+  "database_name": "agent_gateway_dev",
+  "application_role": "agent_gateway_app"
+}

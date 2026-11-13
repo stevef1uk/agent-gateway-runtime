@@ -1,0 +1,15 @@
+# User-local cloud configuration and credentials
+/azure-config.json
+/config/neon.json
+**/.env
+**/*.env
+!**/*.env.example
+*.pem
+*.key
+*.token
+/demo/gmail/credentials/
+
+# Generated deployment output and Python bytecode
+/dist/
+__pycache__/
+**/__pycache__/

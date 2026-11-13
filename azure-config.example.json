@@ -1,0 +1,8 @@
+{
+  "tenant_id": "",
+  "subscription_id": "",
+  "location": "francecentral",
+  "resource_group": "agent-gateway-dev",
+  "container_apps_environment": "agent-gateway-dev",
+  "key_vault_name": ""
+}
