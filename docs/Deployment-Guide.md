@@ -452,6 +452,70 @@ All four services are **stateless** with `PERSISTENCE=postgres`:
 | Postgres | Use a managed HA instance (AWS RDS/Aurora, Azure Flexible Server, Cloud SQL) or an operator like CloudNativePG / Zalando. Regular point-in-time recovery, backups of the `audit_events` table matter — it is your legal record. |
 | Redis | Managed Redis (ElastiCache/Azure Cache) with `appendonly yes`, or a sentinel cluster. Losing Redis is survivable (revocation falls back to database lookups), but do not run a memory-only Redis in production for revocation consistency. |
 
+#### Network placement and cloud edge integration
+
+Treat Agent Gateway as the **policy enforcement point**, not as a replacement
+for your cloud firewall, load balancer, or API-management layer. Place the
+gateway on every route from an agent to a protected tool or API. Protect the
+upstream too: agents must not have a second network path that bypasses the
+gateway.
+
+A common layout is:
+
+```text
+Agents ──HTTPS──► existing public/private edge ──► gateway :8080 ──► protected tools/APIs
+Agents ──HTTPS──► approved token route ──────────► tokensvc :8082
+Humans ──HTTPS──► existing edge ─────────────────► web console :8083
+
+gateway / tokensvc / web ──private service network──► authz :8081
+gateway / authz / tokensvc ──private network────────► Postgres / Redis
+gateway ──approved private route────────────────────► protected tools/APIs
+```
+
+The exact routes depend on how agents and operators create delegations and
+obtain tokens. Publish only the required endpoints: agents need the gateway
+for governed calls and tokensvc to mint tokens; human users need the console,
+and any direct delegation-management API should be exposed only if your
+workflow requires it. Keep service-to-service APIs, databases, and caches
+private unless a specific deployment need requires otherwise.
+
+| Listener | Network access guidance |
+|---|---|
+| `gateway :8080` | Route agent tool/API traffic through this listener. An external or internal HTTPS edge may terminate TLS and forward to it. Preserve the request path, method, body, and authorization and Agent Gateway headers. |
+| `tokensvc :8082` | Agents need the token-mint endpoint. Make it reachable only from the intended agent/client networks, directly or through an HTTPS edge route. Apply edge rate limits as defense in depth; tokensvc also has its own mint rate limit. |
+| `web :8083` | Make the console reachable by intended human administrators over HTTPS, with the configured OIDC sign-in flow. Restrict its network audience where practical. |
+| `authz :8081` | Keep service-to-service traffic private. If humans or a provisioning service must call its delegation API directly, expose only the required access path and restrict who can reach it. |
+| `gateway :8088` (optional) | This is a separate forward-proxy listener for governed outbound traffic, including HTTP `CONNECT`; it is not an ordinary tool/API HTTP route. Give it a deliberate path from the agent or sandbox network, configure proxy authentication and allowed source networks, and do not expose it as an unrestricted public proxy. |
+| Postgres / Redis | Keep them on private data subnets or equivalent; allow connections only from the Agent Gateway services that need them. Do not publish database ports to agent or public networks. |
+
+An existing load balancer, ingress, WAF, or API-management service can provide
+TLS termination, routing, edge filtering, health checks, and rate limiting in
+front of the gateway. Those controls complement—but do not replace—the
+gateway's per-request delegation and policy checks. Configure the edge so it
+does not strip or rewrite `Authorization`, `X-Agent-Tool`,
+`X-Agent-Resource`, or `X-Agent-Action`, and ensure it forwards the request
+body unchanged. Keep a direct-to-upstream route unavailable to agent
+networks.
+
+For ordinary HTTP tool/API calls, an existing API gateway may be suitable if
+it supports the required private backend connectivity, paths, headers, body
+sizes, timeouts, and response behavior. Do not assume that an API-management
+HTTP route can front the optional `:8088` forward proxy: proxy traffic,
+especially `CONNECT`, has different protocol and routing requirements.
+Configure health checks against the service `/healthz` endpoints and permit
+them only from the relevant load-balancer or platform health-check sources.
+
+For example, AWS deployments might use an ALB or a supported API Gateway
+integration for HTTPS application traffic; GCP deployments might use an
+external Application Load Balancer or a supported API Gateway backend.
+Internal load balancing and private network controls should keep
+service-to-service and data-store traffic off the public path. These are
+placement examples, not drop-in cloud configurations: exact products and
+settings depend on where the containers run, how the edge connects to private
+backends, and whether the `:8088` proxy is enabled. Validate those details
+against the current AWS or GCP service documentation and your organization's
+networking standards.
+
 ### 6.3 Kubernetes example
 
 ```yaml

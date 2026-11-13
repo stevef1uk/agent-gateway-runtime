@@ -6,6 +6,10 @@ the gateway's **egress proxy** (used with NVIDIA OpenShell sandboxes). If
 you already know the system, see [Architecture.md](Architecture.md) for
 the deeper story.
 
+For self-hosted AWS or GCP deployments, see the
+[network placement guidance](Deployment-Guide.md#network-placement-and-cloud-edge-integration)
+for integrating Agent Gateway with your existing edge, firewalls, and APIs.
+
 ## One-paragraph summary
 
 A human grants a scoped **delegation**, and the agent receives a
