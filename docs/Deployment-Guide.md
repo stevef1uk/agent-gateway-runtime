@@ -207,7 +207,7 @@ make aws-identity
 make aws-preflight
 ```
 
-**Expected:** the intended account and the **assumed role** (`assumed-role/AgentGatewayDev/...`), plus passing manifest, configuration and activation checks. If `make aws-identity` shows `user/agent-gateway-dev` instead, a static-key entry for `[agent-gateway-dev]` in `~/.aws/credentials` is overriding the role profile; delete that section and run it again, because deploying as the user bypasses the scoped role. Preflight validates the Emotion customer-key format and verifies each service licence's RSA-PSS signature and expiry against the vendor public key. It checks release image references but does not decrypt or launch the service images. It creates no AWS resources; fix any missing or mismatched inputs before continuing.
+**Expected:** `make aws-identity` confirms that the configured profile matches `AWS_ACCOUNT` and is not using root credentials; it deliberately suppresses account and ARN values. If verification fails, check the profile's role configuration and ensure a static-key entry is not overriding it. Preflight validates the Emotion customer-key format and verifies each service licence's RSA-PSS signature and expiry against the vendor public key. It checks release image references but does not decrypt or launch the service images. It creates no AWS resources; fix any missing or mismatched inputs before continuing.
 
 ## 5. Administrator: create or update deployment access
 
@@ -309,7 +309,7 @@ JWT and operator secrets are generated once and stored in `dist/aws-lambda/plan/
 
 The parent deployment uses Lambda and managed services only; it creates no proxy VM or OpenClaw hosts. [Architecture](Architecture.md) covers single-region availability and limits. Bedrock configuration and permissions for the AI Wizard remain enabled, but successful model calls also depend on account and model availability.
 
-**Expected:** the script prints **Deployment Complete**, the **ConsoleURL**, the baseline **GatewayURL**, the pool ID and the operator email. It saves endpoint identifiers to `dist/aws-lambda/plan/deployment-outputs.env` and a cleanup inventory under `dist/aws-lambda/teardown/`. Keep both for later cleanup and recovery.
+**Expected:** the script prints **Deployment Complete**, the **ConsoleURL**, the baseline **GatewayURL**, and the pool ID. The operator is invited without printing their email address. It saves endpoint identifiers to `dist/aws-lambda/plan/deployment-outputs.env` and a cleanup inventory under `dist/aws-lambda/teardown/`. Keep both for later cleanup and recovery.
 
 `EnableRegoPolicy` defaults to `true`. This exposes **Policy & Rego** to signed-in administrators in the `AdminEmails` allowlist, enables per-delegation policy-engine selection in the Wizard, and stores managed revisions in DynamoDB. To disable those capabilities when preparing an image deployment, set `"enable_rego_policy": false` in the release configuration; the generated CloudFormation parameters then set `EnableRegoPolicy` to `false`. Existing and new delegations otherwise continue to use the built-in policy unless an administrator selects Rego. See [AWS demos](AWS-Demos.md#administrator-managed-rego-policy) for the editor, probes, and threshold guidance.
 

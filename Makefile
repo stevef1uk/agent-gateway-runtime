@@ -53,7 +53,12 @@ check:
 demo:
 	bash demo/public-weather-tutorial.sh access
 aws-identity:
-	aws sts get-caller-identity --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)"
+	@account="$$(aws sts get-caller-identity --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --query Account --output text)" || exit $$?; \
+	arn="$$(aws sts get-caller-identity --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --query Arn --output text)" || exit $$?; \
+	test -n "$$account" -a -n "$$arn" || { echo 'Could not verify the configured AWS identity.' >&2; exit 1; }; \
+	test -n "$(AWS_ACCOUNT)" -a "$$account" = "$(AWS_ACCOUNT)" || { echo 'The AWS profile does not match AWS_ACCOUNT in aws-config.mk.' >&2; exit 1; }; \
+	case "$$arn" in *:root) echo 'AWS root credentials are not allowed for deployment.' >&2; exit 1 ;; esac; \
+	echo 'Configured AWS account and non-root profile identity verified; identity details suppressed.'
 aws-release-check:
 	python3 -B scripts/aws-release.py "$(RELEASE_MANIFEST)"
 aws-preflight: aws-release-check
@@ -65,12 +70,12 @@ aws-preflight: aws-release-check
 	@echo 'Local release/config/activation checks passed. No AWS resources created.'
 aws-access-deploy:
 	@test -n "$(AWS_ADMIN_PROFILE)" -a -n "$(AWS_ACCOUNT)" || { echo 'Set AWS_ADMIN_PROFILE and AWS_ACCOUNT explicitly in aws-config.mk.' >&2; exit 2; }
-	python3 -B scripts/aws-access-deploy.py --admin-profile "$(AWS_ADMIN_PROFILE)" --app-profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --account "$(AWS_ACCOUNT)" --access-stack "$(AWS_ACCESS_STACK)" --application-stack "$(AWS_STACK)" --artifact-stack "$(AWS_ARTIFACT_STACK)" --deployment-role "$(AWS_DEPLOYMENT_ROLE_NAME)" --s3-bucket "$(AWS_ACCESS_S3_BUCKET)"
+	@python3 -B scripts/aws-access-deploy.py --admin-profile "$(AWS_ADMIN_PROFILE)" --app-profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --account "$(AWS_ACCOUNT)" --access-stack "$(AWS_ACCESS_STACK)" --application-stack "$(AWS_STACK)" --artifact-stack "$(AWS_ARTIFACT_STACK)" --deployment-role "$(AWS_DEPLOYMENT_ROLE_NAME)" --s3-bucket "$(AWS_ACCESS_S3_BUCKET)"
 aws-access-outputs:
 	@test -n "$(AWS_ADMIN_PROFILE)" || { echo 'Set AWS_ADMIN_PROFILE for access-stack inspection.' >&2; exit 2; }
 	aws cloudformation describe-stacks --profile "$(AWS_ADMIN_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_ACCESS_STACK)" --query 'Stacks[0].Outputs' --output table --no-cli-pager
 aws-deploy: aws-preflight
-	AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AGW_ACCOUNT="$(AWS_ACCOUNT)" AGW_ACCESS_STACK="$(AWS_ACCESS_STACK)" AGW_ACCESS_PROFILE="$(AWS_ADMIN_PROFILE)" AGW_ARTIFACT_STACK="$(AWS_ARTIFACT_STACK)" AGW_APP_STACK="$(AWS_STACK)" AGW_CUSTOMER_KEY_FILE="$(CUSTOMER_KEY_FILE)" AGW_VENDOR_PUBLIC_KEY_FILE="$(VENDOR_PUBLIC_KEY_FILE)" AGW_LICENCE_DIR="$(LICENCE_DIR)" AGW_DEMO_DEPLOYMENT_ROLE_ARN="$(DEMO_DEPLOYMENT_ROLE_ARN)" AGW_WORKLOAD_BOUNDARY_ARN="$(WORKLOAD_BOUNDARY_ARN)" bash scripts/deploy-aws.sh --release-manifest "$(RELEASE_MANIFEST)" --domain-prefix "$(DOMAIN_PREFIX)" --admin-emails "$(ADMIN_EMAILS)"
+	@AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AGW_ACCOUNT="$(AWS_ACCOUNT)" AGW_ACCESS_STACK="$(AWS_ACCESS_STACK)" AGW_ACCESS_PROFILE="$(AWS_ADMIN_PROFILE)" AGW_ARTIFACT_STACK="$(AWS_ARTIFACT_STACK)" AGW_APP_STACK="$(AWS_STACK)" AGW_CUSTOMER_KEY_FILE="$(CUSTOMER_KEY_FILE)" AGW_VENDOR_PUBLIC_KEY_FILE="$(VENDOR_PUBLIC_KEY_FILE)" AGW_LICENCE_DIR="$(LICENCE_DIR)" AGW_DEMO_DEPLOYMENT_ROLE_ARN="$(DEMO_DEPLOYMENT_ROLE_ARN)" AGW_WORKLOAD_BOUNDARY_ARN="$(WORKLOAD_BOUNDARY_ARN)" bash scripts/deploy-aws.sh --release-manifest "$(RELEASE_MANIFEST)" --domain-prefix "$(DOMAIN_PREFIX)" --admin-emails "$(ADMIN_EMAILS)"
 aws-outputs:
 	@python3 -B scripts/aws-outputs.py --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)"
 aws-demo:

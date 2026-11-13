@@ -15,10 +15,6 @@ AWS_DEFAULT_REGION="$AWS_REGION"
 export AWS_PROFILE AWS_REGION AWS_DEFAULT_REGION AWS_PAGER=""
 
 AGW_ACCOUNT="${AGW_ACCOUNT:-}"
-# Auto-detect AWS account ID from CLI profile if not explicitly set
-if [ -z "$AGW_ACCOUNT" ]; then
-  AGW_ACCOUNT=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query Account --output text 2>/dev/null || echo "unknown")
-fi
 AGW_ARTIFACT_STACK="${AGW_ARTIFACT_STACK:-agent-gateway-artifacts-dev}"
 AGW_APP_STACK="${AGW_APP_STACK:-agent-gateway-dev}"
 AGW_ACCESS_STACK="${AGW_ACCESS_STACK:-agent-gateway-access-dev}"
@@ -83,12 +79,11 @@ python3 -B scripts/aws-release.py "$AGW_RELEASE_MANIFEST"
 
 python3 -B scripts/check-aws-activation.py --key "$AGW_CUSTOMER_KEY_FILE" --vendor-public-key "$AGW_VENDOR_PUBLIC_KEY_FILE" --licences "$AGW_LICENCE_DIR" --release "$AGW_RELEASE_MANIFEST"
 
-say "Checking AWS identity (profile: $AWS_PROFILE, region: $AWS_REGION)"
+say "Checking configured AWS identity."
 caller_account="$(aws sts get-caller-identity --query Account --output text)"
 caller_arn="$(aws sts get-caller-identity --query Arn --output text)"
 [[ "$caller_arn" != *:root ]] || die "Use the configured non-root deployment role, not root credentials"
-printf 'Caller ARN: %s (Account: %s)\n' "$caller_arn" "$caller_account"
-[[ "$caller_account" == "$AGW_ACCOUNT" ]] || die "Expected AWS account $AGW_ACCOUNT, got $caller_account"
+[[ "$caller_account" == "$AGW_ACCOUNT" ]] || die "The AWS profile does not match the configured deployment account."
 
 say "Checking deployment role CloudFormation permissions in $AWS_REGION"
 set +e
@@ -100,7 +95,7 @@ if [[ $cfn_check_rc -ne 0 ]] && grep -q "AccessDenied" <<<"$cfn_check_output"; t
 
 ================================================================================
 ADMINISTRATOR PREREQUISITE REQUIRED:
-The role '$caller_arn' does not yet have deployment permissions attached.
+The configured deployment role does not yet have deployment permissions attached.
 
 As documented in docs/Deployment-Guide.md, an administrator must first
 deploy 'deploy/aws/deployment-access.template.json' in eu-west-3:
@@ -122,19 +117,19 @@ fi
 if [[ -z "$AGW_WORKLOAD_BOUNDARY_ARN" ]]; then
   [[ -n "$AGW_ACCESS_PROFILE" ]] ||
     die "Set AWS_ADMIN_PROFILE to read the access stack, or provide WORKLOAD_BOUNDARY_ARN explicitly"
-  say "Reading workload boundary from access stack '$AGW_ACCESS_STACK' (profile: $AGW_ACCESS_PROFILE)"
+  say "Reading workload boundary from the configured access stack."
   access_account="$(aws sts get-caller-identity --profile "$AGW_ACCESS_PROFILE" --query Account --output text)" ||
-    die "Cannot verify AWS account for access profile '$AGW_ACCESS_PROFILE'"
+    die "Cannot verify the AWS account for the configured administrator profile."
   [[ "$access_account" == "$AGW_ACCOUNT" ]] ||
-    die "Access profile '$AGW_ACCESS_PROFILE' points to account $access_account, expected $AGW_ACCOUNT"
+    die "The configured administrator profile does not match the configured deployment account."
   set +e
   boundary_output="$(aws cloudformation describe-stacks --profile "$AGW_ACCESS_PROFILE" --region "$AWS_REGION" --stack-name "$AGW_ACCESS_STACK" --query 'Stacks[0].Outputs[?OutputKey==`WorkloadBoundaryArn`].OutputValue | [0]' --output text 2>&1)"
   boundary_status=$?
   set -e
   [[ $boundary_status -eq 0 ]] ||
-    die "Cannot read WorkloadBoundaryArn from access stack '$AGW_ACCESS_STACK' using profile '$AGW_ACCESS_PROFILE': $boundary_output. Set AWS_ADMIN_PROFILE or provide WORKLOAD_BOUNDARY_ARN."
+    die "Cannot read WorkloadBoundaryArn from the configured access stack. Set AWS_ADMIN_PROFILE or provide WORKLOAD_BOUNDARY_ARN."
   [[ -n "$boundary_output" && "$boundary_output" != "None" ]] ||
-    die "Access stack '$AGW_ACCESS_STACK' has no WorkloadBoundaryArn output. Complete administrator setup or provide WORKLOAD_BOUNDARY_ARN."
+    die "The configured access stack has no WorkloadBoundaryArn output. Complete administrator setup or provide WORKLOAD_BOUNDARY_ARN."
   AGW_WORKLOAD_BOUNDARY_ARN="$boundary_output"
 fi
 if [[ -z "$AGW_DOMAIN_PREFIX" ]]; then
@@ -432,9 +427,9 @@ printf 'PASS: All public/internal HTTP boundary checks succeeded.\n'
 
 primary_email="${AGW_ADMIN_EMAILS%%,*}"
 if aws cognito-idp admin-get-user --user-pool-id "$agw_pool" --username "$primary_email" >/dev/null 2>&1; then
-  printf 'Cognito user %s already exists in pool %s.\n' "$primary_email" "$agw_pool"
+  printf 'Cognito operator is already configured.\n'
 else
-  printf 'Inviting Cognito operator user %s...\n' "$primary_email"
+  printf 'Inviting the configured Cognito operator...\n'
   aws cognito-idp admin-create-user \
     --user-pool-id "$agw_pool" \
     --username "$primary_email" \
@@ -456,8 +451,7 @@ Deployment Complete!
   ConsoleURL:    $agw_console
   GatewayURL:    $agw_gateway
   UserPoolId:    $agw_pool
-  Operator:      $primary_email
-  Outputs file:  $PLAN_DIR/deployment-outputs.env
+  Operator:      configured
 
 Next: Open ConsoleURL and complete your email invitation, then follow:
   docs/Deployment-Guide.md

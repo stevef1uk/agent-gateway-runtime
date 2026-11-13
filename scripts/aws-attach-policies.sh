@@ -8,15 +8,15 @@
 #
 # Prerequisites:
 #   - AWS CLI configured with root or AdministratorAccess credentials as default
-#   - AgentGatewayDev role exists in account 111111111111
+#   - AgentGatewayDev role exists in the explicitly selected account
 #   - This repo checked out on aws branch
+# Usage: scripts/aws-attach-policies.sh ROLE_NAME ACCOUNT_ID
 # ==============================================================================
 
 set -euo pipefail
 
 # --- Configuration ---
 DEFAULT_ROLE_NAME="AgentGatewayDev"
-DEFAULT_ACCOUNT="111111111111"
 REGION="eu-west-3"
 
 # --- Helpers ---
@@ -24,11 +24,11 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 # --- Parse optional args ---
 ROLE_NAME="${1:-$DEFAULT_ROLE_NAME}"
-ACCOUNT_ID="${2:-$DEFAULT_ACCOUNT}"
+ACCOUNT_ID="${2:-}"
+[[ "$ACCOUNT_ID" =~ ^[0-9]{12}$ ]] || die "Provide the expected 12-digit AWS account ID as the second argument."
 
 echo "=== aws-attach-policies.sh ==="
 echo "Role: $ROLE_NAME"
-echo "Account: $ACCOUNT_ID"
 echo "Region: $REGION"
 echo ""
 
@@ -38,12 +38,10 @@ if ! aws sts get-caller-identity >/dev/null 2>&1; then
 fi
 
 CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-echo "Current AWS account (from credentials): $CURRENT_ACCOUNT"
 if [ "$CURRENT_ACCOUNT" != "$ACCOUNT_ID" ]; then
-  echo "⚠️  Warning: Current account ($CURRENT_ACCOUNT) differs from expected ($ACCOUNT_ID)"
-  echo "   This script targets account $ACCOUNT_ID. Press Ctrl+C to abort, or Ctrl+Z to continue anyway."
-  read -r -t 10 || true
+  die "The active AWS credentials do not match the specified target account."
 fi
+echo "AWS account verification passed; account details suppressed."
 
 echo ""
 
