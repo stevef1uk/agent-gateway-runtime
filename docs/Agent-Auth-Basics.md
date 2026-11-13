@@ -169,6 +169,27 @@ connector needs no credentials), which is why `demo.sh` and
 
 Once you have the ID token, pass it in the delegation body (`"id_token"`) — or as `--id-token` / `ID_TOKEN=` when using `kill-switch-remote.sh` — and the delegation is bound to your verified subject. Any later call made with a delegation-scoped JWT is re-authorized against that subject's grant.
 
+### How do I choose the agent's name / `agent_id`?
+
+You choose it, or use a name from your agent framework. When creating a
+delegation, provide an `agent_id` (sometimes called the agent name). It is a
+human-readable string identifying the agent that receives the permission;
+there is no central agent registry to consult first.
+
+Examples:
+
+- **LangChain / LangGraph:** use a name you assign to the agent, such as
+  `research-agent` or `invoice-bot`.
+- **CrewAI:** use the agent's role or a short ID you choose.
+- **AutoGen, Semantic Kernel, LlamaIndex, or custom code:** choose a clear
+  name such as `customer-support-agent` or `payment-agent-v1`.
+
+Keep it short, lowercase, and descriptive. The same `agent_id` can be used
+for multiple delegations, but separate names for distinct logical agents make
+the console and audit trail easier to read. This value appears in the console,
+audit records, and JWT claims. After creating the delegation, securely give
+the agent process its `delegation_id` and `agent_secret`.
+
 ## How the agent obtains a JWT
 
 One HTTP call to the token service:
@@ -271,6 +292,17 @@ A Basic request from a non-allowed source is rejected with `407` before
 the token is even looked at. Callers using `Authorization: Bearer` are
 unaffected. Full wiring instructions are in
 [OpenClaw-OpenShell.md](OpenClaw-OpenShell.md).
+
+### Optional advanced path: SPIFFE
+
+If your environment already uses SPIFFE/SPIRE, you can configure the gateway
+to authenticate agents with their verified SPIFFE X.509 SVID over mTLS
+instead of a Bearer JWT. The delegation still defines the agent's permissions,
+and gateway requests continue through the same policy, approval, and audit
+checks. This is an optional deployment setup; most users can use the standard
+JWT flow without managing workload identity. See
+[Deployment Guide §7.3](Deployment-Guide.md#73-spiffe--spire--zero-bearer-token-agent-identity)
+for configuration details.
 
 ## Things that commonly trip people up
 
