@@ -190,6 +190,38 @@ the console and audit trail easier to read. This value appears in the console,
 audit records, and JWT claims. After creating the delegation, securely give
 the agent process its `delegation_id` and `agent_secret`.
 
+For example, the human includes it in the delegation-creation request to
+authz (`POST /v1/delegations`):
+
+```json
+{
+  "id_token": "<human's OIDC ID token>",
+  "agent_id": "weather-tutorial-agent",
+  "resources": ["/v1/forecast"],
+  "actions": ["read"],
+  "expires_in_seconds": 1800
+}
+```
+
+The response contains the delegation ID and agent secret (and an initial
+JWT). Later, the agent sends the `delegation_id` and `agent_secret` to
+tokensvc to mint a JWT; it does **not** send `agent_id` again. The gateway
+gets the agent identity from the JWT, so tool/API requests do not need an
+`agent_id` field or header.
+
+### What if I have multiple instances or a swarm?
+
+If several instances share one delegation, they also share its `agent_id`,
+permissions, limits, and revocation boundary. The audit trail identifies the
+delegation and agent, but not which instance made a particular request.
+
+For separate audit attribution, limits, or the ability to revoke one instance
+without stopping the others, give each instance its own delegation, `agent_id`,
+and `agent_secret`. For short-lived or dynamically created swarm workers, a
+trusted provisioning service can create delegations for them. See
+[Agent Identity](Agent-Identity.md#scaling--multiple-instances-shared-vs-per-instance-delegations)
+for the trade-offs and scaling patterns.
+
 ## How the agent obtains a JWT
 
 One HTTP call to the token service:
