@@ -5,18 +5,25 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_dir"
 
+config_file="${AGW_GCP_CONFIG_FILE:-gcp-config.env}"
+if [[ -f "$config_file" ]]; then
+  # shellcheck disable=SC1090
+  source "$config_file"
+fi
+
 usage() {
   cat >&2 <<'EOF'
-Usage: scripts/deploy-gcp.sh --project-id PROJECT --version VERSION [options]
+Usage: scripts/deploy-gcp.sh --version VERSION [options]
 
 Required:
-  --project-id PROJECT       GCP project ID with billing enabled
   --version VERSION          Published Docker Hub release tag, or latest (moving alias)
 
 Options:
+  --project-id PROJECT       GCP project ID with billing enabled (or GCP_PROJECT_ID)
   --region REGION            Cloud Run region (default: europe-west9)
   --deployment-id ID         Resource name prefix (default: agent-gateway-dev)
   --keys-directory DIR       Directory containing token.txt (default: ./keys)
+  --dockerhub-namespace NAME Published image namespace (or GCP_DOCKERHUB_NAMESPACE)
   --emotion                  Deploy and wire the published Emotion MCP upstream
   --emotion-token-file FILE  Upload a vendor-issued Emotion token from outside Git
   --oidc-client-id ID        Google OAuth client ID
@@ -28,17 +35,18 @@ EOF
   exit 2
 }
 
-project_id=""
+project_id="${GCP_PROJECT_ID:-}"
 version=""
-region="europe-west9"
-deployment_id="agent-gateway-dev"
-keys_directory="keys"
+region="${GCP_REGION:-europe-west9}"
+deployment_id="${GCP_DEPLOYMENT_ID:-agent-gateway-dev}"
+keys_directory="${GCP_KEYS_DIRECTORY:-keys}"
 oidc_client_id="${GCP_OIDC_CLIENT_ID:-}"
-oidc_client_secret_file=""
+oidc_client_secret_file="${GCP_OIDC_CLIENT_SECRET_FILE:-}"
 admin_emails="${GCP_ADMIN_EMAILS:-}"
 apply=0
 emotion=0
-emotion_token_file="${EMOTION_TOKEN_FILE:-}"
+emotion_token_file="${GCP_EMOTION_TOKEN_FILE:-${EMOTION_TOKEN_FILE:-}}"
+registry="${GCP_DOCKERHUB_NAMESPACE:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -47,6 +55,7 @@ while [[ $# -gt 0 ]]; do
     --region) [[ $# -ge 2 ]] || usage; region=$2; shift 2 ;;
     --deployment-id) [[ $# -ge 2 ]] || usage; deployment_id=$2; shift 2 ;;
     --keys-directory) [[ $# -ge 2 ]] || usage; keys_directory=$2; shift 2 ;;
+    --dockerhub-namespace) [[ $# -ge 2 ]] || usage; registry=$2; shift 2 ;;
     --emotion-token-file) [[ $# -ge 2 ]] || usage; emotion_token_file=$2; shift 2 ;;
     --oidc-client-id) [[ $# -ge 2 ]] || usage; oidc_client_id=$2; shift 2 ;;
     --oidc-client-secret) [[ $# -ge 2 ]] || usage; oidc_client_secret_file=$2; shift 2 ;;
@@ -58,7 +67,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$project_id" && -n "$version" ]] || usage
+[[ -n "$project_id" && -n "$version" && -n "$registry" ]] || usage
 [[ "$version" == latest || "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
   echo 'Version must be a valid Docker tag.' >&2
   exit 2
@@ -73,10 +82,10 @@ for command in gcloud openssl python3; do
 done
 
 licence_token="$keys_directory/token.txt"
-[[ -s "$licence_token" ]] || { echo "Missing $licence_token" >&2; exit 1; }
+[[ -s "$licence_token" ]] || { echo 'Missing Agent Gateway activation token; check GCP_KEYS_DIRECTORY or --keys-directory.' >&2; exit 1; }
 if [[ -n "$emotion_token_file" ]]; then
   [[ "$emotion" -eq 1 ]] || { echo '--emotion-token-file requires --emotion.' >&2; exit 2; }
-  [[ -s "$emotion_token_file" ]] || { echo "Missing Emotion licence token: $emotion_token_file" >&2; exit 1; }
+  [[ -s "$emotion_token_file" ]] || { echo 'Emotion licence token file is missing or empty.' >&2; exit 1; }
   [[ "$(wc -c < "$emotion_token_file")" -le 65536 ]] || {
     echo 'Emotion licence token must not exceed 64 KiB.' >&2
     exit 1
@@ -95,20 +104,13 @@ if [[ -n "$oidc_client_id" && -z "$oidc_client_secret_file" ]]; then
   fi
 fi
 if [[ -n "$oidc_client_secret_file" ]]; then
-  [[ -s "$oidc_client_secret_file" ]] || { echo "Missing OIDC secret file: $oidc_client_secret_file" >&2; exit 1; }
+  [[ -s "$oidc_client_secret_file" ]] || { echo 'OIDC client secret file is missing or empty.' >&2; exit 1; }
   normalized_secret_file="$(mktemp)"
   chmod 600 "$normalized_secret_file"
   tr -d '\r\n' < "$oidc_client_secret_file" > "$normalized_secret_file"
   oidc_client_secret_file="$normalized_secret_file"
   trap 'rm -f "$normalized_secret_file"' EXIT
 fi
-
-gcloud config set project "$project_id" >/dev/null
-gcloud services enable \
-  run.googleapis.com firestore.googleapis.com secretmanager.googleapis.com \
-  storage.googleapis.com aiplatform.googleapis.com iam.googleapis.com \
-  iamcredentials.googleapis.com identitytoolkit.googleapis.com \
-  artifactregistry.googleapis.com cloudbuild.googleapis.com
 
 bucket="${project_id}-agw-activation"
 gateway_service="agw-${deployment_id}-gateway"
@@ -118,7 +120,6 @@ web_sa="agw-${deployment_id}-web@${project_id}.iam.gserviceaccount.com"
 jwt_secret="agw-${deployment_id}-jwt-secret"
 admin_secret="agw-${deployment_id}-admin-token"
 oidc_secret="agw-${deployment_id}-oidc-client-secret"
-registry="stevef1uk"
 artifact_repo="${region}-docker.pkg.dev/${project_id}/agent-gateway"
 
 ensure_service_account() {
@@ -131,7 +132,7 @@ ensure_service_account() {
     gcloud iam service-accounts describe "$email" --project="$project_id" >/dev/null 2>&1 && return
     sleep 2
   done
-  echo "Service account did not become readable: $email" >&2
+  echo "A required service account did not become readable." >&2
   exit 1
 }
 
@@ -145,6 +146,12 @@ if [[ "$apply" -eq 0 ]]; then
   echo "Validated activation files and project inputs. Re-run with --apply to deploy."
   exit 0
 fi
+
+gcloud services enable --project="$project_id" \
+  run.googleapis.com firestore.googleapis.com secretmanager.googleapis.com \
+  storage.googleapis.com aiplatform.googleapis.com iam.googleapis.com \
+  iamcredentials.googleapis.com identitytoolkit.googleapis.com \
+  artifactregistry.googleapis.com cloudbuild.googleapis.com
 
 gcloud storage buckets describe "gs://$bucket" --project="$project_id" >/dev/null 2>&1 || \
   gcloud storage buckets create "gs://$bucket" --location="$region" --uniform-bucket-level-access --project="$project_id"

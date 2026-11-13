@@ -41,12 +41,23 @@ before removing them if they are no longer needed.
 git clone --branch gcp https://github.com/stevef1uk/agent-gateway-runtime.git
 cd agent-gateway-runtime
 
-export GCP_PROJECT_ID="YOUR_GCP_PROJECT_ID"
-export GCP_DEPLOYMENT_ID="agent-gateway-dev"  # Change if using a different resource prefix.
+cp gcp-config.env.example gcp-config.env
+```
+
+Edit `gcp-config.env` with your project ID, resource prefix, published image
+namespace, and any local file paths or admin emails you want to configure.
+`GCP_PROJECT_ID` and `GCP_DOCKERHUB_NAMESPACE` are required; fill them in
+before continuing. This populated file is ignored by Git. Keep OAuth client secrets and other
+credentials out of it; supply an OAuth secret via a protected file or the
+interactive method below.
+
+Load the local values into your shell:
+
+```bash
+source ./gcp-config.env
 
 gcloud auth login
 gcloud auth application-default login
-gcloud config set project "$GCP_PROJECT_ID"
 ```
 
 Verify the project and billing link before deployment:
@@ -86,14 +97,12 @@ You can set the same value in `GCP_ADMIN_EMAILS` instead. The deployment
 script rejects OIDC configuration without an admin allowlist; do not omit this
 flag from either the initial OIDC deployment or a later redeployment.
 
-Run a validation-only pass first:
+Run a validation-only pass first. It checks local inputs and does not change
+your active `gcloud` project or create or update cloud resources:
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id "$GCP_PROJECT_ID" \
-  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
-  --keys-directory keys \
   --admin-emails "admin@example.com"
 ```
 
@@ -101,10 +110,7 @@ Then deploy:
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id "$GCP_PROJECT_ID" \
-  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
-  --keys-directory keys \
   --admin-emails "admin@example.com" \
   --emotion \
   --apply
@@ -141,8 +147,8 @@ The Wizard can also register an existing reachable HTTP(S) API or MCP server
 and create a scoped delegation for it. It does not deploy the upstream service.
 
 ```text
-stevef1uk/agent-gateway-gateway_g:VERSION
-stevef1uk/agent-gateway-web_g:VERSION
+YOUR_PUBLISHED_IMAGE_NAMESPACE/agent-gateway-gateway_g:VERSION
+YOUR_PUBLISHED_IMAGE_NAMESPACE/agent-gateway-web_g:VERSION
 ```
 
 The examples use the moving `latest` aliases. A future deployment with the
@@ -233,10 +239,7 @@ separately supply a vendor-issued Emotion token with
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id "$GCP_PROJECT_ID" \
-  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
-  --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
@@ -252,10 +255,7 @@ echo
 export GCP_OIDC_CLIENT_SECRET
 
 scripts/deploy-gcp.sh \
-  --project-id "$GCP_PROJECT_ID" \
-  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
-  --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --admin-emails "admin@example.com" \
@@ -310,10 +310,7 @@ Add `--emotion` to deploy the published private Emotion MCP upstream and wire it
 
 ```bash
 scripts/deploy-gcp.sh \
-  --project-id "$GCP_PROJECT_ID" \
-  --deployment-id "$GCP_DEPLOYMENT_ID" \
   --version latest \
-  --keys-directory keys \
   --emotion \
   --oidc-client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
   --oidc-client-secret /secure/path/to/client-secret.txt \
