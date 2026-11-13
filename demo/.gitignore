@@ -1,6 +1,0 @@
-# Local runtime credentials and compose overrides (demo only) — gitignored
-.env
-docker-compose.override.yml
-
-# Human-delegation demo — generated fake invoices (one pair per run)
-invoices/

@@ -1,5 +1,0 @@
-ZAP scan — 2026-10-22 19:45:55 UTC
-image: zaproxy/zap-stable  mode: full
-
-mcpsrv     :8091  no alerts
-  reports: security/results/mcpsrv.md (readable)

@@ -51,24 +51,18 @@ can be lower or higher depending on grant use and your subscription.
 | Excluded | Log Analytics ingestion/retention, internet egress, private networking/NAT/firewall, WAF/Front Door/API Management, Redis, Key Vault operations, ACR, HA/zone redundancy, support, software licence, and tax |
 
 The model assigns one second of billed work to each hop. Actual gateway time
-includes waiting for upstream services and may be much longer. `--seconds-per-hop`
-can be used to explore slower requests; no load test or Azure deployment has
-validated these sizing assumptions. Public Docker Hub images avoid ACR charges
-in this estimate.
+includes waiting for upstream services and may be much longer; the cost
+increases with billed duration. No load test or Azure deployment has validated
+these sizing assumptions. Public Docker Hub images avoid ACR charges in this
+estimate.
 
-## 3. Reproduce the estimate
+## 3. Estimate inputs
 
-The calculator uses the checked-in rate snapshot in
-[serverless-pricing-inputs.json](serverless-pricing-inputs.json). Refresh the
-snapshot from the current Azure Retail Prices API and validate the selected
-region before using these figures for a purchase or production budget.
-
-```sh
-python3 scripts/estimate-azure-serverless.py
-python3 scripts/estimate-azure-serverless.py --seconds-per-hop 5
-python3 scripts/estimate-azure-serverless.py --database b1ms
-python3 scripts/estimate-azure-serverless.py --database general-purpose
-```
+The [pricing input snapshot](serverless-pricing-inputs.json) records the
+regional rates and workload inputs used for these estimates. Refresh and
+recalculate from the current Azure Retail Prices API before using the figures
+for a purchase or production budget. The inputs are documentation, not an
+automated calculator.
 
 ## 4. Price sources
 
