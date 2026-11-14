@@ -1,5 +1,11 @@
 # Agent Gateway on Azure — proposed architecture
 
+> This is the original architecture proposal, not the current deployment
+> inventory. For the operator-verified application design and the proposed
+> enterprise integration diagram, see the
+> [current Azure architecture](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/architecture.md)
+> in the application repository.
+
 This is a low-cost, single-region proposal for running the existing
 Agent Gateway service containers in a customer's Azure subscription. It is
 not deployment automation and does not create resources.

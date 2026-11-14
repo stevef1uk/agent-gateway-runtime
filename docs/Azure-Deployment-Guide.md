@@ -1,14 +1,19 @@
-# Agent Gateway Azure deployment proposal
+# Agent Gateway Azure deployment proposal and notes
 
-> **Work in progress — NOT READY TO DEPLOY.** Do not run Terraform `apply` or
-> deploy these images to an Azure subscription yet. Azure end-to-end
-> acceptance and production-readiness gates remain outstanding.
+> **Development trial verified; not production-certified.** This document
+> records the original design and Neon setup workflow. It is not the current
+> Azure installer. For a fresh install or a full teardown, use the canonical
+> [application-repository Azure deployment README](https://github.com/stevef1uk/agent-gateway/blob/azure/deploy/azure/README.md)
+> and [teardown runbook](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/teardown.md).
 
-This guide describes the low-cost Azure deployment flow shared with the
-`agent-gateway` application repository. That repository contains the Azure
-Terraform scaffold, guarded lifecycle wrapper, and Key Vault uploader. This
-guide and the local Neon helper do not create Azure resources by themselves;
-no application resources are applied until the user runs the guarded apply.
+The Azure application source, Terraform scaffold, guarded lifecycle wrapper,
+and Key Vault uploader are in the separate
+[`agent-gateway` application repository](https://github.com/stevef1uk/agent-gateway/tree/azure).
+The operator-verified development trial was deployed through that repository.
+This runtime repository's proposal and Neon helper do not deploy Azure
+resources by themselves. The remaining sections are design and helper
+reference material; they must not be used in place of the canonical
+application-repository install/teardown instructions.
 
 For service placement and trade-offs, see the
 [Azure architecture](azure/architecture.md). For monthly estimates and
@@ -44,13 +49,14 @@ expiry locally before upload. See the application repository's Azure README
 for config validation, required confirmations, and deploy/teardown commands.
 
 Provision or select the non-production Neon database and verify application
-persistence and web OIDC-session migrations before creating the Azure
-Container Apps environment. The planned script should make Neon project and
-database setup repeatable, support an existing Neon project, and avoid printing
-credentials. Test migrations against local PostgreSQL first, then run them
-against the dedicated Neon development database using TLS. Use a direct Neon
-endpoint for schema changes unless pooled-endpoint compatibility is verified;
-test the selected runtime endpoint and connection limits separately.
+persistence and web OIDC-session behavior using the current application
+repository's tests before deployment. The local Neon setup helper supports
+repeatable project/database setup, selecting an existing project, and
+ownership-checked teardown without printing credentials. Test migrations
+against local PostgreSQL first, then use TLS against a dedicated Neon
+development database. Use a direct Neon endpoint for schema changes unless
+pooled-endpoint compatibility is verified; test the selected runtime endpoint
+and connection limits separately.
 
 Phase 1 includes a config-driven Neon setup helper. Copy
 `config/neon.example.json` to the ignored `config/neon.json`. For an existing
@@ -111,8 +117,9 @@ enforce that signed expiry; users who need to continue afterwards should
 request a private replacement licence. See the
 [Pricing page in the main repository](https://github.com/stevef1uk/agent-gateway-demo/blob/main/docs/Pricing.md).
 See the application repository's Azure deployment README for details,
-including the optional private-registry token file. Entra OIDC uses PKCE and
-does not require a client secret.
+including the optional private-registry token file. The current web app uses
+Entra OIDC with PKCE and a confidential-client credential; the guarded
+application-repository workflow stores that credential in Key Vault.
 
 The `status` command only reports non-secret Neon project metadata.
 
@@ -129,10 +136,10 @@ python3 -B scripts/neon_setup.py --config config/neon.json destroy \
 Destroy refuses to delete projects that are not recorded as created by this
 helper. It does not delete or suspend resources in an existing user project.
 Review Neon billing and stop/delete those resources separately if you selected
-an existing project. Azure resource teardown will be added with the Azure
-installer; no Azure resources are currently managed by this branch. Neon
-provisioning does not implement Agent Gateway persistence or OIDC sessions;
-do not treat it as evidence that database integration is complete.
+an existing project. The full Azure teardown procedure, including resources
+outside Terraform ownership, is in the linked application-repository runbook.
+Neon provisioning remains separate from the Agent Gateway application state
+adapter and does not by itself prove application persistence or OIDC behavior.
 
 ## 2. Create the Container Apps environment
 
@@ -163,14 +170,12 @@ revision (the pricing model assumes `0.25` vCPU and `0.5` GiB per replica):
    verify that the ingress preserves the request path, authorization, and
    Agent Gateway headers.
 
-Set `gateway`, `tokensvc`, and `authz` replica bounds from local integration
-tests, starting with conservative maxima. Do not configure `web` with zero
-minimum replicas until the Neon-backed OIDC state/session implementation is in
-the deployed image and passes the cold-start callback acceptance test. Until
-then, set `web` minimum replicas to one; this mitigates scale-down but does not
-survive process restart. Once the Neon session implementation is verified,
-`web` can use zero minimum replicas and be tested for scale-down between OIDC
-start and callback.
+Set replica bounds from local integration tests, starting with conservative
+maxima. The current application image persists shared OIDC/session state in
+PostgreSQL and has passed cross-instance integration tests. Keep `web` at one
+minimum replica until the deployed Azure image also passes cold-callback and
+scale-to-zero acceptance; local database tests alone do not prove that
+behavior.
 
 ## 4. Configure state, secrets, and identity
 

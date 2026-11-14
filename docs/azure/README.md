@@ -1,19 +1,27 @@
-# Azure proposal
+# Azure documentation
 
-This branch proposes a low-cost, serverless deployment of Agent Gateway in
-Microsoft Azure. It is a design and cost model, **not an executable deployment
-or a promise that Azure resources have been created**.
+This directory records the original Azure proposal and design work in this
+runtime repository. The current Azure application implementation and
+operator-tested install/teardown instructions live in the separate
+[`stevef1uk/agent-gateway` repository](https://github.com/stevef1uk/agent-gateway/tree/azure).
+The development trial is verified by the operator but is not
+production-certified.
 
-- [Architecture and Azure service choices](architecture.md)
-- [Deployment proposal](../Azure-Deployment-Guide.md)
-- [Indicative pricing and assumptions](serverless-pricing.md)
-- [Implementation plan and test gates](implementation-plan.md)
+- [Current Azure install and release instructions](https://github.com/stevef1uk/agent-gateway/blob/azure/deploy/azure/README.md)
+- [Current live deployment status](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/live-deployment.md)
+- [Current Azure architecture](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/architecture.md)
+- [Full Azure teardown runbook](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/teardown.md)
+- [Current implementation and acceptance plan](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/implementation-plan.md)
 
-The target design uses Azure Container Apps Consumption and Neon PostgreSQL.
-Phase 1 includes config-driven Neon project/database/role setup and
-ownership-checked teardown in `scripts/neon_setup.py`; application database
-integration remains to be implemented. Web OIDC state and sessions
-must be persisted in Neon before `web` can safely scale to zero; until that
-application/image change passes its cold-callback tests, keep one replica
-warm. Azure Database for PostgreSQL is an optional, separately costed
-alternative.
+The files below retain proposal assumptions, pricing, and the Neon helper
+design. Use the linked application-repository docs for a new installation;
+the proposal pages are not the current installer or deployment status.
+
+- [Original architecture proposal](architecture.md)
+- [Original deployment proposal](../Azure-Deployment-Guide.md)
+- [Indicative pricing assumptions](serverless-pricing.md)
+- [Original implementation plan](implementation-plan.md)
+
+The Neon setup helper supports creating/selecting a project/database and
+ownership-checked removal of a project it created. It does not deploy Azure
+resources or implement the Agent Gateway application's PostgreSQL state.

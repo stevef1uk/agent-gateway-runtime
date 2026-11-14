@@ -1,5 +1,11 @@
 # Azure implementation plan
 
+> This is the original planning document and predates the current Azure
+> implementation. For current implementation status, acceptance results, and
+> remaining production gates, use the
+> [current Azure implementation plan](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/implementation-plan.md)
+> in the application repository.
+
 This plan turns the Azure proposal into a testable, scripted delivery. Users
 provide a non-secret environment/account config; scripts provision or select
 the Neon database and drive Terraform for Azure. Application behavior,
