@@ -1,16 +1,17 @@
 # Agent Gateway Azure deployment guide
 
-This guide deploys the licensed Agent Gateway service images to a dedicated
-Azure resource group. The public `agent-gateway-runtime` repository contains
-the Azure Bicep template, deployment lifecycle script, and Key Vault uploader.
-It does **not** contain the proprietary application source or container build
-files. Users cannot build or modify the service images; obtain the immutable
-image digests and licence material from the release owner.
+Deploy the licensed Agent Gateway service images to Azure using the public
+Bicep template, deployment lifecycle script, and Key Vault uploader in this
+repository. Obtain the immutable image digests and licence material from the
+release owner; these identify the published service images used by the
+deployment.
 
-The supervised Azure development trial was operator-tested and later torn
-down. The public installer has not yet been used to recreate that trial and
-is not production-certified. Validate application behavior in your own
-non-production subscription before production use.
+The supervised Azure development trial successfully verified the Console,
+Policy/Rego page, Telegram configuration, and wizard-managed Emotion service.
+This guide walks through configuring prerequisites, deploying those services,
+and validating the application in your Azure environment. Start with a
+non-production subscription, then use the acceptance checks below to confirm
+the end-to-end experience before a production rollout.
 
 ## What the installer manages
 

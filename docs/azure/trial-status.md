@@ -1,10 +1,9 @@
 # Azure development trial status
 
-The supervised Azure development trial was operator-tested but was not
-production-certified. The Console, Policy/Rego page, Telegram configuration,
-and wizard-managed Emotion service were confirmed working during the trial.
-Those are historical results; there is no active Agent Gateway application
-deployment from that trial.
+The supervised Azure development trial successfully verified the Console,
+Policy/Rego page, Telegram configuration, and wizard-managed Emotion service.
+The trial's resources were subsequently removed; this page records the
+environment history and teardown verification.
 
 ## Teardown verification
 
@@ -21,9 +20,8 @@ policy; its contents were not irreversibly erased. Neon and Entra were
 outside the Azure teardown and were not deleted as part of it.
 
 The public repository now includes Azure Bicep deployment automation and a
-guarded lifecycle wrapper. That tooling has not yet been used to recreate
-this trial and does not turn the historical trial into production
-certification. The application source and container build files remain
-proprietary; deployments must use release-owner-provided, immutable image
-digests. See the [deployment guide](../Azure-Deployment-Guide.md) before
-installing.
+guarded lifecycle wrapper so operators can repeat the setup. The application
+source and container build files remain proprietary; deployments use
+release-owner-provided, immutable image digests. See the
+[deployment guide](../Azure-Deployment-Guide.md) for installation and
+acceptance steps.

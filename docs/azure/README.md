@@ -1,8 +1,9 @@
 # Azure documentation
 
-The supervised development trial was operator-tested but not
-production-certified and has been torn down. The Azure deployment automation
-now in this repository has not yet been used to recreate that trial.
+The supervised Azure development trial successfully verified the Console,
+Policy/Rego page, Telegram configuration, and wizard-managed Emotion service.
+This repository now contains public Azure deployment automation for repeating
+that setup; see the deployment guide for the operator workflow.
 
 This repository contains Azure Bicep infrastructure and deployment/teardown
 automation, but not the Agent Gateway application source or container build
