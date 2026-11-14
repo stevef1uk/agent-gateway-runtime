@@ -1,10 +1,8 @@
 # Indicative Azure serverless deployment cost estimate
 
-> **Indicative planning model, not an active deployment or Azure quote.**
-> The model predates the public installer and was updated to include its
-> `web` and `authz` minimum replicas. No fresh Azure deployment has been run
-> with that installer. Recalculate regional prices and validate image
-> behavior before using these figures.
+> **Indicative monthly planning model.** These scenarios help estimate Azure
+> costs for the public installer; they are not an Azure quote. Refresh regional
+> prices and compare actual usage after deployment.
 
 Prepared **13 November 2026** for Azure region **`francecentral` (Paris)**,
 USD/month, on-demand, before tax. This is a planning model, not an Azure quote,

@@ -1,17 +1,16 @@
 # Agent Gateway Azure deployment guide
 
-Deploy the licensed Agent Gateway service images to Azure using the public
-Bicep template, deployment lifecycle script, and Key Vault uploader in this
-repository. Obtain the immutable image digests and licence material from the
-release owner; these identify the published service images used by the
-deployment.
+Deploy the licensed Agent Gateway services to Azure with the public Bicep
+template and lifecycle tools in this repository. The workflow provisions the
+Container Apps environment, securely connects runtime secrets through Key
+Vault, previews infrastructure changes, and provides an ownership-aware
+teardown path.
 
-The supervised Azure development trial successfully verified the Console,
+A supervised Azure development trial successfully exercised the Console,
 Policy/Rego page, Telegram configuration, and wizard-managed Emotion service.
-This guide walks through configuring prerequisites, deploying those services,
-and validating the application in your Azure environment. Start with a
-non-production subscription, then use the acceptance checks below to confirm
-the end-to-end experience before a production rollout.
+This guide helps you prepare your Azure environment, deploy the release-owner
+images, and confirm the end-to-end experience with the acceptance checklist.
+Begin in a non-production subscription, then use your results to plan rollout.
 
 ## What the installer manages
 
@@ -26,11 +25,11 @@ the end-to-end experience before a production rollout.
   group derived from `name_prefix`.
 - Azure Monitor log destination for the Container Apps environment.
 
-It does not create, modify, or delete the external Key Vault, Neon database,
-Entra app registration, image registry, or licence entitlement. The optional
-private registry setting only configures pulls for the four service images;
-the Emotion image used later by the wizard must be pullable by Azure Container
-Apps independently.
+Bring an existing Key Vault, Neon database, Entra app registration, image
+registry, and licence entitlement; these external services stay under your
+control. The optional private-registry setting configures pulls for the four
+Agent Gateway service images. Make the Emotion image used by the wizard
+available to Azure Container Apps independently.
 
 ## 1. Prerequisites
 

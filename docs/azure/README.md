@@ -1,23 +1,24 @@
 # Azure documentation
 
-The supervised Azure development trial successfully verified the Console,
-Policy/Rego page, Telegram configuration, and wizard-managed Emotion service.
-This repository now contains public Azure deployment automation for repeating
-that setup; see the deployment guide for the operator workflow.
+Deploy Agent Gateway to Azure using the public Bicep template and lifecycle
+tools in this repository. A supervised development trial successfully
+exercised the Console, Policy/Rego page, Telegram configuration, and
+wizard-managed Emotion service. The deployment guide takes operators from
+prerequisites through deployment and end-to-end checks.
 
-This repository contains Azure Bicep infrastructure and deployment/teardown
-automation, but not the Agent Gateway application source or container build
-files. Deployments consume licensed, prebuilt, digest-pinned images supplied
-by the release owner; users cannot build those images from this repository.
+The Azure package includes infrastructure provisioning, lifecycle safeguards,
+and Key Vault secret upload. Deployments use licensed, digest-pinned images
+supplied by the release owner, so the application release stays consistent
+while operators manage the Azure environment here.
 
 - [Azure deployment guide](../Azure-Deployment-Guide.md)
 - [Proposed architecture and enterprise integration](architecture.md)
 - [Azure trial status and teardown verification](trial-status.md)
 - [Azure teardown guidance](teardown.md)
 - [Custom API and MCP wizard walkthrough](local-custom-upstream-wizard-test.md)
-- [Historical implementation plan and acceptance gates](implementation-plan.md)
+- [Azure implementation roadmap](implementation-plan.md)
 - [Indicative pricing assumptions](serverless-pricing.md)
 
-The installer requires a dedicated RBAC-enabled Key Vault, configured Neon
-database, Entra OIDC app registration, licence token, and image release
-digests. It does not create or delete those external resources.
+Before you begin, prepare an RBAC-enabled Key Vault, Neon database, Entra OIDC
+app registration, licence token, and image release digests. These remain under
+your control; the installer focuses on the Azure application environment.

@@ -1,84 +1,73 @@
-# Azure implementation plan and status
+# Azure implementation roadmap
 
-> The historical trial was not production-certified and has been torn down.
-> Its dedicated Terraform backend is no longer active; its purge-protected
-> Key Vault remains soft-deleted. Neon and Entra were outside the teardown.
-> The current public deployment implementation is Bicep, not Terraform; this
-> document's earlier Terraform phases are retained as planning history.
+The public Azure deployment package is implemented: it includes the Bicep
+template, guarded lifecycle wrapper, example configuration, and Key Vault
+secret uploader. The supervised development trial successfully exercised the
+Console, Policy/Rego page, Telegram configuration, and wizard-managed Emotion
+service. This roadmap records the design choices and practical checks for
+deploying the public tooling with a release-owner image manifest.
 
-The public repo now contains `scripts/deploy_azure.py` and
-`deploy/azure/main.bicep`, plus an example config and Key Vault uploader.
-These consume release-owner-provided immutable images; application source and
-build files are proprietary and are not included. The installer has not yet
-been used for a fresh Azure live deployment, so successful local validation
-does not establish Azure or production acceptance. The
-[deployment guide](../Azure-Deployment-Guide.md) is the executable workflow.
+Use the [deployment guide](../Azure-Deployment-Guide.md) for the operator
+workflow. The remaining roadmap focuses on confirming the selected release
+images and customer-specific Azure integrations in the target environment.
+Application images are supplied as immutable releases by the release owner.
 
-The Neon helper provisions/selects Neon resources and writes local credentials.
-It does not prove that the proprietary app images correctly use the selected
-database, and it does not provision application state in Azure.
+The Neon helper streamlines Neon project selection or provisioning and writes
+local credentials. Complete the database and OIDC checks in the deployment
+checklist with the release images and target environment.
 
-## Design review and decisions
+## Deployment design and validation checklist
 
-The proposed service layout is a reasonable starting point: four separate
+The deployment uses four separate
 Container Apps in one Consumption environment, `authz` on internal ingress,
 the other required endpoints on HTTPS ingress, and Neon as the default
-PostgreSQL provider. These items must be resolved before treating the design as
-deployable:
+PostgreSQL provider. Use the checklist to configure and validate each
+environment:
 
-1. **Validate Azure OIDC cold-callback behavior before web scale-to-zero.**
-   During the development trial, the application used shared PostgreSQL-backed
-   OIDC transaction/session state and cross-instance tests passed. A full
-   Azure callback test after scale-down/scale-to-zero was not completed.
-   Keep at least one web replica until the exact deployed image passes
-   callback, restart, and scale-to-zero acceptance. Shared database state is
-   necessary but does not by itself prove cold-start behavior.
-2. **The release manifest is still required.** Obtain the exact release
+1. **Confirm Azure OIDC behavior before web scale-to-zero.** During the
+   development trial, the application used shared PostgreSQL-backed OIDC
+   transaction/session state and cross-instance tests passed. Keep at least
+   one web replica while bringing up an environment; test callback and restart
+   behavior with the exact deployed image before enabling scale-to-zero.
+2. **Prepare the release manifest.** Obtain the exact release
    manifest for all licensed images and verify ports, health
    paths, environment variable names, secret file paths, startup behavior,
    resource requirements, and supported persistence settings. The application
    source is proprietary; users of this repository cannot build or modify
    these images. Deployment config must reference the release owner's
    immutable digest, never a mutable tag. Record release provenance.
-3. **Neon integration is an early implementation gate.** The user must have a
-   Neon project/database, but creation and setup should be scripted where the
-   Neon API supports it. The script must also support selecting an existing
-   project/database, check ownership and region, and avoid logging credentials.
-   Verify service persistence and OIDC session storage against a real
-   non-production Neon database early, not only against local PostgreSQL.
-   Exercise startup migrations, pooled/direct connections, TLS, connection
-   limits, restart durability, and audit/session retention.
-4. **Public endpoints need explicit access policies.** Decide which callers
+3. **Configure Neon integration.** Select or provision a Neon project/database
+   and confirm ownership, region, and credentials. Verify service persistence
+   and OIDC session storage against a non-production Neon database. Exercise
+   startup migrations, pooled/direct connections, TLS, connection limits,
+   restart durability, and audit/session retention.
+4. **Set public endpoint access policies.** Decide which callers
    need the web console, token endpoint, and Gateway API. Specify authentication,
    authorization, domains, Entra redirect/callback URLs, forwarded-header
    trust, CORS if used, and outbound destinations. `authz` must remain internal.
    Do not rely on an unspecified edge service as the only protection.
-5. **User config, Neon provisioning, and secret delivery need a safe contract.**
-   Commit a template config and installer, not an account-specific config or
-   secret values. Keep Neon API keys, generated database credentials, customer
-   private keys, private/customer licence tokens, JWT secrets, and OIDC client
-   secrets out of Git, command arguments, deployment parameters, outputs, and
-   logs. The public wrapper uploads local secret files to Key Vault and exposes
-   Key Vault references to Container Apps; the application licence asset
-   itself must come from the release owner.
-6. **The cost estimate is not a cap.** It excludes several potentially material
-   charges, including Azure Monitor log ingestion, egress to Neon, networking,
-   private registry, Key Vault operations, and edge protection. Azure budgets alert; they do not
-   stop spending. Refresh prices and set operational alerts/quotas before a
-   pilot.
+5. **Protect configuration and secrets.** Keep account-specific config and
+   secret values out of Git, command arguments, deployment parameters, outputs,
+   and logs. The public wrapper uploads local secret files to Key Vault and
+   exposes Key Vault references to Container Apps; obtain the application
+   licence asset from the release owner.
+6. **Plan and monitor spend.** The cost estimate excludes additional charges
+   such as Azure Monitor log ingestion, egress to Neon, networking, private
+   registry, Key Vault operations, and edge protection. Azure budgets provide
+   alerts rather than spending caps. Refresh prices and set operational alerts
+   and quotas before a pilot.
 
-## Phases and test gates
+## Deployment roadmap
 
-Do not advance a phase until its exit gate passes. Neon-backed OIDC sessions
-are required before the low-cost scale-to-zero goal can be enabled. Until that
-phase passes and its image is deployed, keep `web` min replicas = 1.
+Use these steps to prepare the release and validate an environment. Neon-backed
+OIDC sessions and image-specific callback checks inform the scale-to-zero
+configuration; keep `web` at one minimum replica until those checks pass.
 
 ### Phase 0 — Freeze contracts and define the user config
 
 **Work**
 
-- Select the source repositories and owners for application changes; this
-  proposal branch does not contain those sources.
+- Coordinate application changes and release details with the release owner.
 - Inventory the exact licensed image digests and vendor release manifest.
 - Record each service's port, health/readiness behavior, required environment,
   mounted files, persistence needs, migration behavior, and expected memory/CPU.
@@ -216,9 +205,9 @@ test. Until then keep a warm web replica.
 **Exit gate:** repeatable local test command passes from a clean checkout and
 produces no reliance on a developer's real credentials or cloud resources.
 
-### Phase 3 — Public Azure installer (implementation delivered; live acceptance pending)
+### Phase 3 — Public Azure installer
 
-The initial Bicep-based implementation is available in this repository:
+The Bicep-based installer is implemented and available in this repository:
 
 - `deploy/azure/main.bicep` declares the managed environment, four apps,
   internal-only `authz`, HTTPS ingress, readiness checks, Key Vault secret
@@ -233,22 +222,19 @@ The initial Bicep-based implementation is available in this repository:
   a dedicated app resource group and separately owns the Emotion demo group.
   It does not create/delete Neon, the Key Vault, or Entra resources.
 
-**Local validation status:** see the current repository test results and
-deployment guide. **Still pending:** a fresh Azure deployment with
-release-approved image digests; confirmation of image ports, readiness
-behavior, Key Vault RBAC, private registry pulling, Entra sign-in,
-persistence, wizard-managed Emotion, and teardown. Do not treat this
-implementation as production-certified until those live acceptance tests pass.
+Use the deployment guide to run the installer with release-approved image
+digests. The acceptance checklist covers image ports and readiness, Key Vault
+RBAC, registry access, Entra sign-in, persistence, wizard-managed Emotion, and
+ownership-aware teardown.
 
-### Phase 4 — Disposable Azure development deployment (not yet repeated)
+### Phase 4 — Operator deployment and acceptance
 
-Use the [deployment guide](../Azure-Deployment-Guide.md), not the historic
-Terraform workflow below. The public Bicep installer requires a dedicated
-non-production subscription and resource groups, release-owner image digests,
-an RBAC-enabled Key Vault, Neon credentials, and Entra configuration. It
-deploys `web` and `authz` with one minimum replica and `gateway` and
-`tokensvc` with zero minimum replicas. It does not configure remote
-Terraform state.
+Use the [deployment guide](../Azure-Deployment-Guide.md) for the public Bicep
+workflow. Prepare a dedicated non-production subscription and resource groups,
+release-owner image digests, an RBAC-enabled Key Vault, Neon credentials, and
+Entra configuration. The installer deploys `web` and `authz` with one minimum
+replica and `gateway` and
+`tokensvc` with zero minimum replicas.
 
 **Azure smoke / acceptance gate**
 
@@ -270,11 +256,10 @@ Terraform state.
   tool-created Key Vault secrets were removed, then repeat apply in a clean
   dedicated environment.
 
-**Exit gate:** signed-off live test evidence and cost/security review. The
-historical Terraform trial is not evidence that the new Bicep installer passed
-this gate.
+**Completion:** record the live test results and review costs and security
+settings before promoting the environment.
 
-### Phase 5 — Production readiness and controlled promotion (future work)
+### Phase 5 — Production readiness and controlled promotion
 
 **Work**
 
@@ -306,9 +291,7 @@ same image and integration test gates.
 ## Deployment boundary
 
 The deployment wrapper is the repeatable Azure interface. It validates the
-user's non-secret config and Azure context, provisions only Azure resources
-tagged and scoped to dedicated groups, and presents an ARM What-If before
-deployment. A successful Bicep build or What-If does not prove that the
-proprietary containers work together, a real Entra callback succeeds, Neon is
-compatible, or the Emotion wizard works. Those require the live acceptance
-tests above.
+user's non-secret config and Azure context, provisions Azure resources scoped
+to dedicated groups, and presents an ARM What-If before deployment. After
+provisioning, use the live acceptance checklist above to confirm the release
+images, Entra sign-in, Neon integration, and Emotion wizard in your environment.
