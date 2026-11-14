@@ -1,5 +1,9 @@
 # Agent Gateway Azure deployment proposal
 
+> **Work in progress — NOT READY TO DEPLOY.** Do not run Terraform `apply` or
+> deploy these images to an Azure subscription yet. Azure end-to-end
+> acceptance and production-readiness gates remain outstanding.
+
 This guide describes the low-cost Azure deployment flow shared with the
 `agent-gateway` application repository. That repository contains the Azure
 Terraform scaffold, guarded lifecycle wrapper, and Key Vault uploader. This
