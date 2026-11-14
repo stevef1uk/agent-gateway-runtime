@@ -1,5 +1,11 @@
 # Indicative Azure serverless deployment cost estimate
 
+> **Historical planning model, not an active deployment or Azure quote.**
+> The model predates the completed development trial and its teardown. The
+> trial implemented shared PostgreSQL-backed OIDC/session state, but did not
+> complete Azure cold-callback/scale-to-zero acceptance. Recalculate regional
+> prices and validate current image behavior before using these figures.
+
 Prepared **13 November 2026** for Azure region **`francecentral` (Paris)**,
 USD/month, on-demand, before tax. This is a planning model, not an Azure quote,
 a capacity guarantee, or a spending cap. It creates no Azure resources.
@@ -10,9 +16,9 @@ web OIDC session implementation is built and passes its cold-callback tests.
 The default durable database assumption is the user's existing Neon PostgreSQL
 plan, which adds no Azure database charge in this model. Azure Database for
 PostgreSQL Flexible Server is an explicit, separately costed alternative.
-Until shared OIDC state/session support is deployed and verified, keep one web
-replica warm; the current web image's in-memory state is not safe for
-scale-to-zero sign-in.
+Keep one web replica warm until the exact image intended for deployment passes
+OIDC cold-callback and restart acceptance; shared database state alone does
+not prove Azure scale-to-zero behavior.
 
 ## 1. Monthly estimates
 
@@ -29,13 +35,12 @@ guarantee that every Neon plan remains free. Check plan limits and actual
 billing. Azure outbound data transfer to Neon may also be billable and is
 excluded.
 
-The scale-to-zero estimates are conditional on implementing and testing shared
-OIDC state/session storage in Neon: **the current web image does not persist
-OIDC sessions there**. Until the application release adds that capability,
-sign-in state can be lost when `web` scales to zero. The modeled Container Apps
-cost is the same after shared-session support is implemented; Neon
-compute/storage costs for the added session records and any Neon project/plan
-charges are not separately modeled and may affect the user's bill.
+The trial application used shared PostgreSQL-backed OIDC state/session storage,
+and cross-instance tests passed. The trial did not complete Azure callback
+acceptance after scale-to-zero, so the model keeps one `web` replica warm
+until that behavior is verified in the exact deployed release. Neon
+compute/storage costs for session records and any Neon project/plan charges
+are not separately modeled and may affect the user's bill.
 
 The Azure PostgreSQL column adds **$18.13/month** for a single B1ms Burstable
 Flexible Server and 32 GB storage. This is an indicative development/staging
@@ -44,10 +49,9 @@ Burstable for production. A minimal illustrative 2-vCore General Purpose
 server at the same region's retail rate adds about **$154.64/month** including
 32 GB storage.
 
-The target Container Apps estimates assume every app has a zero minimum
-replica and model only active compute/request usage for the gateway/authz/token
-service hop pattern. Until Neon-backed OIDC session support passes acceptance,
-the web minimum must be one; that warm replica adds approximately
+The all-zero Container Apps estimate models only active compute/request usage
+for the gateway/authz/token service hop pattern. Until Azure cold-callback and
+restart acceptance passes, the web minimum should be one; that warm replica adds approximately
 **$5.91/month** at modeled idle rates. “After modeled unused grants” assumes
 that none of the subscription's free grants have been consumed elsewhere.
 Actual billing depends on subscription-level usage and traffic.
@@ -56,15 +60,14 @@ Actual billing depends on subscription-level usage and traffic.
 
 | Web session design | Can `web` scale to zero reliably for OIDC? | Modeled added Azure cost |
 |---|---|---:|
-| Current image: in-memory OIDC session | No; a callback after scale-to-zero/restart may fail | $0 when scaled to zero; optional warm replica adds about $5.91/month |
-| Target: shared OIDC session/state stored in Neon | Yes, after the web app/image adds and validates shared session storage | $0 Azure database cost under the existing-Neon assumption; possible additional Neon compute/storage and Azure egress are unpriced |
-| Alternative: shared session storage in Azure Database for PostgreSQL | Yes, after the same application support is added | Add the PostgreSQL Flexible Server cost shown above; the small B1ms illustration adds about $18.13/month before networking/egress |
+| Trial application: shared PostgreSQL OIDC state/session | Cross-instance tests passed; Azure scale-to-zero callback behavior was not verified | Keep a warm replica pending acceptance; about $5.91/month at modeled idle rates |
+| Shared OIDC state/session plus verified Azure cold callback | Candidate for scale-to-zero only after testing the exact deployed image | $0 Azure database cost under the existing-Neon assumption; possible additional Neon compute/storage and Azure egress are unpriced |
+| Alternative: shared session storage in Azure Database for PostgreSQL | Requires application support and the same Azure cold-callback acceptance | Add the PostgreSQL Flexible Server cost shown above; the small B1ms illustration adds about $18.13/month before networking/egress |
 
-Using Neon for Agent Gateway's existing domain persistence alone does not
-enable the target session design. No available Azure-native serverless
-key/value service is assumed to be compatible with the current web image's
-session implementation; adopting one would also require explicit application
-storage support and a new estimate.
+Shared database support is necessary but does not, by itself, prove
+scale-to-zero callback reliability. No available Azure-native serverless
+key/value service is assumed in this model; adopting another store requires
+explicit application support and a new estimate.
 
 ## 2. Scope and assumptions
 

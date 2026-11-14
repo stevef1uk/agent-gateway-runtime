@@ -9,16 +9,21 @@ install or remove a complete Agent Gateway deployment using this checkout
 alone.
 
 An operator previously verified an Azure development trial, but that trial is
-not production-certified. Its deployment was performed using tooling not
-included in this public repository; verify the current Azure resource state
-with your own subscription administrator rather than relying on old trial
-resource names or status.
+not production-certified and is no longer deployed. The application stack,
+dedicated Key Vault, and Terraform state storage account have been removed
+from active Azure resources. Azure retains the purge-protected Key Vault in
+soft-deleted state. Neon and Entra resources were outside this Azure teardown
+and may remain; their ownership and current state must be checked separately.
+The deployment used tooling not included in this public repository.
 
 ## Azure documentation in this repository
 
 - [Azure documentation index](docs/azure/README.md)
 - [Deployment design and Neon setup helper guide](docs/Azure-Deployment-Guide.md)
 - [Proposed architecture and enterprise integration](docs/azure/architecture.md)
+- [Azure trial status and teardown verification](docs/azure/trial-status.md)
+- [Azure teardown guidance](docs/azure/teardown.md)
+- [Azure custom API and MCP wizard walkthrough](docs/azure/local-custom-upstream-wizard-test.md)
 - [Historical implementation plan and acceptance gates](docs/azure/implementation-plan.md)
 - [Indicative pricing and assumptions](docs/azure/serverless-pricing.md)
 

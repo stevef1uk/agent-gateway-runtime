@@ -3,9 +3,12 @@
 > **This is not current deployment status or an install guide.** It records
 > an earlier plan and includes implementation assumptions that may have
 > changed since the operator-verified Azure development trial. The trial was
-> not production-certified, and its current Azure inventory must be checked
-> independently. This repository does not include the application source or
-> Azure deployment tooling, so this plan cannot be used to deploy it.
+> not production-certified and has since been torn down. Its application
+> stack and dedicated Terraform backend are no longer active; its
+> purge-protected Key Vault remains soft-deleted under Azure retention.
+> Neon and Entra resources were outside the Azure teardown. This repository
+> does not include the application source or Azure deployment tooling, so
+> this plan cannot be used to deploy it.
 
 This plan turns the Azure proposal into a testable, scripted delivery. Users
 provide a non-secret environment/account config; scripts provision or select
@@ -25,15 +28,13 @@ the other required endpoints on HTTPS ingress, and Neon as the default
 PostgreSQL provider. These items must be resolved before treating the design as
 deployable:
 
-1. **Neon-backed OIDC sessions are required for web scale-to-zero.** The
-   current web image keeps OIDC state and sessions in process memory. A restart
-   or scale-to-zero between sign-in and callback can lose state. Implement
-   shared durable OIDC transaction/state and server-side session storage in the
-   existing Neon PostgreSQL database before configuring `web` with minimum
-   replicas zero. Setting `DATABASE_URL` for Agent Gateway domain data does not
-   provide this feature. Until the new web image is deployed and passes the
-   scale-to-zero acceptance test, keep at least one web replica warm; that only
-   mitigates scale-down and does not survive process restart.
+1. **Validate Azure OIDC cold-callback behavior before web scale-to-zero.**
+   During the development trial, the application used shared PostgreSQL-backed
+   OIDC transaction/session state and cross-instance tests passed. A full
+   Azure callback test after scale-down/scale-to-zero was not completed.
+   Keep at least one web replica until the exact deployed image passes
+   callback, restart, and scale-to-zero acceptance. Shared database state is
+   necessary but does not by itself prove cold-start behavior.
 2. **The image contract is not yet a deployment contract.** Obtain the exact
    release manifest for all four licensed images and verify ports, health
    paths, environment variable names, secret file paths, startup behavior,

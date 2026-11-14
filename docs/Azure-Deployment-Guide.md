@@ -3,9 +3,10 @@
 > **Not an installer.** This repository does not include the Agent Gateway
 > application source, container build files, Terraform, Azure lifecycle
 > commands, or Key Vault secret uploader. An operator verified a development
-> trial using tooling not included here; that trial is not production-
-> certified. These Azure sections describe design considerations, not
-> commands that can deploy or tear down the application from this checkout.
+> trial using tooling not included here; it was not production-certified and
+> has since been torn down. These Azure sections describe design
+> considerations, not commands that can deploy or tear down the application
+> from this checkout.
 
 The Neon project setup helper documented below is included here and can be
 used independently. Do not treat successful Neon setup as an application
@@ -17,6 +18,11 @@ For service placement and trade-offs, see the
 [Azure architecture](azure/architecture.md). For monthly estimates and
 reproducible assumptions, see the
 [Azure pricing model](azure/serverless-pricing.md).
+The supervised trial's status is in the
+[trial record](azure/trial-status.md); cleanup guidance is in the
+[teardown guide](azure/teardown.md).
+The generic upstream wizard flow is documented in the
+[Azure API/MCP walkthrough](azure/local-custom-upstream-wizard-test.md).
 
 ## 1. Prepare
 

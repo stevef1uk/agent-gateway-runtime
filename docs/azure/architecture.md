@@ -1,9 +1,12 @@
 # Agent Gateway on Azure — proposed architecture
 
 > This is a proposed design, not an inventory of deployed resources or an
-> executable deployment. The operator-verified development trial is not
-> production-certified. This repository does not include the application
-> source, container build files, Terraform, or Azure lifecycle tooling.
+> executable deployment. The operator-verified development trial was not
+> production-certified and has been torn down. Its application resources and
+> dedicated Terraform backend are no longer active; the purge-protected Key
+> Vault remains soft-deleted. Neon and Entra were outside the Azure teardown.
+> This repository does not include the application source, container build
+> files, Terraform, or Azure lifecycle tooling. See the [trial status](trial-status.md).
 
 This is a low-cost, single-region proposal for running the existing
 Agent Gateway service containers in a customer's Azure subscription. It is
@@ -50,29 +53,13 @@ routing and must not become an unrestricted public proxy.
 
 ### Web scale-to-zero and OIDC
 
-The existing container web console keeps OIDC sign-in session state in
-process memory. Scale-to-zero is supported by Azure Container Apps, but it
-does not preserve that state: if the app scales down between the sign-in
-request and identity-provider callback, the callback can reach a fresh
-instance and fail state validation. A process restart has the same effect.
-Keeping one replica warm reduces this risk but costs approximately $5.91/month
-at the modeled idle rates; it does not make the session durable across a
-restart.
-
-**Target design:** extend the web application to persist its short-lived
-OIDC state/nonce and server-side sign-in session in the same Neon PostgreSQL
-database, then configure the web service to use that shared session store.
-The browser should continue to hold only the protected opaque session cookie.
-With that code and image support, the web app can scale to zero and any
-replica can complete the callback or resume a session. The current web image
-does not provide this storage option: setting its existing `DATABASE_URL`
-for Agent Gateway domain data does **not** make OIDC sessions persistent.
-Treat this Neon integration as an early implementation and test phase, before
-building the full Azure environment. Until a release adds and documents shared
-session storage and it passes a cold-start callback test, configure `web` with
-at least one minimum replica. Once verified, the intended Azure configuration
-sets `web` minimum replicas to zero and tests OIDC state creation, scale-down,
-cold callback completion, and session continuation across instances.
+The trial application used PostgreSQL-backed shared OIDC/session state, and
+local cross-instance tests passed. The operator also confirmed interactive
+Entra sign-in during the trial. A full Azure cold-callback test across
+scale-down/scale-to-zero was not completed, so the trial kept `web` at one
+minimum replica. For a new environment, keep that minimum until the exact
+deployed image passes cold-callback and restart acceptance. Durable database
+state is necessary but does not, by itself, prove scale-to-zero behavior.
 
 This differs from the other cloud implementations. The GCP branch sets the
 Cloud Run web service to `min=0` and stores sessions and application state in
@@ -186,6 +173,101 @@ would require an application storage adapter and migration work.
 - Validate the current image startup paths, health checks, mounted-secret
   filenames, OIDC callback behavior, and Container Apps resource limits with a
   non-production deployment before committing to this design.
+
+## Proposed integration with an existing enterprise estate
+
+This is a target proposal, not the topology used for the development trial.
+It follows Azure landing-zone separation: shared identity, network,
+governance, and operations remain in the enterprise platform landing zone;
+Agent Gateway runs in a dedicated workload landing zone or subscription.
+
+```mermaid
+flowchart TB
+  subgraph estate["Existing enterprise estate"]
+    People["Enterprise users and AI agents"]
+    Entra["Microsoft Entra ID<br/>Workforce OIDC and Conditional Access"]
+    Edge["Approved ingress<br/>Front Door + WAF / Private Link<br/>or internal Application Gateway + WAF"]
+    subgraph platform["Platform landing zone"]
+      Hub["Hub network<br/>Firewall, private DNS,<br/>VPN / ExpressRoute as needed"]
+      Guardrails["Azure Policy and Defender"]
+      Monitor["Azure Monitor / Log Analytics<br/>Application Insights and Managed Grafana"]
+      Pipeline["GitHub Actions or Azure DevOps<br/>federated deployment identity"]
+      Registry["Azure Container Registry<br/>approved digest-pinned images"]
+    end
+    EnterpriseAPI["Enterprise APIs, MCP services,<br/>and data services"]
+    Hybrid["On-premises or other-cloud services"]
+  end
+
+  PublicAPI["Approved public APIs / MCP upstreams"]
+
+  subgraph workload["Agent Gateway workload landing zone"]
+    subgraph spoke["Dedicated workload VNet"]
+      subgraph apps["VNet-integrated Container Apps environment"]
+        Web["web<br/>Console and OIDC callback"]
+        Gateway["gateway<br/>governed API / MCP"]
+        Tokens["tokensvc"]
+        Authz["authz<br/>internal only"]
+        Emotion["optional Emotion app<br/>private ingress"]
+      end
+      Vault["Azure Key Vault"]
+      Database["Approved PostgreSQL service"]
+      Telemetry["OpenTelemetry instrumentation"]
+    end
+    Identity["Container Apps managed identities"]
+  end
+
+  People --> Entra
+  People --> Edge
+  Edge --> Web
+  Edge --> Gateway
+  Edge --> Tokens
+  Web <-->|OIDC| Entra
+  Web --> Authz
+  Gateway --> Authz
+  Tokens --> Authz
+  Gateway --> Emotion
+  Gateway --> EnterpriseAPI
+  Gateway --> Hybrid
+  Gateway --> Hub
+  Hub --> PublicAPI
+  Web --> Database
+  Gateway --> Database
+  Authz --> Database
+  Tokens --> Database
+  Identity --> Vault
+  Identity --> Registry
+  Pipeline --> Registry
+  Web -. telemetry .-> Telemetry
+  Gateway -. telemetry .-> Telemetry
+  Authz -. telemetry .-> Telemetry
+  Tokens -. telemetry .-> Telemetry
+  Telemetry -. export .-> Monitor
+  Guardrails -. policy .-> workload
+```
+
+### Enterprise integration boundaries
+
+- Use the customer's existing landing zone, management groups, policy
+  assignments, identity controls, and security services; do not recreate
+  shared platform resources for the application.
+- Select one ingress path. Keep `authz` private and ensure protected requests
+  cannot bypass Gateway policy enforcement. The trial used public ingress and
+  did not implement this private enterprise network topology.
+- Design the VNet-integrated Container Apps environment, delegated subnet,
+  DNS, UDRs, firewall, private endpoints, and egress policy before
+  provisioning. Several networking choices are fixed at environment creation.
+- Route the Gateway only to approved upstream destinations. Use the existing
+  hybrid routes for private enterprise services and controlled egress for
+  public APIs.
+- Use an enterprise-approved PostgreSQL service and identity/role model.
+  The trial used Neon over TLS; this repo does not provision either database
+  choice or its network path.
+- Send traces, metrics, and logs to approved Azure Monitor, Application
+  Insights, Log Analytics, or Managed Grafana destinations. OpenTelemetry
+  export and production monitoring need independent verification.
+- Build and promote immutable image digests through the enterprise pipeline
+  and registry. The trial used Docker Hub; it did not establish a production
+  release pipeline.
 
 ## Microsoft references
 
