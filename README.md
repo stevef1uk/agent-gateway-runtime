@@ -19,6 +19,14 @@ Deployments use immutable container images and licence material supplied by
 the release owner. This keeps the application release consistent while letting
 operators manage the Azure infrastructure from this public repository.
 
+## Public evaluation licence expiry
+
+The public evaluation licence in `keys/token.txt` expires on 31 December 2027.
+The images enforce this signed expiry. To keep running after that date,
+request a private replacement licence from the vendor. See the [Pricing page
+in the main repository](https://github.com/stevef1uk/agent-gateway/blob/aws/docs/aws/pricing.md)
+for licensing details.
+
 ## Azure resources and documentation
 
 - [Azure documentation index](docs/azure/README.md)
