@@ -156,12 +156,15 @@ class RoleAssignmentTests(unittest.TestCase):
                     "name": "reader-assignment",
                 },
             ],
-        ):
+        ) as run_json:
             matches = deploy_azure.role_assignments(
                 "principal", scope, deploy_azure.KEY_VAULT_SECRETS_USER
             )
 
         self.assertEqual([item["name"] for item in matches], ["owned-assignment"])
+        args = run_json.call_args.args[0]
+        self.assertIn("--scope", args)
+        self.assertNotIn("--all", args)
 
     def test_assignment_id_is_stable(self):
         expected = deploy_azure.assignment_id(

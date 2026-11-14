@@ -430,7 +430,6 @@ def role_assignments(principal_id: str, scope: str, role_name: str) -> list[dict
             principal_id,
             "--scope",
             scope,
-            "--all",
             "--output",
             "json",
         ]
