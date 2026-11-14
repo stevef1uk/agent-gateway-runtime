@@ -1,10 +1,11 @@
-# Azure implementation plan
+# Azure implementation plan (historical)
 
-> This is the original planning document and predates the current Azure
-> implementation. For current implementation status, acceptance results, and
-> remaining production gates, use the
-> [current Azure implementation plan](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/implementation-plan.md)
-> in the application repository.
+> **This is not current deployment status or an install guide.** It records
+> an earlier plan and includes implementation assumptions that may have
+> changed since the operator-verified Azure development trial. The trial was
+> not production-certified, and its current Azure inventory must be checked
+> independently. This repository does not include the application source or
+> Azure deployment tooling, so this plan cannot be used to deploy it.
 
 This plan turns the Azure proposal into a testable, scripted delivery. Users
 provide a non-secret environment/account config; scripts provision or select
@@ -59,10 +60,10 @@ deployable:
    secret values. Keep Neon API keys, generated database credentials, customer
    private keys, private/customer licence tokens, JWT secrets, and OIDC client
    secrets out of Git, command arguments, Terraform plans/state, outputs, and
-   logs. The sibling application repository intentionally distributes a
-   time-limited public demo licence as a separate asset.
-   Prefer writing generated runtime credentials directly to Key Vault and
-   exposing only Key Vault references to Container Apps.
+   logs. Licence assets and a production-safe secret-delivery workflow are not
+   included in this repository. Prefer writing generated runtime credentials
+   directly to Key Vault and exposing only Key Vault references to Container
+   Apps.
 6. **The cost estimate is not a cap.** It excludes several potentially material
    charges, including Log Analytics, egress to Neon, networking, registry,
    Key Vault operations, and edge protection. Azure budgets alert; they do not
@@ -124,11 +125,9 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
   inspect sanitized project metadata, and provision/select the configured
   project, database, and application role. `destroy` deletes only a project
   recorded as created by this tool, with explicit project-ID confirmation.
-- Agent Gateway PostgreSQL persistence and shared OIDC/session state are
-  implemented in the sibling `agent-gateway` application repository, including
-  local PostgreSQL and cross-instance tests. Key Vault secret delivery is
-  implemented there as `scripts/azure_secrets.py`; it has not yet been run
-  against the user's vault.
+- The application source, PostgreSQL persistence implementation, shared
+  OIDC/session implementation, and Key Vault uploader are not included in this
+  repository. Users of this checkout cannot inspect or run those components.
 
 **Work**
 
@@ -145,8 +144,8 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
   generated passwords or full connection strings.
 - For local development, store the generated database URL in an ignored local
   credentials file with mode `0600`; never write it to tracked config or
-  Terraform state. The sibling application's secret uploader can copy this
-  URL to Key Vault without printing it or adding it to Terraform state.
+  Terraform state. A Key Vault uploader is required before this credential can
+  be safely used by a deployed application, and is not included here.
 - Implement/test Agent Gateway PostgreSQL persistence and migrations against a
   disposable local PostgreSQL first, then the dedicated Neon development
   database. Use TLS, verify the Neon direct endpoint for migrations and select

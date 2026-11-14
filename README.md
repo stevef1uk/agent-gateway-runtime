@@ -1,35 +1,30 @@
-# Agent Gateway — Azure integration documentation
+# Agent Gateway — Azure documentation
 
-This repository contains Azure architecture/proposal documents and a local
-Neon project setup helper. The Azure application source and deployable
-infrastructure are maintained in the separate
-[`stevef1uk/agent-gateway` repository](https://github.com/stevef1uk/agent-gateway/tree/azure).
-That repository contains the application code, Azure Terraform scaffold,
-guarded deployment/teardown wrapper, and Key Vault uploader.
+This repository is the user-facing source for the Azure design and deployment
+status. It contains architecture and pricing documents and a local Neon
+project setup helper. It does **not** currently contain the Agent Gateway
+application source, container build files, Terraform deployment, Azure
+install/upgrade/teardown commands, or Key Vault secret uploader. You cannot
+install or remove a complete Agent Gateway deployment using this checkout
+alone.
 
-The operator-verified Azure development trial and the instructions for
-installing or removing the application are documented in the application
-repository. The trial is not production-certified.
+An operator previously verified an Azure development trial, but that trial is
+not production-certified. Its deployment was performed using tooling not
+included in this public repository; verify the current Azure resource state
+with your own subscription administrator rather than relying on old trial
+resource names or status.
 
-## Current Azure install and teardown
-
-- [Azure deployment and release README](https://github.com/stevef1uk/agent-gateway/blob/azure/deploy/azure/README.md)
-- [Live development status](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/live-deployment.md)
-- [Current Azure architecture and enterprise integration proposal](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/architecture.md)
-- [Full Azure teardown runbook](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/teardown.md)
-- [Application implementation and acceptance plan](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/implementation-plan.md)
-
-Use the files in this repository for the Azure design proposal, cost model,
-and Neon helper details:
+## Azure documentation in this repository
 
 - [Azure documentation index](docs/azure/README.md)
-- [Azure deployment proposal and history](docs/Azure-Deployment-Guide.md)
-- [Proposed architecture](docs/azure/architecture.md)
+- [Deployment design and Neon setup helper guide](docs/Azure-Deployment-Guide.md)
+- [Proposed architecture and enterprise integration](docs/azure/architecture.md)
+- [Historical implementation plan and acceptance gates](docs/azure/implementation-plan.md)
 - [Indicative pricing and assumptions](docs/azure/serverless-pricing.md)
-- [Original implementation plan](docs/azure/implementation-plan.md)
 
 The Neon helper provisions or selects a Neon project/database and can remove a
 project it created after exact confirmation. It does not deploy Azure
-resources or modify Agent Gateway application data. The helper and proposal
-documents are not substitutes for the application repository's guarded Azure
-installer.
+resources or modify Agent Gateway application data. The Azure deployment
+material is design and acceptance guidance, not an executable installer. Do
+not apply the manual resource outline as a substitute for reviewed,
+version-controlled deployment automation.

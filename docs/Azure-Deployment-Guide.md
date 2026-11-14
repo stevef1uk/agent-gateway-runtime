@@ -1,19 +1,17 @@
-# Agent Gateway Azure deployment proposal and notes
+# Agent Gateway Azure deployment design and Neon helper
 
-> **Development trial verified; not production-certified.** This document
-> records the original design and Neon setup workflow. It is not the current
-> Azure installer. For a fresh install or a full teardown, use the canonical
-> [application-repository Azure deployment README](https://github.com/stevef1uk/agent-gateway/blob/azure/deploy/azure/README.md)
-> and [teardown runbook](https://github.com/stevef1uk/agent-gateway/blob/azure/docs/azure/teardown.md).
+> **Not an installer.** This repository does not include the Agent Gateway
+> application source, container build files, Terraform, Azure lifecycle
+> commands, or Key Vault secret uploader. An operator verified a development
+> trial using tooling not included here; that trial is not production-
+> certified. These Azure sections describe design considerations, not
+> commands that can deploy or tear down the application from this checkout.
 
-The Azure application source, Terraform scaffold, guarded lifecycle wrapper,
-and Key Vault uploader are in the separate
-[`agent-gateway` application repository](https://github.com/stevef1uk/agent-gateway/tree/azure).
-The operator-verified development trial was deployed through that repository.
-This runtime repository's proposal and Neon helper do not deploy Azure
-resources by themselves. The remaining sections are design and helper
-reference material; they must not be used in place of the canonical
-application-repository install/teardown instructions.
+The Neon project setup helper documented below is included here and can be
+used independently. Do not treat successful Neon setup as an application
+deployment or as proof of application persistence/OIDC behavior. The Azure
+deployment outline is retained as reference material until a complete,
+reviewed installer and release artifacts are available in this repository.
 
 For service placement and trade-offs, see the
 [Azure architecture](azure/architecture.md). For monthly estimates and
@@ -22,11 +20,12 @@ reproducible assumptions, see the
 
 ## 1. Prepare
 
-Copy `azure-config.example.json` to `azure-config.json` and enter your Azure
-tenant ID, subscription ID, and Key Vault name. The local file is ignored by
-Git. Keep secrets such as client credentials, Neon API keys, database
-passwords, customer keys, and licence tokens out of this config; use the
-environment or Key Vault as appropriate.
+The root `azure-config.example.json` is a proposal-era example only. No Azure
+deployment command in this repository consumes it; copying it does not
+configure or deploy an Azure environment. The included Neon helper uses
+`config/neon.example.json` instead. Never put client credentials, Neon API
+keys, database passwords, customer keys, or licence tokens in either example
+config.
 
 The estimate uses `francecentral`; update `location` if you choose another
 region. Install Azure CLI, authenticate, select the subscription, and register the
@@ -34,29 +33,20 @@ region. Install Azure CLI, authenticate, select the subscription, and register t
 Register `Microsoft.DBforPostgreSQL` only if you explicitly choose Azure
 Database for PostgreSQL instead of the default Neon database.
 
-Pin the current licensed image digests. The application repository includes
-one public, time-limited demo licence for deployment. Keep vendor private keys
-and customer-specific licence files outside Git; a user with a private or
-extended licence may pass that file to the uploader. Use Entra ID OIDC for the
-web console and configure an administrator allowlist.
+An installable release requires verified immutable image digests, a supported
+licence-delivery workflow, a secret uploader, and a guarded Azure lifecycle
+installer. Those release artifacts and tools are not present in this
+repository. Do not try to deploy by following the reference sequence below.
+Keep any vendor private keys and customer-specific licence files outside Git.
 
-The deployment uses a user-created, non-secret Azure config for account,
-resource, image, and Key Vault reference values. Neon API keys and database
-credentials stay in protected local files or environment-based authentication;
-generated runtime secrets are uploaded directly to Key Vault. The uploader
-uses the bundled public demo licence by default and verifies its signature and
-expiry locally before upload. See the application repository's Azure README
-for config validation, required confirmations, and deploy/teardown commands.
-
-Provision or select the non-production Neon database and verify application
-persistence and web OIDC-session behavior using the current application
-repository's tests before deployment. The local Neon setup helper supports
-repeatable project/database setup, selecting an existing project, and
-ownership-checked teardown without printing credentials. Test migrations
-against local PostgreSQL first, then use TLS against a dedicated Neon
-development database. Use a direct Neon endpoint for schema changes unless
-pooled-endpoint compatibility is verified; test the selected runtime endpoint
-and connection limits separately.
+For a future deployment, provision or select a non-production Neon database
+and test application persistence and web OIDC-session behavior before Azure
+deployment. The local Neon setup helper supports repeatable project/database
+setup, selecting an existing project, and ownership-checked teardown without
+printing credentials. Test migrations against local PostgreSQL first, then
+use TLS against a dedicated Neon development database. Use a direct Neon
+endpoint for schema changes unless pooled-endpoint compatibility is verified;
+test the selected runtime endpoint and connection limits separately.
 
 Phase 1 includes a config-driven Neon setup helper. Copy
 `config/neon.example.json` to the ignored `config/neon.json`. For an existing
@@ -90,36 +80,10 @@ python3 -B scripts/neon_setup.py --config config/neon.json setup \
 The helper creates or selects the configured database and application role,
 waits for Neon operations, and stores the connection URL in the ignored
 `config/neon-credentials.json` with owner-only permissions. Never print or
-commit that file. To upload it and other runtime secrets directly to Key Vault,
-use `scripts/azure_secrets.py` from the `agent-gateway` application repository
-after preparing that repository's ignored Azure config:
-
-```bash
-python3 scripts/azure_secrets.py \
-  --config deploy/azure/azure-config.json \
-  upload \
-  --neon-credentials-file /path/to/agent-gateway-runtime/config/neon-credentials.json
-```
-
-The uploader generates JWT/admin secrets locally, reads only the configured
-secret names from Key Vault, and transfers values from protected temporary
-files using Azure CLI's file upload option. It does not print, download, or
-place values in Terraform inputs/state. The user must have Key Vault secret
-write permission. Secret names already present are never overwritten by
-default; explicit rotation requires `--replace` and a second confirmation.
-The one-year demo licence and its public verification key are selected
-automatically. To use a private or extended licence, pass
-`--licence-token-file /path/to/private-licence` and
-`--vendor-public-key-file /path/to/vendor_public.pem`; keep those files
-owner-only and out of Git.
-The bundled public demo licence expires on **31 December 2027**. The images
-enforce that signed expiry; users who need to continue afterwards should
-request a private replacement licence. See the
-[Pricing page in the main repository](https://github.com/stevef1uk/agent-gateway-demo/blob/main/docs/Pricing.md).
-See the application repository's Azure deployment README for details,
-including the optional private-registry token file. The current web app uses
-Entra OIDC with PKCE and a confidential-client credential; the guarded
-application-repository workflow stores that credential in Key Vault.
+commit that file. This repository does not include a Key Vault uploader or
+deployment config, so it cannot safely transfer the generated credential to
+an Azure application. Do not proceed to deployment on the basis of this
+helper alone.
 
 The `status` command only reports non-secret Neon project metadata.
 
@@ -136,14 +100,19 @@ python3 -B scripts/neon_setup.py --config config/neon.json destroy \
 Destroy refuses to delete projects that are not recorded as created by this
 helper. It does not delete or suspend resources in an existing user project.
 Review Neon billing and stop/delete those resources separately if you selected
-an existing project. The full Azure teardown procedure, including resources
-outside Terraform ownership, is in the linked application-repository runbook.
-Neon provisioning remains separate from the Agent Gateway application state
-adapter and does not by itself prove application persistence or OIDC behavior.
+an existing project. This repository does not include an Azure teardown
+runbook or guarded destroy command. Neon provisioning remains separate from
+the Agent Gateway application state adapter and does not by itself prove
+application persistence or OIDC behavior.
 
-## 2. Create the Container Apps environment
+## 2. Azure target design (reference only)
 
-Create one Consumption-plan Container Apps environment in the selected region.
+The following sections describe a proposed configuration only; they do not
+provide an executable install, upgrade, or teardown procedure. Do not create
+billable resources from this outline. A future installer must be published
+here and tested before these steps can be used.
+
+The target design uses one Consumption-plan Container Apps environment in the selected region.
 Use a Log Analytics workspace with deliberate retention and ingestion
 monitoring, or another supported logging configuration. The workspace's
 ingestion and retention charges are not part of the estimate.
