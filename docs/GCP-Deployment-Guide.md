@@ -15,6 +15,12 @@ To register and test an existing customer API or MCP server, see the
 
 Do not reuse these evaluation files for production or paid/customer deployments. The deployment script uploads the Agent Gateway signed licence token to a private Cloud Storage bucket. With `--emotion-token-file`, it also uploads the vendor-issued Emotion token to a versioned object and grants access only to the Emotion service account. Keep that token outside Git; the script does not upload the customer private key for Emotion.
 
+The public evaluation token in `keys/token.txt` expires on
+**31 December 2027**; the service images enforce that signed expiry. To keep
+running after that date, request a private replacement licence from the
+vendor. See the [Pricing page in the main repository](https://github.com/stevef1uk/agent-gateway-demo/blob/main/docs/Pricing.md)
+for licensing details.
+
 The Emotion token is separate from `keys/token.txt` and the per-service
 `keys/local-activation/licences/*.token` files. Those are Agent Gateway
 activation files, not Emotion model licences. The deployment command below uses

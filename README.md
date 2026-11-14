@@ -16,3 +16,11 @@ cd agent-gateway-runtime
 ```
 
 See the [GCP documentation index](docs/gcp/README.md), [deployment guide](docs/GCP-Deployment-Guide.md), [architecture overview](docs/gcp/architecture.md), and [pricing estimate](docs/gcp/serverless-pricing.md). The GCP deploy script defaults gateway and web to `min=0`; first requests after idle may incur a cold start.
+
+## Public evaluation licence expiry
+
+The public evaluation licence in `keys/token.txt` expires on
+**31 December 2027**. The images enforce this signed expiry. To keep running
+after that date, request a private replacement licence from the vendor. See
+the [Pricing page in the main repository](https://github.com/stevef1uk/agent-gateway-demo/blob/main/docs/Pricing.md)
+for licensing details.
