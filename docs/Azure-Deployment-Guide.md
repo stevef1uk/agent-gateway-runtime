@@ -1,224 +1,275 @@
-# Agent Gateway Azure deployment design and Neon helper
+# Agent Gateway Azure deployment guide
 
-> **Not an installer.** This repository does not include the Agent Gateway
-> application source, container build files, Terraform, Azure lifecycle
-> commands, or Key Vault secret uploader. An operator verified a development
-> trial using tooling not included here; it was not production-certified and
-> has since been torn down. These Azure sections describe design
-> considerations, not commands that can deploy or tear down the application
-> from this checkout.
+This guide deploys the licensed Agent Gateway service images to a dedicated
+Azure resource group. The public `agent-gateway-runtime` repository contains
+the Azure Bicep template, deployment lifecycle script, and Key Vault uploader.
+It does **not** contain the proprietary application source or container build
+files. Users cannot build or modify the service images; obtain the immutable
+image digests and licence material from the release owner.
 
-The Neon project setup helper documented below is included here and can be
-used independently. Do not treat successful Neon setup as an application
-deployment or as proof of application persistence/OIDC behavior. The Azure
-deployment outline is retained as reference material until a complete,
-reviewed installer and release artifacts are available in this repository.
+The supervised Azure development trial was operator-tested and later torn
+down. The public installer has not yet been used to recreate that trial and
+is not production-certified. Validate application behavior in your own
+non-production subscription before production use.
 
-For service placement and trade-offs, see the
-[Azure architecture](azure/architecture.md). For monthly estimates and
-reproducible assumptions, see the
-[Azure pricing model](azure/serverless-pricing.md).
-The supervised trial's status is in the
-[trial record](azure/trial-status.md); cleanup guidance is in the
-[teardown guide](azure/teardown.md).
-The generic upstream wizard flow is documented in the
-[Azure API/MCP walkthrough](azure/local-custom-upstream-wizard-test.md).
+## What the installer manages
 
-## 1. Prepare
+- Four Container Apps (`authz`, `gateway`, `tokensvc`, `web`) in one
+  Consumption environment.
+- A user-assigned managed identity with Key Vault secret-read access and
+  scoped permissions for the Emotion wizard's dedicated resource group and
+  Container Apps environment.
+- Key Vault references for runtime secrets; secret values are not Bicep
+  parameters or command-line arguments.
+- A dedicated resource group named in the config and an Emotion demo resource
+  group derived from `name_prefix`.
+- Azure Monitor log destination for the Container Apps environment.
 
-The root `azure-config.example.json` is a proposal-era example only. No Azure
-deployment command in this repository consumes it; copying it does not
-configure or deploy an Azure environment. The included Neon helper uses
-`config/neon.example.json` instead. Never put client credentials, Neon API
-keys, database passwords, customer keys, or licence tokens in either example
-config.
+It does not create, modify, or delete the external Key Vault, Neon database,
+Entra app registration, image registry, or licence entitlement. The optional
+private registry setting only configures pulls for the four service images;
+the Emotion image used later by the wizard must be pullable by Azure Container
+Apps independently.
 
-The estimate uses `francecentral`; update `location` if you choose another
-region. Install Azure CLI, authenticate, select the subscription, and register the
-`Microsoft.App` and `Microsoft.OperationalInsights` resource providers.
-Register `Microsoft.DBforPostgreSQL` only if you explicitly choose Azure
-Database for PostgreSQL instead of the default Neon database.
+## 1. Prerequisites
 
-An installable release requires verified immutable image digests, a supported
-licence-delivery workflow, a secret uploader, and a guarded Azure lifecycle
-installer. Those release artifacts and tools are not present in this
-repository. Do not try to deploy by following the reference sequence below.
-Keep any vendor private keys and customer-specific licence files outside Git.
+Install Python 3.10+ and Azure CLI with Bicep. Sign in to the intended tenant
+and subscription; the script rejects a mismatch with the deployment config.
+If Bicep is not installed, install it with `az bicep install`.
 
-For a future deployment, provision or select a non-production Neon database
-and test application persistence and web OIDC-session behavior before Azure
-deployment. The local Neon setup helper supports repeatable project/database
-setup, selecting an existing project, and ownership-checked teardown without
-printing credentials. Test migrations against local PostgreSQL first, then
-use TLS against a dedicated Neon development database. Use a direct Neon
-endpoint for schema changes unless pooled-endpoint compatibility is verified;
-test the selected runtime endpoint and connection limits separately.
+The deploying identity needs permission to create the listed Azure resources,
+create a user-assigned managed identity, and create role assignments at the
+configured Key Vault and new deployment scopes. A typical setup is Contributor
+and User Access Administrator (or Role Based Access Control Administrator) at
+the target subscription, plus Key Vault Secrets Officer at the external vault
+for secret upload and cleanup. These are privileged permissions; have the
+subscription administrator scope them according to your organization's
+least-privilege policy. The Key Vault must already exist and use Azure RBAC
+authorization.
 
-Phase 1 includes a config-driven Neon setup helper. Copy
-`config/neon.example.json` to the ignored `config/neon.json`. For an existing
-project, set `mode` to `existing`, set its `project_id`, and leave
-`project_name` empty. For a new development project, set `mode` to `create`,
-leave `project_id` empty, and provide a project name. Validate before
-provisioning:
+Select a dedicated Key Vault, or create one in a separate resource group.
+Choose a globally unique name that is not still soft-deleted from a previous
+trial; do not purge a retained vault to reuse its name:
 
-```bash
+```sh
+az group create --name rg-agent-gateway-secrets --location uksouth
+az keyvault create \
+  --name YOUR_UNIQUE_VAULT_NAME \
+  --resource-group rg-agent-gateway-secrets \
+  --location uksouth \
+  --enable-rbac-authorization true
+```
+
+Set the matching vault name, resource group, and region in the config. Assign
+the deployment operator the required Key Vault data-plane and role-assignment
+permissions using your organization's approved RBAC process.
+
+Prepare these external inputs before deployment:
+
+1. A Neon PostgreSQL database and the owner-only
+   `config/neon-credentials.json` produced by `scripts/neon_setup.py`.
+2. An Entra OIDC application with a client ID, issuer URL, and client-secret
+   file. The deployment script prints the callback URI to add after the first
+   apply.
+3. A valid Agent Gateway licence token in a local file.
+4. A release manifest from the release owner containing immutable `sha256`
+   image references for `authz`, `gateway`, `tokensvc`, `web`, and the Emotion
+   bridge image. The service images must be anonymously pullable unless
+   `private_registry` is configured. Do not substitute tags such as `latest`.
+
+The optional `private_registry` config stores the registry password in Key
+Vault and configures the four service apps to use that secret. All four
+service-image hostnames must match `private_registry.server`. The file passed
+to `--registry-password-file` must be owner-only. Do not put credentials in
+the config file.
+
+### Prepare Neon credentials
+
+The public Neon helper can select an existing project or create a dedicated
+development project. Copy its example config, choose the project/database
+settings, and validate it:
+
+```sh
+cp config/neon.example.json config/neon.json
 python3 -B scripts/neon_setup.py --config config/neon.json validate
 ```
 
-Set `NEON_API_KEY` in the process environment (do not put it in either config
-file), then explicitly confirm project creation or mutation of an existing
-project:
+Set `NEON_API_KEY` through a secure environment-variable mechanism. For an
+interactive shell, enter it without echoing or placing it in shell history:
 
-```bash
+```sh
 read -r -s -p "Neon API key: " NEON_API_KEY
 echo
 export NEON_API_KEY
+```
 
-# New project (exact confirmation must match project_name):
+For a new project, use exact confirmation matching `project_name`:
+
+```sh
 python3 -B scripts/neon_setup.py --config config/neon.json setup \
-  --confirm-create "agent-gateway-development"
-
-# Existing project (exact confirmation must match project_id):
-# python3 -B scripts/neon_setup.py --config config/neon.json setup \
-#   --confirm-existing-project "YOUR_NEON_PROJECT_ID"
+  --confirm-create "YOUR_CONFIGURED_PROJECT_NAME"
 ```
 
-The helper creates or selects the configured database and application role,
-waits for Neon operations, and stores the connection URL in the ignored
-`config/neon-credentials.json` with owner-only permissions. Never print or
-commit that file. This repository does not include a Key Vault uploader or
-deployment config, so it cannot safely transfer the generated credential to
-an Azure application. Do not proceed to deployment on the basis of this
-helper alone.
+For an existing project, use its exact project ID:
 
-The `status` command only reports non-secret Neon project metadata.
+```sh
+python3 -B scripts/neon_setup.py --config config/neon.json setup \
+  --confirm-existing-project "YOUR_CONFIGURED_PROJECT_ID"
+```
 
-To delete a project created by this helper and remove its local credentials,
-use the exact locally recorded project ID as confirmation:
+The helper writes the connection URL to ignored `config/neon-credentials.json`
+with owner-only permissions. Do not print or commit it. The Azure secret
+uploader requires this file and checks that its PostgreSQL URL requires TLS.
+After setup, remove the API key from the shell with `unset NEON_API_KEY`.
 
-```bash
+## 2. Configure and upload secrets
+
+Copy the example and edit only non-secret deployment settings:
+
+```sh
+cp deploy/azure/azure-config.example.json deploy/azure/azure-config.json
+```
+
+Set the tenant/subscription UUIDs, Azure region, dedicated resource-group
+name, `name_prefix`, Key Vault name/resource group, Neon namespace, OIDC
+issuer/client ID, admin email allowlist, and the five image digests. If using
+a private registry, set its `server` and `username`. Leave all secret values
+out of this file. `deploy/azure/azure-config.json` is gitignored.
+
+Validate the file without contacting Azure:
+
+```sh
+python3 -B scripts/deploy_azure.py validate \
+  --config deploy/azure/azure-config.json
+```
+
+Ensure input files are private. The Neon helper already writes its credential
+file with owner-only permissions; set the same mode on the licence,
+OIDC-client-secret, and optional registry-password files. Then upload the
+values to the configured Key Vault. The helper creates strong JWT and
+gateway-admin tokens if those names do not already exist. Existing Key Vault
+secrets are preserved, not overwritten. It uses `database-url`,
+`licence-token`, `oidc-client-secret`, `jwt-secret`, and
+`gateway-admin-token`; private pulls additionally use the configured registry
+password secret name. Prefer a dedicated vault. If any of these names already
+exist in a shared vault, verify their values through your approved secure
+process before deploying.
+
+```sh
+chmod 600 /path/to/licence-token /path/to/oidc-client-secret
+python3 -B scripts/deploy_azure.py upload-secrets \
+  --config deploy/azure/azure-config.json \
+  --licence-token-file /path/to/licence-token \
+  --oidc-client-secret-file /path/to/oidc-client-secret
+```
+
+When using a private service-image registry, add:
+
+```sh
+  --registry-password-file /path/to/registry-password
+```
+
+The command reads file contents locally and passes file paths (not secret
+values) to Azure CLI. It will not rotate an existing secret; update/rotate
+secrets through your approved Key Vault process and then restart or revise
+the affected apps as required.
+
+## 3. Review and deploy
+
+Select the intended Azure subscription, then run a preview:
+
+```sh
+az account set --subscription YOUR_SUBSCRIPTION_ID
+python3 -B scripts/deploy_azure.py plan \
+  --config deploy/azure/azure-config.json
+```
+
+For an existing deployment resource group, `plan` runs Azure Resource Manager
+What-If. For a new group it prints the intended resources; the complete
+What-If preview runs during `apply`, after the guarded creation of the empty
+resource groups and managed identity.
+
+Apply the deployment:
+
+```sh
+python3 -B scripts/deploy_azure.py apply \
+  --config deploy/azure/azure-config.json
+```
+
+The script requires the exact `APPLY <resource-group>` confirmation before
+creating resources, and a second exact `DEPLOY <resource-group>` confirmation
+after showing What-If output. `authz` uses internal ingress; the other three
+apps use external HTTPS ingress. Apps have readiness checks on `/readyz`;
+`web` and `authz` start with one minimum replica, while `gateway` and
+`tokensvc` can scale to zero.
+
+After deployment, add the printed `https://<web-fqdn>/oidc/callback` URI to
+the Entra app registration's Web redirect URIs. The script does not modify
+Entra settings. Then run the
+[Azure custom API and MCP walkthrough](azure/local-custom-upstream-wizard-test.md)
+and verify OIDC, service health, persistence, authorization, and upstream
+behavior before accepting traffic.
+
+The script uses Azure Resource Manager deployments scoped to the dedicated
+resource group; it does not use Terraform state or provision a remote state
+account. If an apply is interrupted after the first confirmation, it may leave
+the owned groups, managed identity, and Key Vault role assignment in place.
+Rerun `apply` to continue or use `destroy` after reviewing the resources.
+
+## 4. Teardown
+
+Use the same config and Azure tenant/subscription as deployment:
+
+```sh
+python3 -B scripts/deploy_azure.py destroy \
+  --config deploy/azure/azure-config.json
+```
+
+The script verifies the ownership marker on the dedicated application
+resource group, lists its resources and any Emotion demo resources, and
+requires exact `DESTROY <resource-group>` confirmation. It requests deletion
+of the entire dedicated application and Emotion resource groups, so inspect
+the complete lists and stop if either group contains anything you need. The
+application groups are deleted asynchronously.
+
+The external Key Vault itself, pre-existing secrets, Neon project/database,
+Entra app registration, image registry, licence entitlement, and unrelated
+resource groups are preserved. Secrets newly uploaded by this script are
+tagged with the deployment owner and prefix; destroy deletes only those
+tagged secrets. Key Vault soft-delete may keep them recoverable until the
+vault's retention period expires. The script removes only this deployment
+identity's wrapper-created Key Vault Secrets User assignment; a pre-existing
+assignment is retained. Remove the callback URI from a shared Entra app
+registration separately if appropriate.
+
+If the Key Vault and its resource group were created solely for this
+deployment, remove them separately only after reviewing their remaining
+resources and confirming that no pre-existing secrets or other data need to be
+kept. Key Vault deletion is subject to soft-delete and purge-protection
+retention; do not bypass that retention.
+
+If you created a dedicated Neon project with the Neon helper, inspect the
+recorded project ID and remove only that helper-owned project. Set
+`NEON_API_KEY` securely as described above before running these commands:
+
+```sh
 python3 -B scripts/neon_setup.py --config config/neon.json status
-# Review the project ID shown above before proceeding.
 python3 -B scripts/neon_setup.py --config config/neon.json destroy \
-  --confirm-project-id "THE_REVIEWED_PROJECT_ID"
+  --confirm-project-id THE_REVIEWED_PROJECT_ID
 ```
 
-Destroy refuses to delete projects that are not recorded as created by this
-helper. It does not delete or suspend resources in an existing user project.
-Review Neon billing and stop/delete those resources separately if you selected
-an existing project. This repository does not include an Azure teardown
-runbook or guarded destroy command. Neon provisioning remains separate from
-the Agent Gateway application state adapter and does not by itself prove
-application persistence or OIDC behavior.
+The Neon helper refuses to delete an existing project it did not create.
+Remove only the deployment-specific callback URI from a shared Entra app
+registration; delete a dedicated app registration only if you own it and
+have confirmed it is not shared.
 
-## 2. Azure target design (reference only)
+For cleanup of resources created by the historical trial, see
+[trial status](azure/trial-status.md); those resources are not managed by the
+new installer.
 
-The following sections describe a proposed configuration only; they do not
-provide an executable install, upgrade, or teardown procedure. Do not create
-billable resources from this outline. A future installer must be published
-here and tested before these steps can be used.
+## Related Azure material
 
-The target design uses one Consumption-plan Container Apps environment in the selected region.
-Use a Log Analytics workspace with deliberate retention and ingestion
-monitoring, or another supported logging configuration. The workspace's
-ingestion and retention charges are not part of the estimate.
-
-For a low-cost pilot, use the standard managed environment and its built-in
-ingress. For production access to private upstreams or a private database,
-design the VNet-integrated environment, routes, DNS, and firewall policy
-before deployment. The estimate excludes any billed NAT, firewall, private
-endpoint, WAF, API Management, or data-transfer resources.
-
-## 3. Deploy the four apps
-
-Create four Container Apps in the same environment, using version-pinned
-images. Start with the smallest Consumption sizing supported by the selected
-revision (the pricing model assumes `0.25` vCPU and `0.5` GiB per replica):
-
-1. Deploy `authz` first with internal ingress on port `8081`.
-2. Deploy `tokensvc` on port `8082` and `gateway` on port `8080`, each with
-   external HTTPS ingress. Configure both to reach `authz` using its
-   environment-generated internal FQDN.
-3. Deploy `web` on port `8083` with external HTTPS ingress. Configure
-   `AUTHZ_URL` and `GATEWAY_URL` to use the internal service FQDNs.
-4. Configure health checks against each service's `/healthz` endpoint and
-   verify that the ingress preserves the request path, authorization, and
-   Agent Gateway headers.
-
-Set replica bounds from local integration tests, starting with conservative
-maxima. The current application image persists shared OIDC/session state in
-PostgreSQL and has passed cross-instance integration tests. Keep `web` at one
-minimum replica until the deployed Azure image also passes cold-callback and
-scale-to-zero acceptance; local database tests alone do not prove that
-behavior.
-
-## 4. Configure state, secrets, and identity
-
-Use the existing or installer-created Neon PostgreSQL database by default.
-Configure
-`PERSISTENCE=postgres` and a TLS-enabled `DATABASE_URL` for the Agent Gateway
-services that use PostgreSQL. Use Neon's pooled endpoint for runtime only
-after verifying that it is compatible with the selected image's connection
-and startup-migration behavior. Restrict connection counts as replicas scale,
-and review Neon plan limits, region, backups, retention, and availability.
-This proposal assumes the user's existing Neon plan has no additional charge;
-Neon pricing, cross-cloud latency and Azure egress are not included.
-
-Implement OIDC transaction state (including nonce and PKCE verifier when used)
-and server-side web sessions in that shared Neon database as an early
-application/database integration phase. Keep only a protected opaque session
-identifier in the browser, expire and clean up records, and consume callback
-state atomically to prevent replay. Do not assume that setting `DATABASE_URL`
-for domain persistence automatically persists OIDC sessions. Until the new
-image passes integration and cold-start callback tests, keep one web replica
-warm.
-
-If Azure-managed database hosting is explicitly required, provision Azure
-Database for PostgreSQL Flexible Server, create the application database, and
-configure the same PostgreSQL persistence settings. Grant network access only
-from the Container Apps environment. Schema creation and migration are
-handled by the application on startup. The estimate's Burstable configuration
-is for non-production testing; production should use a suitably sized General
-Purpose tier and availability/backup settings.
-
-Set the same strong `JWT_SECRET` on `authz`, `tokensvc`, and `gateway`. Supply
-the customer private key under `/keys` and each service's vendor licence under
-`/licences/<service>.token`, read-only. Store these values as Container Apps
-secrets or Key Vault references and mount them as secret volumes; do not put
-secret values in command history, source files, or deployment logs. If a
-secret changes, deploy a new revision or restart the affected revision as
-required by Container Apps.
-
-Configure Entra ID OIDC issuer, client ID/secret, callback URL, and the
-administrator allowlist using the names and formats supported by the selected
-Agent Gateway image release. The exact image configuration is release
-specific and must be checked against its accompanying manifest.
-
-Use the generated web callback URL in the Entra app registration and the
-matching callback value in the user config. If Azure-specific images need to
-be built, suffix release tags with `_a` (for example `<version>_a` and
-optionally `latest_a`); deployment config must pin the verified immutable
-digest rather than the mutable `latest_a` alias.
-
-Leave `REDIS_URL` unset in the minimum-cost design. Add a managed Redis
-service only if its immediate-revocation or decision-cache benefit justifies
-its cost and operational scope.
-
-## 5. Verify, monitor, and remove
-
-Before accepting agent traffic:
-
-- Confirm all four `/healthz` endpoints and internal service calls.
-- Complete an Entra ID sign-in and callback, then create and revoke a test
-  delegation.
-- Confirm denied, allowed, and approval-held requests reach the intended
-  upstream only through the Gateway PEP.
-- Confirm audit records survive a service restart when PostgreSQL is enabled.
-- Test scale-to-zero cold starts, configured timeouts, memory/CPU headroom,
-  log volume, and outbound network restrictions.
-- Set Azure budgets and alerts. Budgets are alerts, not hard spending caps.
-
-Delete the Container Apps and environment, workspace if unused, database,
-registry mirror, Key Vault resources, and any network/edge resources created
-for the deployment. Retained databases, backups, logs, images, and secrets can
-continue to incur charges after application deletion.
+- [Architecture and enterprise integration](azure/architecture.md)
+- [Teardown details and safety checks](azure/teardown.md)
+- [Historical implementation plan and acceptance gates](azure/implementation-plan.md)
+- [Indicative pricing assumptions](azure/serverless-pricing.md)

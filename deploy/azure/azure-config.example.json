@@ -1,0 +1,25 @@
+{
+  "subscription_id": "00000000-0000-0000-0000-000000000000",
+  "tenant_id": "00000000-0000-0000-0000-000000000000",
+  "location": "uksouth",
+  "resource_group": "rg-agent-gateway-dev",
+  "name_prefix": "agw-dev",
+  "key_vault_name": "replacewithvault",
+  "key_vault_resource_group": "rg-agent-gateway-secrets",
+  "postgres_namespace": "agent-gateway-dev",
+  "oidc_issuer_url": "https://login.microsoftonline.com/00000000-0000-0000-0000-000000000000/v2.0",
+  "oidc_client_id": "00000000-0000-0000-0000-000000000000",
+  "web_admin_emails": "admin@example.invalid",
+  "emotion_image": "",
+  "private_registry": {
+    "server": "",
+    "username": "",
+    "password_secret_name": "registry-password"
+  },
+  "images": {
+    "authz": "",
+    "gateway": "",
+    "tokensvc": "",
+    "web": ""
+  }
+}

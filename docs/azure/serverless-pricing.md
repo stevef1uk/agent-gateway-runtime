@@ -1,33 +1,34 @@
 # Indicative Azure serverless deployment cost estimate
 
-> **Historical planning model, not an active deployment or Azure quote.**
-> The model predates the completed development trial and its teardown. The
-> trial implemented shared PostgreSQL-backed OIDC/session state, but did not
-> complete Azure cold-callback/scale-to-zero acceptance. Recalculate regional
-> prices and validate current image behavior before using these figures.
+> **Indicative planning model, not an active deployment or Azure quote.**
+> The model predates the public installer and was updated to include its
+> `web` and `authz` minimum replicas. No fresh Azure deployment has been run
+> with that installer. Recalculate regional prices and validate image
+> behavior before using these figures.
 
 Prepared **13 November 2026** for Azure region **`francecentral` (Paris)**,
 USD/month, on-demand, before tax. This is a planning model, not an Azure quote,
 a capacity guarantee, or a spending cap. It creates no Azure resources.
 
-The target low-cost shape uses Azure Container Apps Consumption for the four
-service containers, with all four able to scale to zero after the Neon-backed
-web OIDC session implementation is built and passes its cold-callback tests.
-The default durable database assumption is the user's existing Neon PostgreSQL
-plan, which adds no Azure database charge in this model. Azure Database for
+The public installer uses Azure Container Apps Consumption for four service
+containers. It keeps `web` and `authz` at one minimum replica each; `gateway`
+and `tokensvc` can scale to zero. The estimate includes approximately
+$11.82/month for those two idle replicas at the model's rates. The default
+durable database assumption is the user's existing Neon PostgreSQL plan,
+which adds no Azure database charge in this model. Azure Database for
 PostgreSQL Flexible Server is an explicit, separately costed alternative.
-Keep one web replica warm until the exact image intended for deployment passes
-OIDC cold-callback and restart acceptance; shared database state alone does
-not prove Azure scale-to-zero behavior.
+Keep `web` warm until the exact image intended for deployment passes OIDC
+cold-callback and restart acceptance; shared database state alone does not
+prove Azure scale-to-zero behavior.
 
 ## 1. Monthly estimates
 
 | Scenario | Container Apps gross, before included grants | After modeled unused Container Apps grants | Default with existing Neon plan (Azure portion) | With Azure PostgreSQL B1ms (gross) |
 |---|---:|---:|---:|---:|
-| Idle: all apps scaled to zero | $0.00 | $0.00 | $0.00 | $18.13 |
-| Light: 10,000 external actions | $0.16 | $0.00 | $0.00 | $18.29 |
-| Regular: 100,000 external actions | $1.58 | $0.00 | $0.00 | $19.71 |
-| Busy illustration: 1,000,000 external actions | $15.79 | $10.39 | $10.39 | $33.92 |
+| Idle: no external actions; web and authz warm | $11.82 | $11.82 | $11.82 | $29.95 |
+| Light: 10,000 external actions | $11.98 | $11.82 | $11.82 | $30.11 |
+| Regular: 100,000 external actions | $13.40 | $11.82 | $11.82 | $31.53 |
+| Busy illustration: 1,000,000 external actions | $27.61 | $22.21 | $22.21 | $45.74 |
 
 The default Neon column assumes the user's existing Neon plan covers this
 database usage at no additional charge; it is not a general Neon price or a
@@ -49,11 +50,11 @@ Burstable for production. A minimal illustrative 2-vCore General Purpose
 server at the same region's retail rate adds about **$154.64/month** including
 32 GB storage.
 
-The all-zero Container Apps estimate models only active compute/request usage
-for the gateway/authz/token service hop pattern. Until Azure cold-callback and
-restart acceptance passes, the web minimum should be one; that warm replica adds approximately
-**$5.91/month** at modeled idle rates. “After modeled unused grants” assumes
-that none of the subscription's free grants have been consumed elsewhere.
+The deployment baseline includes one warm `web` and one warm `authz` replica;
+each adds approximately **$5.91/month** at modeled idle rates. The idle
+scenario is therefore not a zero-cost/all-scaled-down deployment.
+“After modeled unused grants” assumes that none of the subscription's free
+grants have been consumed elsewhere.
 Actual billing depends on subscription-level usage and traffic.
 
 ### Web session options and cost
@@ -76,22 +77,22 @@ explicit application support and a new estimate.
 | Region, currency, billing month | `francecentral`, USD, 730 hours |
 | Container Apps plan | Consumption, one environment; no Dedicated profile |
 | Container size | `0.25` vCPU and `0.5` GiB per replica |
-| Always-on allocation | None in the low-cost default; optional `web` minimum replica adds about $5.91/month |
-| Target scale-to-zero services | `web`, `gateway`, `tokensvc`, `authz`; zero minimum replicas after Neon-backed web OIDC sessions pass acceptance (until then web minimum is one) |
+| Always-on allocation | One `web` and one `authz` minimum replica; about $11.82/month at modeled idle rates |
+| Target scale-to-zero services | `gateway` and `tokensvc`; `web` remains warm pending cold-callback acceptance and `authz` remains warm in the current template |
 | Request work model | 2.1 one-second container hops per external action: gateway + authz per action and one tokensvc call per 10 actions |
 | Free grants | 180,000 vCPU-seconds, 360,000 GiB-seconds, and 2 million requests per subscription/month |
 | Default database assumption | Existing user Neon plan, modeled as $0 additional database cost for this user; Azure egress excluded |
 | Azure PostgreSQL test option | One non-HA 1-vCore B1ms Burstable Flexible Server, 32 GB storage, always running |
 | Azure PostgreSQL production illustration | One non-HA 2-vCore General Purpose Flexible Server, 32 GB storage |
 | Included | Container Apps active compute and request charges, optional Azure PostgreSQL compute/storage when selected |
-| Excluded | Neon charges beyond the user's assumed existing plan, Log Analytics ingestion/retention, internet egress (including Azure-to-Neon), private networking/NAT/firewall, WAF/Front Door/API Management, Redis, Key Vault operations, ACR, HA/zone redundancy, support, software licence, and tax |
+| Excluded | Neon charges beyond the user's assumed existing plan, Azure Monitor log ingestion/retention, internet egress (including Azure-to-Neon), private networking/NAT/firewall, WAF/Front Door/API Management, Redis, Key Vault operations, private registry costs, HA/zone redundancy, support, software licence, and tax |
 
 The model assigns one second of billed work to each hop. Actual gateway time
 includes waiting for upstream services and may be much longer; the cost
 increases with billed duration. Web-console traffic, post-request scale-down
 idle time, and cold-start warm-up are not separately modeled. No load test or
-Azure deployment has validated these sizing assumptions. Public Docker Hub
-images avoid ACR charges in this estimate.
+Azure deployment has validated these sizing assumptions. Publicly pullable
+images avoid registry charges; private image registries add their own costs.
 
 ## 3. Estimate inputs
 
@@ -117,9 +118,8 @@ date:
 
 ## 5. Cost controls
 
-- Keep all minimum replicas at zero for minimum cost. Set web minimum to one
-  if OIDC sign-in reliability is more important than its idle replica charge;
-  shared durable session storage would require an application change.
+- The installer keeps `web` and `authz` at one minimum replica. Change these
+  bounds only after validating cold-start, OIDC, and service dependencies.
 - Set conservative maximum replicas and request/concurrency limits; review
   scale and logs after a representative test.
 - Avoid always-on Redis, Front Door, API Management, ACR, and Dedicated

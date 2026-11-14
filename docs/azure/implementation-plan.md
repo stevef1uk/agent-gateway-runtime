@@ -1,24 +1,22 @@
-# Azure implementation plan (historical)
+# Azure implementation plan and status
 
-> **This is not current deployment status or an install guide.** It records
-> an earlier plan and includes implementation assumptions that may have
-> changed since the operator-verified Azure development trial. The trial was
-> not production-certified and has since been torn down. Its application
-> stack and dedicated Terraform backend are no longer active; its
-> purge-protected Key Vault remains soft-deleted under Azure retention.
-> Neon and Entra resources were outside the Azure teardown. This repository
-> does not include the application source or Azure deployment tooling, so
-> this plan cannot be used to deploy it.
+> The historical trial was not production-certified and has been torn down.
+> Its dedicated Terraform backend is no longer active; its purge-protected
+> Key Vault remains soft-deleted. Neon and Entra were outside the teardown.
+> The current public deployment implementation is Bicep, not Terraform; this
+> document's earlier Terraform phases are retained as planning history.
 
-This plan turns the Azure proposal into a testable, scripted delivery. Users
-provide a non-secret environment/account config; scripts provision or select
-the Neon database and drive Terraform for Azure. Application behavior,
-database integration, and container composition are tested locally before any
-Azure apply. This checkout has no Agent Gateway application source, container
-build files, Terraform, or complete installer. Phase 1 now includes
-config-driven Neon project/database/role provisioning and ownership-checked
-teardown. It does not provide Azure deployment automation or Agent Gateway
-database integration.
+The public repo now contains `scripts/deploy_azure.py` and
+`deploy/azure/main.bicep`, plus an example config and Key Vault uploader.
+These consume release-owner-provided immutable images; application source and
+build files are proprietary and are not included. The installer has not yet
+been used for a fresh Azure live deployment, so successful local validation
+does not establish Azure or production acceptance. The
+[deployment guide](../Azure-Deployment-Guide.md) is the executable workflow.
+
+The Neon helper provisions/selects Neon resources and writes local credentials.
+It does not prove that the proprietary app images correctly use the selected
+database, and it does not provision application state in Azure.
 
 ## Design review and decisions
 
@@ -35,14 +33,13 @@ deployable:
    Keep at least one web replica until the exact deployed image passes
    callback, restart, and scale-to-zero acceptance. Shared database state is
    necessary but does not by itself prove cold-start behavior.
-2. **The image contract is not yet a deployment contract.** Obtain the exact
-   release manifest for all four licensed images and verify ports, health
+2. **The release manifest is still required.** Obtain the exact release
+   manifest for all licensed images and verify ports, health
    paths, environment variable names, secret file paths, startup behavior,
-   resource requirements, and supported persistence settings. If a new Azure
-   image must be built, add the requested `_a` suffix to its release tag; for
-   example, use `<version>_a` and optionally publish `latest_a` as a convenience
-   alias. Terraform must reference the immutable digest, never the mutable
-   `latest_a` alias. Record the release provenance.
+   resource requirements, and supported persistence settings. The application
+   source is proprietary; users of this repository cannot build or modify
+   these images. Deployment config must reference the release owner's
+   immutable digest, never a mutable tag. Record release provenance.
 3. **Neon integration is an early implementation gate.** The user must have a
    Neon project/database, but creation and setup should be scripted where the
    Neon API supports it. The script must also support selecting an existing
@@ -60,14 +57,13 @@ deployable:
    Commit a template config and installer, not an account-specific config or
    secret values. Keep Neon API keys, generated database credentials, customer
    private keys, private/customer licence tokens, JWT secrets, and OIDC client
-   secrets out of Git, command arguments, Terraform plans/state, outputs, and
-   logs. Licence assets and a production-safe secret-delivery workflow are not
-   included in this repository. Prefer writing generated runtime credentials
-   directly to Key Vault and exposing only Key Vault references to Container
-   Apps.
+   secrets out of Git, command arguments, deployment parameters, outputs, and
+   logs. The public wrapper uploads local secret files to Key Vault and exposes
+   Key Vault references to Container Apps; the application licence asset
+   itself must come from the release owner.
 6. **The cost estimate is not a cap.** It excludes several potentially material
-   charges, including Log Analytics, egress to Neon, networking, registry,
-   Key Vault operations, and edge protection. Azure budgets alert; they do not
+   charges, including Azure Monitor log ingestion, egress to Neon, networking,
+   private registry, Key Vault operations, and edge protection. Azure budgets alert; they do not
    stop spending. Refresh prices and set operational alerts/quotas before a
    pilot.
 
@@ -98,11 +94,11 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
   settings; database/role names; web domains and OIDC callback URLs; image
   digests; replica limits; and Key Vault references. Never put API keys,
   passwords, licence tokens, or private keys in this file.
-- The initial Azure user config template is `azure-config.example.json`.
-  Users copy it to the ignored `azure-config.json`; no deployment command
-  consumes it until the installer phase is implemented.
-- Agree on image tagging: Azure-built release tags end in `_a` (for example
-  `<version>_a`); `latest_a` may be a moving alias, but deployments use digests.
+- The canonical template is
+  `deploy/azure/azure-config.example.json`; copy it to the ignored
+  `deploy/azure/azure-config.json`, which `scripts/deploy_azure.py` consumes.
+- Agree on the release manifest and digest distribution with the image owner.
+  Users do not build the proprietary application images.
 - Set explicit retention, backup/recovery, audit, cost alert, and teardown
   requirements.
 
@@ -110,8 +106,8 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
 
 - Check every required image can be pulled by an authorized operator and its
   digest and manifest are recorded.
-- Validate the manifest against actual container startup and `/healthz` (or
-  the documented health endpoint) in a disposable local run.
+- Validate the manifest against actual container startup and `/readyz` (or
+  the release's documented health endpoint) in a disposable run.
 - Validate the example config with no cloud credentials; reject missing
   required fields and any detected secret values.
 - No unresolved placeholders remain for ports, paths, environment names,
@@ -126,18 +122,16 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
   inspect sanitized project metadata, and provision/select the configured
   project, database, and application role. `destroy` deletes only a project
   recorded as created by this tool, with explicit project-ID confirmation.
-- The application source, PostgreSQL persistence implementation, shared
-  OIDC/session implementation, and Key Vault uploader are not included in this
-  repository. Users of this checkout cannot inspect or run those components.
+- The application source and image build files remain proprietary. The public
+  repo includes the Key Vault uploader, but users cannot inspect or modify
+  application-side PostgreSQL/OIDC behavior here.
 
 **Work**
 
-- Add an idempotent Neon setup command driven by the user config. It should
-  support selecting an existing project/database or creating a dedicated
-  non-production project/database and least-privilege app role. Use the Neon
-  API or a maintained provider/CLI after confirming it supports the required
-  operations. Read the Neon API key from the process environment or a secure
-  interactive login, never from the committed example config.
+- The Neon helper is implemented. It supports selecting an existing
+  project/database or creating a dedicated non-production project/database
+  and application role. It reads `NEON_API_KEY` from the process environment,
+  never from the committed example config.
 - Make create/status operations safe to repeat and report resource IDs and
   non-secret connection metadata. Require exact-name confirmation for
   project creation, exact-ID confirmation for mutations to existing projects,
@@ -145,8 +139,8 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
   generated passwords or full connection strings.
 - For local development, store the generated database URL in an ignored local
   credentials file with mode `0600`; never write it to tracked config or
-  Terraform state. A Key Vault uploader is required before this credential can
-  be safely used by a deployed application, and is not included here.
+  deployment parameters. `scripts/deploy_azure.py upload-secrets` transfers it
+  to the configured Key Vault without printing the value.
 - Implement/test Agent Gateway PostgreSQL persistence and migrations against a
   disposable local PostgreSQL first, then the dedicated Neon development
   database. Use TLS, verify the Neon direct endpoint for migrations and select
@@ -163,11 +157,9 @@ phase passes and its image is deployed, keep `web` min replicas = 1.
   require no in-memory state to complete callbacks. Document the web session
   database setting and secret contract.
 - Make database startup and migrations safe across multiple service replicas.
-- Build and publish a new web image only if the existing image cannot be
-  configured to use the implementation. Tag Azure-built artifacts with the
-  agreed `_a` suffix (for example `<version>_a`; optional `latest_a` alias),
-  record the immutable digest, and document upgrade and rollback. Rebuild other
-  service images only if their own code or runtime contract changes.
+- If an image change is necessary, the proprietary application owner must
+  implement and publish it. Public-repo users consume the release owner's
+  immutable digests; they do not build or modify the application images.
 
 **Local and Neon test gate**
 
@@ -224,114 +216,65 @@ test. Until then keep a warm web replica.
 **Exit gate:** repeatable local test command passes from a clean checkout and
 produces no reliance on a developer's real credentials or cloud resources.
 
-### Phase 3 — Implement the config-driven installer and Terraform
+### Phase 3 — Public Azure installer (implementation delivered; live acceptance pending)
 
-**Work**
+The initial Bicep-based implementation is available in this repository:
 
-- Add a pinned Terraform and AzureRM provider version plus committed provider
-  lock file. Keep modules small and explicit: resource group/diagnostics,
-  Container Apps environment, identity/secrets, and the four apps.
-- Extend the committed `azure-config.example.json` and document updating the
-  gitignored `azure-config.json`; test the ignore rule. It holds non-secret
-  account/environment-specific values: tenant and subscription IDs, location,
-  resource/environment names, domain and callback URLs, image references,
-  replica bounds, logging retention, and Key Vault secret names/IDs. The same
-  config drives Neon selection/provisioning and Azure deployment.
-- Add a scripted entry point (for example `./scripts/azure.sh --config
-  azure-config.json neon|plan|apply|destroy`) with separate
-  `neon` and Azure lifecycle subcommands. It validates the config, checks
-  `az account show` against the configured tenant/subscription, runs Terraform
-  with the selected workspace/backend, shows the plan, requires explicit
-  approval before billable creation/apply/destroy, and emits only non-secret
-  endpoints and resource identifiers. It must not silently select the current
-  Azure subscription.
-- Keep credentials, private keys, private/customer licence tokens,
-  `DATABASE_URL`, and
-  OIDC client secrets out of the config file. Provision values separately to
-  Key Vault; the config may reference vault/resource IDs and secret names, not
-  secret contents. Never print secret values or put them in Terraform outputs.
-- Parameterize subscription/tenant, region, image digests, ingress, replica
-  bounds, CPU/memory, logging retention, and external database configuration.
-- Keep `authz` internal-only; make externally reachable ingress opt-in and
-  narrowly configured. Add least-privilege managed identity and Key Vault
-  secret references. Do not manage secret values as Terraform inputs.
-- Exclude Neon and other existing external resources from Terraform ownership.
-  Add explicit safeguards against accidental deletion of managed persistent
-  resources if the Azure PostgreSQL option is later selected.
-- Define remote Terraform state (encrypted Azure Storage, restricted identity,
-  locking, versioning/recovery) before shared environments. Use local state
-  only for isolated developer validation.
+- `deploy/azure/main.bicep` declares the managed environment, four apps,
+  internal-only `authz`, HTTPS ingress, readiness checks, Key Vault secret
+  references, and optional private-registry pulls.
+- `scripts/deploy_azure.py` validates tenant/subscription and digest-pinned
+  image config, uploads local secret files to Key Vault without putting
+  values in command arguments, runs What-If, and requires exact confirmations
+  for apply and destroy.
+- `deploy/azure/azure-config.example.json` is the canonical non-secret config
+  template; its user copy is gitignored.
+- The script creates no remote Terraform state. It scopes ARM deployment to
+  a dedicated app resource group and separately owns the Emotion demo group.
+  It does not create/delete Neon, the Key Vault, or Entra resources.
 
-**Local test gate (no Azure apply)**
+**Local validation status:** see the current repository test results and
+deployment guide. **Still pending:** a fresh Azure deployment with
+release-approved image digests; confirmation of image ports, readiness
+behavior, Key Vault RBAC, private registry pulling, Entra sign-in,
+persistence, wizard-managed Emotion, and teardown. Do not treat this
+implementation as production-certified until those live acceptance tests pass.
 
-- `terraform fmt -check -recursive`
-- `terraform init -backend=false -lockfile=readonly`
-- `terraform validate`
-- `terraform test` with provider mocks for module/default/invalid-input and
-  security invariants, including internal-only `authz`, replica settings,
-  secret references, region, and image digests.
-- Run the installer config-validation and `plan` modes with a safe sample
-  config, no Azure credentials, and mocked or offline Terraform inputs. Verify
-  missing/unknown fields, malformed IDs, and unsafe `latest_a` deployment
-  references fail before apply. Verify a mismatched active Azure subscription
-  is rejected and apply/destroy require explicit confirmation.
-- Verify Neon status and dry-run modes need no API key; live create reads
-  `NEON_API_KEY` from the process environment or secure login, targets only the
-  configured project/region, and never prints credentials.
-- Verify the sample config contains no credential values and is not the
-  gitignored user config. Secret scanning must cover the config, generated
-  files, plans, and test fixtures.
-- Run a Terraform linter and IaC security scanner; review every finding and
-  document accepted exceptions.
-- Generate a plan only with synthetic non-secret values and verify no secret
-  values appear in plan output.
+### Phase 4 — Disposable Azure development deployment (not yet repeated)
 
-**Exit gate:** checks pass without Azure credentials; all public exposure,
-identity, secret, diagnostic, and cost-related resources are represented in
-the reviewed plan; an operator can run the scripted workflow from a clean
-checkout using only a non-secret user config. Terraform is not considered
-locally deployed merely because `validate` succeeds.
-
-### Phase 4 — Disposable Azure development deployment
-
-**Work**
-
-- Use a dedicated non-production subscription/resource group and remote state.
-- Run the scripted installer with the user-created non-production config and
-  apply the reviewed plan with the minimum required Azure permissions.
-- Start with pinned images, conservative replica ceilings, short diagnostic
-  retention, and the agreed web OIDC mode. Keep production credentials and
-  customer activation material out of development.
-- Use the staged scripted order: provision/bootstrap remote Terraform state
-  and Key Vault, provision/select Neon and write generated runtime credentials
-  to Key Vault, then apply the Container Apps configuration. Initially keep
-  `web` at minimum 1 while checking connectivity and migrations; only set
-  minimum 0 after the deployed image contains Neon session support.
-- Do not provision optional Azure PostgreSQL, Redis, ACR, NAT, WAF, or other
-  billed services unless a documented test or requirement needs them.
+Use the [deployment guide](../Azure-Deployment-Guide.md), not the historic
+Terraform workflow below. The public Bicep installer requires a dedicated
+non-production subscription and resource groups, release-owner image digests,
+an RBAC-enabled Key Vault, Neon credentials, and Entra configuration. It
+deploys `web` and `authz` with one minimum replica and `gateway` and
+`tokensvc` with zero minimum replicas. It does not configure remote
+Terraform state.
 
 **Azure smoke / acceptance gate**
 
-- Review `terraform plan` before apply; after apply, compare actual resources
-  with Terraform state and confirm no out-of-scope resources were created.
-- Verify HTTPS, only intended public routes, internal-only `authz`, OIDC
-  callback URL, service-to-service calls, and database TLS.
-- Repeat the Phase 2 functional tests against the deployed endpoints.
-- Exercise scale-to-zero and cold starts. Create OIDC state, wait until `web`
-  has scaled to zero, then complete the callback on the cold-started app; verify
-  a different replica can subsequently resume the session. Repeat with Neon's
-  compute suspended or cold, and record callback latency and failure behavior.
-- Confirm session migrations are applied safely, session rows expire/are
-  cleaned up, and no secret or session contents appear in Terraform state,
-  container logs, or browser storage.
-- Verify logs/metrics, alarms, backup/audit behavior, and egress rules.
-- Inspect actual cost/usage and revise the estimate; alerting is not a hard cap.
+- Review the Azure What-If preview and verify only the dedicated resources
+  are changed.
+- Verify HTTPS, public routes, internal-only `authz`, Entra OIDC callback,
+  service-to-service calls, and database TLS.
+- Repeat the app behavior tests against the deployed endpoints, including
+  policy enforcement, persistence, and wizard-managed Emotion creation and
+  deletion.
+- Exercise cold starts and scale-to-zero for the apps configured with a zero
+  minimum. Keep `web` warm until its cold-callback behavior is verified.
+- Confirm session migrations, expiry, logs/metrics, alarms, backup/audit
+  behavior, and egress controls. Verify no secret or session contents appear
+  in output or logs.
+- Inspect actual cost/usage and revise the estimate; alerting is not a hard
+  cap.
+- Run the guarded destroy, verify only deployment-owned resource groups and
+  tool-created Key Vault secrets were removed, then repeat apply in a clean
+  dedicated environment.
 
-**Exit gate:** signed-off test evidence and cost/security review. Destroy the
-disposable deployment and verify expected resources are removed, retained
-data/logs are understood, and a fresh apply can recreate the environment.
+**Exit gate:** signed-off live test evidence and cost/security review. The
+historical Terraform trial is not evidence that the new Bicep installer passed
+this gate.
 
-### Phase 5 — Production readiness and controlled promotion
+### Phase 5 — Production readiness and controlled promotion (future work)
 
 **Work**
 
@@ -343,30 +286,29 @@ data/logs are understood, and a fresh apply can recreate the environment.
   requirement, and separately design and price its network/database resources.
 - Set production replica ceilings and minimums from load evidence; configure
   budgets and alerts, with an owner and response procedure.
-- Establish image promotion, Terraform plan review, approval, state backup,
-  rollback, secret rotation, and disaster-recovery procedures.
+- Establish image promotion, What-If review, approval, deployment rollback,
+  secret rotation, and disaster-recovery procedures.
 
 **Production release gate**
 
-- CI gates from Phases 1–3 are green; production Terraform plan is reviewed
-  and approved; credentials and licensed activation material are provisioned
+- CI gates from Phases 1–3 are green; production What-If is reviewed and
+  approved; credentials and licensed activation material are provisioned
   through the agreed secret path.
 - Run a limited canary, verify the production sign-in and policy path, monitor
   errors/latency/scale/cost, and confirm rollback before increasing traffic.
 - Complete a restore/rollback exercise before declaring the service operational.
 
-Do not promote a `latest_a` alias as the production image reference. Resolve the
-tested release tag to its digest and put that digest in the user config used for
-the reviewed Terraform plan. A later image change requires the same image and
-integration test gates.
+Do not use mutable tags such as `latest` as production image references.
+Resolve a tested release to its immutable digest and put that digest in the
+user config used for the reviewed What-If. A later image change requires the
+same image and integration test gates.
 
-## Terraform deployment boundary
+## Deployment boundary
 
-The config-driven installer is the intended repeatable interface. It
-provisions/selects Neon first, validates the user's non-secret account and
-environment config, then drives Terraform after the application and container
-contracts have been verified locally. Terraform cannot prove the four
-containers work together, validate a real Entra callback, or guarantee Neon
-compatibility; those are application/local integration and disposable Azure
-acceptance tests above. A successful Terraform plan is necessary but not
-sufficient for production deployment.
+The deployment wrapper is the repeatable Azure interface. It validates the
+user's non-secret config and Azure context, provisions only Azure resources
+tagged and scoped to dedicated groups, and presents an ARM What-If before
+deployment. A successful Bicep build or What-If does not prove that the
+proprietary containers work together, a real Entra callback succeeds, Neon is
+compatible, or the Emotion wizard works. Those require the live acceptance
+tests above.

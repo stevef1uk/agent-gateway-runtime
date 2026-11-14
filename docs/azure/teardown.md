@@ -1,114 +1,78 @@
 # Azure teardown guidance
 
-This guide explains the ownership checks needed to remove a dedicated Agent
-Gateway Azure deployment. It is not a general subscription cleanup procedure.
-Keep pre-existing or shared resources. Stop if resource ownership or the
-deployment's Terraform state is uncertain.
+The public Azure deployment wrapper owns two dedicated resource groups: the
+application group configured in `deploy/azure/azure-config.json` and the
+Emotion demo group derived from `name_prefix`. The installer does not create
+Terraform state. Use its ownership-checked destroy action rather than
+manually deleting individual application resources.
 
-**This repository does not include the Azure installer, Terraform, or guarded
-destroy wrapper.** If the deployment was created with those tools from
-another checkout, use the same release and its guarded destroy command. Do
-not replace a missing state-aware destroy with direct Azure resource deletion:
-that can leave Terraform state inconsistent or remove shared infrastructure.
+## 1. Confirm context and review resources
 
-## 1. Confirm Azure context and ownership
-
-Sign in using the account authorized to manage the deployment and check the
-active tenant and subscription:
+Use the same config and Azure tenant/subscription as deployment:
 
 ```sh
 az account show --query '{tenant:tenantId,subscription:id}' --output table
+python3 -B scripts/deploy_azure.py destroy \
+  --config deploy/azure/azure-config.json
 ```
 
-Compare this context with the original deployment records. Identify the
-application and optional Emotion resource groups, Key Vault, remote Terraform
-state account, Entra app registration, and Neon project. Delete only
-resources created exclusively for this deployment. Never copy account IDs,
-tokens, database URLs, or secret values into this repository.
+The script refuses a mismatched account or an application group that lacks
+its `managedBy=agent-gateway-runtime-azure` ownership tag. It lists every
+resource in the application group and the Emotion group, if present, before
+asking for the exact `DESTROY <application-resource-group>` confirmation.
+Destroy deletes all resources in those groups asynchronously. Review the lists
+and stop if either group contains data or resources that must be retained.
 
-## 2. Remove wizard-managed services and the application stack
-
-If the Console is available, remove a wizard-managed Emotion service through
-its **Delete MCP** action first. This removes its route and the private
-Container App together.
-
-For a Terraform-managed application, run its original guarded destroy flow.
-Review the full plan and require it to destroy only deployment-owned
-resources. Confirm using the exact resource-group name only after the plan is
-reviewed. Verify the application resource group is gone and the original
-Terraform state contains no managed resources:
+After confirming, verify deletion:
 
 ```sh
 az group exists --name <application-resource-group>
-terraform -chdir=<path-to-original-terraform> state list
+az group exists --name <name-prefix>-emotion-demos
 ```
 
-The first command should return `false`; the state list should be empty.
-Keep the state backend until both checks pass. If the original wrapper or
-state is unavailable, stop and recover those from the deployment owner rather
-than deleting resources directly.
+Both should eventually return `false`. Group deletion is asynchronous; check
+again after Azure completes it.
 
-## 3. Remove dedicated prerequisites only after the application destroy
+## 2. External resources are not deleted
 
-The application destroy commonly leaves a separately managed Key Vault and
-state backend. Remove them only if they were created for this deployment and
-are not shared.
+The wrapper preserves the existing Key Vault, pre-existing secrets, Neon
+project/database, Entra app registration, image registry, and any resource
+groups outside this deployment. It deletes only the Key Vault secrets it
+uploaded and tagged for this deployment, and removes this runtime identity's
+wrapper-created Key Vault Secrets User assignment. A pre-existing assignment
+is retained. Deleted secrets may remain recoverable
+under Key Vault soft-delete retention. Remove the callback URI from a shared
+Entra application manually if appropriate. Delete a dedicated Key Vault,
+Neon project, or Entra application only through its owner-approved workflow
+and only after verifying that it is not shared.
 
-Delete the dedicated Key Vault from active resources:
+Key Vault soft-delete and purge-protection retention are controlled by Azure.
+The deployment wrapper does not purge a vault or bypass retention.
+
+If you created a Neon project with the public helper, set `NEON_API_KEY`
+securely, inspect its recorded project ID, and remove only that helper-owned
+project:
 
 ```sh
-az keyvault delete --name <demo-key-vault> \
-  --resource-group <demo-key-vault-resource-group>
+python3 -B scripts/neon_setup.py --config config/neon.json status
+python3 -B scripts/neon_setup.py --config config/neon.json destroy \
+  --confirm-project-id THE_REVIEWED_PROJECT_ID
 ```
 
-Azure soft-delete and purge-protection policies may keep the vault recoverable
-and visible in deleted-vault listings. Do not disable or work around purge
-protection, and do not claim the secrets were immediately or irreversibly
-erased.
+The helper refuses to delete a project it did not create. Remove only the
+deployment-specific callback URI from a shared Entra app; delete a dedicated
+registration only after verifying that it is not shared.
 
-The Terraform state account is the last Azure resource to remove. First
-verify that the guarded destroy succeeded and the state is empty, then verify
-the storage account contains no other state or customer data:
+## 3. Interrupted or historical deployments
 
-```sh
-az storage account delete --name <demo-state-storage-account> \
-  --resource-group <demo-state-resource-group> --yes
-```
+If `apply` stopped after its first confirmation, it may have created the
+dedicated groups, managed identity, and Key Vault role assignment before the
+Container Apps deployment. The same `destroy` command can remove those
+resources after displaying them. If ownership checks fail or the script
+cannot identify the identity, stop and inspect the resources with the Azure
+administrator; do not remove a group by name alone.
 
-This permanently removes the account and its state blobs/versions. Do not
-delete a shared state backend. Once it is gone, the original Terraform
-backend configuration cannot be reused.
-
-For dedicated Key Vault or state resource groups, list resources and delete
-the exact resource group only after confirming it is empty:
-
-```sh
-az resource list --resource-group <dedicated-resource-group> --output table
-az group delete --name <dedicated-resource-group> --yes
-```
-
-## 4. Revert tenant and external-service changes only when owned
-
-- For a shared Entra app registration, remove only the deployment-specific
-  callback URI and client credential. Preserve unrelated redirect URIs,
-  credentials, and applications. Delete the registration/service principal
-  only if dedicated to the deployment.
-- Neon is not an Azure resource. Delete a Neon project only if it was created
-  exclusively for the deployment, after retaining any required data. Do not
-  delete a shared or pre-existing project.
-- Docker images, source, and documentation are not Azure resources and are
-  not removed by Azure teardown.
-
-## 5. Verify the final state
-
-- No application or Emotion Container Apps remain in the dedicated resource
-  groups; dedicated groups are deleted only if empty and owned by the demo.
-- The dedicated Key Vault and state storage account are absent from active
-  resources if their removal was authorized.
-- Shared Entra applications and Neon projects remain intact; remove only
-  demo-specific settings when applicable.
-- Azure Activity Logs and a soft-deleted Key Vault can remain visible under
-  Azure retention policies. These are expected remnants, not active
-  application deployments.
-
-For the state of the supervised trial, see [trial status](trial-status.md).
+The 2026 supervised trial used a separate Terraform deployment and has
+already been torn down. Its status and verification details are in the
+[trial record](trial-status.md); do not reuse that trial's resource names or
+state assumptions for a new installation.

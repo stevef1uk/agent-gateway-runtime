@@ -21,7 +21,8 @@
   "workload": {
     "replica_vcpu": "0.25",
     "replica_gib": "0.5",
-    "web_min_replicas": 0,
+    "web_min_replicas": 1,
+    "authz_min_replicas": 1,
     "hops_per_action": "2.1",
     "seconds_per_hop": "1",
     "actions_per_month": [0, 10000, 100000, 1000000]

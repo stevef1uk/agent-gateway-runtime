@@ -20,8 +20,10 @@ was enabled, Azure retains the vault in soft-deleted state under its retention
 policy; its contents were not irreversibly erased. Neon and Entra were
 outside the Azure teardown and were not deleted as part of it.
 
-This checkout contains design documentation and a Neon helper only. It does
-not include the application source, container build files, Terraform, Azure
-deployment/destroy wrapper, or Key Vault uploader. The trial's status is not
-an install promise; see the [README](../../README.md) before planning a new
-deployment.
+The public repository now includes Azure Bicep deployment automation and a
+guarded lifecycle wrapper. That tooling has not yet been used to recreate
+this trial and does not turn the historical trial into production
+certification. The application source and container build files remain
+proprietary; deployments must use release-owner-provided, immutable image
+digests. See the [deployment guide](../Azure-Deployment-Guide.md) before
+installing.

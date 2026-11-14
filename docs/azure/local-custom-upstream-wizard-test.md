@@ -55,5 +55,6 @@ after readiness. Delete it through the Console's **Delete MCP** action so
 the route and managed app are removed together.
 
 For a deployment-specific cleanup, consult the
-[Azure teardown guidance](teardown.md). This repository does not include the
-Azure installer, Terraform, or guarded destroy wrapper.
+[Azure teardown guidance](teardown.md). Use the
+[Azure deployment guide](../Azure-Deployment-Guide.md) to create a dedicated
+installation.

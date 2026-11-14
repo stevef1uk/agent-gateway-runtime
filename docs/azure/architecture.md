@@ -1,16 +1,16 @@
 # Agent Gateway on Azure — proposed architecture
 
-> This is a proposed design, not an inventory of deployed resources or an
-> executable deployment. The operator-verified development trial was not
-> production-certified and has been torn down. Its application resources and
-> dedicated Terraform backend are no longer active; the purge-protected Key
-> Vault remains soft-deleted. Neon and Entra were outside the Azure teardown.
-> This repository does not include the application source, container build
-> files, Terraform, or Azure lifecycle tooling. See the [trial status](trial-status.md).
+> This design is implemented by the public Azure Bicep template and lifecycle
+> wrapper, but no new Azure deployment has yet been run with that tooling and
+> the design is not production-certified. The supervised development trial was
+> torn down; its purge-protected Key Vault remains soft-deleted. Neon and Entra
+> were outside that teardown. See the [trial status](trial-status.md) and
+> [deployment guide](../Azure-Deployment-Guide.md).
 
-This is a low-cost, single-region proposal for running the existing
-Agent Gateway service containers in a customer's Azure subscription. It is
-not deployment automation and does not create resources.
+This is the low-cost, single-region deployment design for running licensed,
+prebuilt Agent Gateway service images in a customer's Azure subscription.
+The deployment wrapper deploys the resources described here; the application
+source and image build files remain proprietary and are not in this repo.
 
 ## Proposed layout
 
@@ -28,7 +28,7 @@ flowchart LR
   Authz --> State
   Gateway --> State
   State -. optional alternative .-> AzureDB[(Azure Database for PostgreSQL)]
-  Web -. secrets .-> Secrets[Container Apps secrets or Key Vault]
+  Web -. secret references .-> Secrets[Existing Azure Key Vault]
   Gateway -. secrets .-> Secrets
   Tokens -. secrets .-> Secrets
   Authz -. secrets .-> Secrets
@@ -39,10 +39,10 @@ one **Consumption-plan** Container Apps environment:
 
 | Service | Ingress | Low-cost default | Reliability option |
 |---|---|---|---|
-| `web` | External HTTPS | Minimum 0 only after Neon-backed OIDC session support passes cold-callback tests; otherwise minimum 1 | Zero minimum is the target cost setting after durable session support is released and verified. |
-| `gateway` | External HTTPS | Minimum 0 | This is the policy enforcement point for agent requests. Scale-to-zero trades idle cost for cold-start latency. |
-| `tokensvc` | External HTTPS | Minimum 0 | Restrict access to intended agent clients at the edge or with app authentication where appropriate. |
-| `authz` | Internal only | Minimum 0 | Only the other Agent Gateway services should call the authorization API. Use the environment's generated internal service DNS name in `AUTHZ_URL`. |
+| `web` | External HTTPS | Minimum 1, maximum 2 | Keep a warm replica pending deployed Azure OIDC cold-callback and restart acceptance. |
+| `gateway` | External HTTPS | Minimum 0, maximum 2 | This is the policy enforcement point for agent requests. Scale-to-zero trades idle cost for cold-start latency. |
+| `tokensvc` | External HTTPS | Minimum 0, maximum 2 | Restrict access to intended agent clients at the edge or with app authentication where appropriate. |
+| `authz` | Internal only | Minimum 1, maximum 2 | Only the other Agent Gateway services should call the authorization API. Use the environment's generated internal service DNS name in `AUTHZ_URL`. |
 
 Container Apps supports external and internal ingress, HTTPS, service
 discovery, and scaling to zero. This avoids a separate load balancer for a
@@ -68,17 +68,12 @@ container, with Cognito sign-in and DynamoDB-backed application state. Those
 architectures do not require a continuously running web replica, but they are
 not the same container session implementation as this Azure proposal.
 
-Use the licensed published images from the current vendor release manifest,
-pinning each image to its release tag or digest. Public Docker Hub pulls avoid
-the fixed cost of a private Azure Container Registry for a small evaluation.
-Mirror images to ACR for production supply-chain control if required; registry
-storage and transfer are not included in the estimate.
-
-If an Azure-specific image must be built, tag the release with the `_a` suffix
-(for example `<version>_a`); `latest_a` may be published as a convenience
-alias. Deployment configuration must use the tested immutable image digest,
-not the mutable alias. Rebuild only the services whose source or runtime
-contract changes.
+Use licensed, prebuilt images from the release owner's manifest and pin each
+service to its immutable digest. This repository does not provide application
+source or build instructions, and users cannot rebuild these images. The
+installer supports an optional Key Vault-backed private-registry credential
+for the four service images. Registry storage and transfer are not included
+in the cost estimate.
 
 ## State and availability choices
 
@@ -102,11 +97,10 @@ callback state validation and authenticated session access; it must not fall
 back to process-local sessions. See
 [Web scale-to-zero and OIDC](#web-scale-to-zero-and-oidc).
 
-Phase 1 now includes a local config validator, project/database/role
-provisioning, local credential-file output, and ownership-checked deletion of
-projects created by the helper. These tools do not provision Azure resources
-or enable application persistence; those remain implementation and acceptance
-gates. Existing Neon projects are never deleted by the helper.
+The runtime repo includes the Neon project helper and an Azure deployment
+wrapper. The wrapper consumes an existing Neon credential file and does not
+provision or delete Neon resources. Existing Neon projects are not deleted by
+the helper or Azure teardown.
 
 The estimate treats the user's existing Neon plan as having no additional
 database charge for this deployment. This is a user-specific assumption, not
@@ -139,10 +133,10 @@ smallest-cost model.
 | Azure Container Apps Consumption | Run the four existing containers | Pay per use, supports zero minimum replicas, managed HTTPS ingress, internal service discovery, and HTTP-based scaling without operating Kubernetes. |
 | Neon PostgreSQL | Default durable application state | Reuses the existing Neon account/database and avoids adding Azure database compute charges; introduces cross-cloud networking, plan-limit, and data-residency considerations. |
 | Azure Database for PostgreSQL Flexible Server | Explicit alternative for Azure-managed state | Compatible with PostgreSQL persistence, but has provisioned hourly compute and storage charges. |
-| Container Apps secrets; optionally Azure Key Vault | Provide JWT/admin secrets, customer key, and per-service licence files | Avoids committing secret material. For Key Vault, use managed identity and tightly scoped access; rotate/restart revisions when secret values change. |
+| Existing Azure Key Vault | Provide PostgreSQL, OIDC, licence, JWT/admin, and optional registry secrets through managed-identity references | The installer does not create the vault. New secrets are deployment-tagged for teardown; pre-existing secrets are preserved. |
 | Microsoft Entra ID | OIDC identity provider for console sign-in | Fits the existing OIDC configuration. Configure the app registration's redirect URI to the web console's HTTPS URL and allowlist console administrators. |
 | Azure Monitor / Log Analytics | Operational logs, metrics, and alerts | Useful for diagnosing scale-to-zero cold starts and database health. Ingestion and retention depend on volume and are excluded from the estimate. |
-| Azure Container Registry | Optional private image mirror | Not required for public Docker Hub images; add for controlled image distribution, with extra storage and transfer charges. |
+| Container image registry | Pull release-owner images by immutable digest | Public images require no registry secret. The installer can use a Key Vault-backed credential for private service images; private registry fees are additional. |
 
 Azure Functions and Logic Apps are not the first choice for the existing
 long-running HTTP services. Azure Kubernetes Service and Container Apps
@@ -162,9 +156,9 @@ would require an application storage adapter and migration work.
   Permit only required egress and protect private upstream APIs from bypass
   routes.
 - Keep JWT secrets identical across the services that validate the same
-  tokens. Mount the matching customer private key and each service's signed
-  licence token read-only at the paths expected by its image. Never place
-  production activation material in Git.
+  tokens. The installer references the database URL, OIDC secret, licence
+  token, and JWT/admin secrets from Key Vault; never place production
+  activation material in Git.
 - Scale-to-zero can add cold-start latency. Do not set the web console's
   minimum replicas to zero until Neon-backed OIDC state/session storage is
   implemented and cold-callback behavior passes acceptance testing. Until then
