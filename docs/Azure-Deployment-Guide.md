@@ -109,13 +109,21 @@ the config file.
 ### Prepare Neon credentials
 
 The public Neon helper can select an existing project or create a dedicated
-development project. Copy its example config, choose the project/database
-settings, and validate it:
+development project. The [Neon config guide](../config/README.md) explains
+where to find the project ID and region, when to set a branch ID, and what the
+database and application-role fields control. Read it before editing the
+example. For an existing project, copy the template and replace the project ID
+and exact project region:
 
 ```sh
 cp config/neon.example.json config/neon.json
 python3 -B scripts/neon_setup.py --config config/neon.json validate
 ```
+
+Leave `project_name` empty and `mode` as `existing`. Leave `branch_id` empty
+to use the project's default branch, or enter a branch ID from the Neon
+Console to use a specific branch. The helper creates the configured
+`database_name` and `application_role` on that branch if they do not exist.
 
 Set `NEON_API_KEY` through a secure environment-variable mechanism. For an
 interactive shell, enter it without echoing or placing it in shell history:

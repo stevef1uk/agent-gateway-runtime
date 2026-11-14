@@ -3,7 +3,7 @@
   "mode": "existing",
   "project_id": "replace-with-neon-project-id",
   "project_name": "",
-  "region_id": "aws-eu-west-2",
+  "region_id": "replace-with-project-region-id",
   "branch_id": "",
   "database_name": "agent_gateway_dev",
   "application_role": "agent_gateway_app"
