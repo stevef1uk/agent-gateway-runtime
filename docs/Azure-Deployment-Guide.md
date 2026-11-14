@@ -36,9 +36,33 @@ Apps independently.
 
 ## 1. Prerequisites
 
-Install Python 3.10+ and Azure CLI with Bicep. Sign in to the intended tenant
-and subscription; the script rejects a mismatch with the deployment config.
-If Bicep is not installed, install it with `az bicep install`.
+You need access to an active Azure subscription where you can create the
+deployment resources. If you do not already have an Azure subscription, create
+one or ask your Azure administrator to grant you access before continuing.
+
+Install Python 3.10+ and Azure CLI. Sign in interactively:
+
+```sh
+az login
+```
+
+List the subscriptions available to your signed-in account:
+
+```sh
+az account list --output table
+```
+
+Select the subscription where you intend to deploy, using its subscription ID:
+
+```sh
+az account set --subscription YOUR_SUBSCRIPTION_ID
+az account show --query '{subscriptionId:id,tenantId:tenantId,name:name}' --output table
+```
+
+Use the displayed subscription and tenant IDs in
+`deploy/azure/azure-config.json`. The deployment script checks that the active
+Azure account matches those configured IDs and stops if they differ. If Bicep
+is not installed, install it with `az bicep install`.
 
 The deploying identity needs permission to create the listed Azure resources,
 create a user-assigned managed identity, and create role assignments at the
