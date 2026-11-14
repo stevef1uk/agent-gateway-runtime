@@ -101,11 +101,20 @@ permissions using your organization's approved RBAC process.
    validates a PostgreSQL connection URL. Add a SQL Server option only after
    the release owner confirms image support and the installer is updated for
    that database contract.
-2. **Entra sign-in:** Create or select an Entra OIDC app registration and
-   provide its client ID, issuer URL, and client-secret file. The scripts use
-   these values but do not create or edit the app registration. After the first
-   apply, add the exact callback URI printed by the script to the app's Web
-   redirect URIs.
+2. **Entra sign-in:** Create or select an Entra OIDC app registration. The app
+   registration does not come with a client secret automatically. In the
+   Microsoft Entra admin center, open the app registration, select
+   **Certificates & secrets** > **Client secrets** > **New client secret**,
+   choose an expiry that meets your organization's policy, and select **Add**.
+   Copy the secret **Value** immediately into a secure local file; Entra shows
+   the value only once. The **Secret ID** is not the client secret. If you
+   closed the page without copying the value, create a new client secret and
+   store that value instead.
+
+   Provide the app's client ID, tenant-specific issuer URL, and client-secret
+   file to the deployment workflow. The scripts use these values but do not
+   create or edit the app registration. After the first apply, add the exact
+   callback URI printed by the script to the app's Web redirect URIs.
 3. **Azure secrets:** Select an RBAC-enabled Key Vault. The installer uploads
    the local database, licence, and OIDC secret files there; it generates the
    JWT and admin tokens when needed.
@@ -199,9 +208,10 @@ python3 -B scripts/deploy_azure.py validate \
 ```
 
 Ensure input files are private. The Neon helper already writes its credential
-file with owner-only permissions; set the same mode on the licence,
-OIDC-client-secret, and optional registry-password files. Then upload the
-values to the configured Key Vault. The helper creates strong JWT and
+file with owner-only permissions; save the Entra client-secret **Value** in a
+local file and set owner-only permissions along with the licence and optional
+registry-password files. Then upload the values to the configured Key Vault.
+The helper creates strong JWT and
 gateway-admin tokens if those names do not already exist. Existing Key Vault
 secrets are preserved, not overwritten. It uses `database-url`,
 `licence-token`, `oidc-client-secret`, `jwt-secret`, and
