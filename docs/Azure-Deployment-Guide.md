@@ -141,12 +141,36 @@ the config file.
 
 ### Prepare Neon credentials
 
-The public Neon helper can select an existing project or create a dedicated
-development project. The [Neon config guide](../config/README.md) explains
-where to find the project ID and region, when to set a branch ID, and what the
-database and application-role fields control. Read it before editing the
-example. For an existing project, copy the template and replace the project ID
-and exact project region:
+If you already have a working PostgreSQL `DATABASE_URL` for the database you
+want to use, **you do not need to create a Neon API key or run the Neon
+management helper**. The Azure installer only needs the connection URL. Create
+`config/neon-credentials.json` with that URL using a secure local editor:
+
+```json
+{
+  "database_url": "PASTE_YOUR_DATABASE_URL_HERE"
+}
+```
+
+Save it with owner-only permissions and ensure its URL includes a TLS
+`sslmode`, such as `sslmode=require`:
+
+```sh
+chmod 600 config/neon-credentials.json
+```
+
+This credentials file is gitignored. Do not paste the connection URL into
+chat, tickets, or source control. The Azure uploader reads this file and stores
+the URL in Key Vault.
+
+Use the optional Neon helper below only if you want it to look up an existing
+Neon project and create/select the application database and role for you. That
+helper calls the Neon management API and therefore requires a separate
+`NEON_API_KEY`; the key is not the database password or `DATABASE_URL`.
+The [Neon config guide](../config/README.md) explains where to find the project
+ID and region, when to set a branch ID, and what the database and application
+role fields control. For an existing project, copy the template and replace
+the project ID and exact project region:
 
 ```sh
 cp config/neon.example.json config/neon.json
@@ -158,6 +182,7 @@ to use the project's default branch, or enter a branch ID from the Neon
 Console to use a specific branch. The helper creates the configured
 `database_name` and `application_role` on that branch if they do not exist.
 
+To use the Neon helper, create a Neon API key in your Neon account settings.
 Set `NEON_API_KEY` through a secure environment-variable mechanism. For an
 interactive shell, enter it without echoing or placing it in shell history:
 
@@ -184,7 +209,8 @@ python3 -B scripts/neon_setup.py --config config/neon.json setup \
 The helper writes the connection URL to ignored `config/neon-credentials.json`
 with owner-only permissions. Do not print or commit it. The Azure secret
 uploader requires this file and checks that its PostgreSQL URL requires TLS.
-After setup, remove the API key from the shell with `unset NEON_API_KEY`.
+After helper setup, remove the API key from the shell with
+`unset NEON_API_KEY`.
 
 ## 2. Configure and upload secrets
 

@@ -33,10 +33,37 @@ a descriptive `project_name`, and leave `project_id` and `branch_id` empty.
 Choose the Neon `region_id` where the project should be created. The helper
 uses the project name as the exact confirmation text for the create command.
 
+## Do I need a Neon API key?
+
+Only if you want `scripts/neon_setup.py` to call Neon to look up the project,
+create/select the database and role, and generate the connection credentials
+file. The Neon API key is a management credential; it is different from the
+database URL/password used by Agent Gateway.
+
+If you already have a working PostgreSQL `DATABASE_URL`, you can skip the
+Neon helper and its API key. Create the Azure uploader's ignored
+`config/neon-credentials.json` with a secure local editor:
+
+```json
+{
+  "database_url": "PASTE_YOUR_DATABASE_URL_HERE"
+}
+```
+
+Protect the file and ensure the URL requires TLS (`sslmode=require`,
+`verify-ca`, or `verify-full`):
+
+```sh
+chmod 600 config/neon-credentials.json
+```
+
+Do not print, share, or commit the connection URL or credentials file.
+
 ## Run the helper
 
-Set `NEON_API_KEY` using your approved secure method, then validate the
-non-secret configuration:
+To use the helper, create a Neon API key in your Neon account settings and
+provide it as `NEON_API_KEY` using your approved secure method. Then validate
+the non-secret configuration:
 
 ```sh
 python3 -B scripts/neon_setup.py --config config/neon.json validate
