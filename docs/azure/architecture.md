@@ -1,11 +1,12 @@
 # Agent Gateway on Azure — proposed architecture
 
-> This design is implemented by the public Azure Bicep template and lifecycle
-> wrapper, but no new Azure deployment has yet been run with that tooling and
-> the design is not production-certified. The supervised development trial was
-> torn down; its purge-protected Key Vault remains soft-deleted. Neon and Entra
-> were outside that teardown. See the [trial status](trial-status.md) and
-> [deployment guide](../Azure-Deployment-Guide.md).
+> The supervised Azure development trial successfully verified the Console,
+> Policy/Rego page, Telegram configuration, and wizard-managed Emotion service.
+> The public Bicep template and lifecycle wrapper bring this architecture into
+> the runtime repository as an operator deployment workflow. Use the
+> [deployment guide](../Azure-Deployment-Guide.md) to configure your Azure
+> environment and complete the end-to-end acceptance checks. For the trial
+> environment history, see [trial status](trial-status.md).
 
 This is the low-cost, single-region deployment design for running licensed,
 prebuilt Agent Gateway service images in a customer's Azure subscription.
