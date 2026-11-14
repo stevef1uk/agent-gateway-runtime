@@ -443,3 +443,13 @@ The signed-licence web function receives the same JWT signing value and operator
 | A teardown inventory refers to an earlier CloudFormation stack ID with the same stack name | The stack was deleted and recreated, but the prior cleanup inventory remains | The teardown tool now keeps each verified stack generation in the inventory and adds the current stack ID. Review every generation in the plan; use `--state-file` to separate inventories only when managing unrelated cleanup histories |
 | After deleting and redeploying, a retained resource has a different ID than the old inventory | Retained DynamoDB tables and log groups keep their names and are reused by the new stack, but a Cognito user pool is created fresh, leaving the old one orphaned | Compare with `aws cloudformation list-stack-resources --stack-name <app stack> --query "StackResourceSummaries[?ResourceType=='AWS::DynamoDB::Table' \|\| ResourceType=='AWS::Cognito::UserPool'].[LogicalResourceId,PhysicalResourceId]"`. Delete an orphaned pool manually only after confirming it holds nothing you need |
 | No invitation email | Spam folder, or the original expired | Resend with the command in step 8 |
+
+## Licence expiry and renewal
+
+The four signed service licences expire on the dates encoded in the licence
+files supplied for your deployment. The preflight validates their signatures
+and expiry, and the images stop running when a licence expires. To keep a
+deployment running beyond its current licence period, request replacement
+private licence files from the vendor and update the activation files before
+redeploying. See the [Pricing page in the main repository](https://github.com/stevef1uk/agent-gateway-demo/blob/main/docs/Pricing.md)
+for licensing details.

@@ -17,3 +17,12 @@ make check
 ```
 
 `make check` is offline and creates no AWS resources. Deployment requires a current vendor release manifest and compatible activation material; historical manifests are not substitutes. The [guide](docs/Deployment-Guide.md#3-obtain-the-current-release-and-activation-files) explains these inputs before any billable deployment. OpenClaw hosts are not created by this repository; the proxy VM is optional.
+
+## Licence expiry and renewal
+
+The signed service licences have an expiry enforced by the images, and the
+deployment preflight checks their signatures and expiry before provisioning.
+Use the expiry in the licence files supplied for your deployment; to continue
+running after expiry, request a replacement private licence from the vendor.
+See the [Pricing page in the main repository](https://github.com/stevef1uk/agent-gateway-demo/blob/main/docs/Pricing.md)
+for licensing details.
