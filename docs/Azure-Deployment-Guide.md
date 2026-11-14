@@ -73,8 +73,9 @@ create a user-assigned managed identity, and create role assignments at the
 configured Key Vault and new deployment scopes. A typical setup is Contributor
 and User Access Administrator (or Role Based Access Control Administrator) at
 the target subscription, plus Key Vault Secrets Officer at the external vault
-for secret upload and cleanup. These are privileged permissions; have the
-subscription administrator scope them according to your organization's
+for secret upload and cleanup. Subscription Contributor alone does not grant
+access to Key Vault secret contents. These are privileged permissions; have
+the subscription administrator scope them according to your organization's
 least-privilege policy. The Key Vault must already exist and use Azure RBAC
 authorization.
 
@@ -91,9 +92,38 @@ az keyvault create \
   --enable-rbac-authorization true
 ```
 
-Set the matching vault name, resource group, and region in the config. Assign
-the deployment operator the required Key Vault data-plane and role-assignment
-permissions using your organization's approved RBAC process.
+Set the matching vault name, resource group, and region in the config. Before
+uploading secrets, ensure the signed-in deployment operator has the **Key
+Vault Secrets Officer** role on the configured vault. In the Azure portal,
+open that Key Vault, go to **Access control (IAM)** > **Add** > **Add role
+assignment**, select **Key Vault Secrets Officer**, and assign it to the user
+who runs `az login`. A subscription administrator may need to do this. Allow
+a few minutes for a new role assignment to propagate before retrying.
+
+An administrator with permission to create role assignments can grant the
+same access with Azure CLI. Sign in as the deployment user to get that user's
+object ID:
+
+```sh
+az ad signed-in-user show --query id --output tsv
+```
+
+Then have an administrator run the following, replacing the placeholders with
+the deployment user's object ID and the subscription, resource group, and
+vault name from `deploy/azure/azure-config.json`:
+
+```sh
+az role assignment create \
+  --assignee-object-id YOUR_SIGNED_IN_USER_OBJECT_ID \
+  --assignee-principal-type User \
+  --role "Key Vault Secrets Officer" \
+  --scope /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_KEY_VAULT_RESOURCE_GROUP/providers/Microsoft.KeyVault/vaults/YOUR_KEY_VAULT_NAME
+```
+
+The person running this command must themselves have permission to create
+role assignments at the vault scope (for example, **Owner** or **User Access
+Administrator**). This grants secret-management access only on the specified
+vault; it does not grant access to other vaults.
 
 ## External service setup
 
@@ -296,6 +326,17 @@ The command reads file contents locally and passes file paths (not secret
 values) to Azure CLI. It will not rotate an existing secret; update/rotate
 secrets through your approved Key Vault process and then restart or revise
 the affected apps as required.
+
+If the command fails with `ForbiddenByRbac` or says the caller is not
+authorized for `Microsoft.KeyVault/vaults/secrets/readMetadata/action`, the
+signed-in user is missing the Key Vault data-plane role. Grant **Key Vault
+Secrets Officer** to that user on the configured vault, wait for role
+propagation, and retry. See the portal and CLI role-assignment steps above.
+This check occurs before secrets are uploaded, so a failure here means this
+command did not upload them. Also replace example paths with real local
+paths: for example, if the client-secret file is `secret.txt` in the
+repository root, run `chmod 600 ./secret.txt` (not
+`chmod 600 /path/to/oidc-client-secret`) before retrying.
 
 ## 3. Review and deploy
 
