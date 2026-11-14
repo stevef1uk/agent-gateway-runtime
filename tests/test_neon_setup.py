@@ -146,6 +146,11 @@ class NeonConfigTests(unittest.TestCase):
     def test_loads_valid_non_secret_config(self) -> None:
         self.assertEqual(load_config(self.write_config(VALID_CONFIG)), VALID_CONFIG)
 
+    def test_rejects_example_project_id_placeholder(self) -> None:
+        config = {**VALID_CONFIG, "project_id": "replace-with-neon-project-id"}
+        with self.assertRaisesRegex(ConfigError, "actual Neon project ID"):
+            load_config(self.write_config(config))
+
     def test_accepts_new_project_config_without_project_id(self) -> None:
         self.assertEqual(
             load_config(self.write_config(CREATE_CONFIG)), CREATE_CONFIG

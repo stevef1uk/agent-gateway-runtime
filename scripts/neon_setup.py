@@ -76,9 +76,13 @@ def load_config(path: Path) -> dict[str, str]:
     if raw["mode"] not in {"existing", "create"}:
         raise ConfigError("mode must be 'existing' or 'create'.")
     if raw["mode"] == "existing":
-        if not PROJECT_ID_PATTERN.fullmatch(raw["project_id"]):
+        if (
+            not PROJECT_ID_PATTERN.fullmatch(raw["project_id"])
+            or raw["project_id"] == "replace-with-neon-project-id"
+        ):
             raise ConfigError(
-                "project_id must be a Neon project ID when mode is 'existing'."
+                "project_id must be the actual Neon project ID when mode is "
+                "'existing'; replace the example placeholder."
             )
         if raw["project_name"]:
             raise ConfigError("project_name must be empty when mode is 'existing'.")
