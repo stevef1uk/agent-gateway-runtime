@@ -19,6 +19,9 @@ while operators manage the Azure environment here.
 - [Azure implementation roadmap](implementation-plan.md)
 - [Indicative pricing assumptions](serverless-pricing.md)
 
-Before you begin, prepare an RBAC-enabled Key Vault, Neon database, Entra OIDC
-app registration, licence token, and image release digests. These remain under
-your control; the installer focuses on the Azure application environment.
+The current deployment uses PostgreSQL through Neon. The Neon helper prepares
+the database credentials; operators provide an Entra app registration and add
+the printed redirect URI after deployment. Licence and immutable image
+references are release assets consumed by the installer, not additional cloud
+services to provision. Microsoft SQL Server is not currently supported by the
+installer and application-image contract.

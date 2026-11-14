@@ -25,11 +25,14 @@ Begin in a non-production subscription, then use your results to plan rollout.
   group derived from `name_prefix`.
 - Azure Monitor log destination for the Container Apps environment.
 
-Bring an existing Key Vault, Neon database, Entra app registration, image
-registry, and licence entitlement; these external services stay under your
-control. The optional private-registry setting configures pulls for the four
-Agent Gateway service images. Make the Emotion image used by the wizard
-available to Azure Container Apps independently.
+The deployment uses a Key Vault you select and a PostgreSQL connection. The
+Neon helper can create or select the Neon project and database and produce the
+credential file. The deployment scripts do not create or configure an Entra
+app registration: you provide its client ID, issuer URL, and client-secret
+file, then add the callback URI printed after deployment. The optional
+private-registry setting configures pulls for the four Agent Gateway service
+images. Make the Emotion image used by the wizard available to Azure Container
+Apps independently.
 
 ## 1. Prerequisites
 
@@ -64,18 +67,38 @@ Set the matching vault name, resource group, and region in the config. Assign
 the deployment operator the required Key Vault data-plane and role-assignment
 permissions using your organization's approved RBAC process.
 
-Prepare these external inputs before deployment:
+## External service setup
 
-1. A Neon PostgreSQL database and the owner-only
-   `config/neon-credentials.json` produced by `scripts/neon_setup.py`.
-2. An Entra OIDC application with a client ID, issuer URL, and client-secret
-   file. The deployment script prints the callback URI to add after the first
-   apply.
-3. A valid Agent Gateway licence token in a local file.
-4. A release manifest from the release owner containing immutable `sha256`
-   image references for `authz`, `gateway`, `tokensvc`, `web`, and the Emotion
-   bridge image. The service images must be anonymously pullable unless
-   `private_registry` is configured. Do not substitute tags such as `latest`.
+1. **Database:** The current installer and release-image contract use
+   PostgreSQL. Run `scripts/neon_setup.py` to select an existing Neon project
+   or create a dedicated one; the helper writes the owner-only
+   `config/neon-credentials.json` used by the Azure secret uploader. Microsoft
+   SQL Server is not currently supported by the installer: the uploader
+   validates a PostgreSQL connection URL. Add a SQL Server option only after
+   the release owner confirms image support and the installer is updated for
+   that database contract.
+2. **Entra sign-in:** Create or select an Entra OIDC app registration and
+   provide its client ID, issuer URL, and client-secret file. The scripts use
+   these values but do not create or edit the app registration. After the first
+   apply, add the exact callback URI printed by the script to the app's Web
+   redirect URIs.
+3. **Azure secrets:** Select an RBAC-enabled Key Vault. The installer uploads
+   the local database, licence, and OIDC secret files there; it generates the
+   JWT and admin tokens when needed.
+
+## Release assets
+
+The deployment also needs the evaluation licence file and immutable `sha256`
+image references for `authz`, `gateway`, `tokensvc`, `web`, and the Emotion
+bridge image. Use the release assets supplied for your checkout; these are
+inputs consumed by the scripts, not additional Azure services to provision.
+If your release checkout includes the public evaluation token at
+`keys/token.txt`, pass that path to `--licence-token-file`; the uploader reads
+it locally and stores it in Key Vault. Copy the release image digests into the
+deployment config.
+The service images must be anonymously pullable unless `private_registry` is
+configured. Do not substitute tags such as `latest`. The public runtime repo's
+example config leaves image digests blank for the release owner to supply.
 
 The optional `private_registry` config stores the registry password in Key
 Vault and configures the four service apps to use that secret. All four

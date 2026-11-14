@@ -29,29 +29,33 @@ environment:
    transaction/session state and cross-instance tests passed. Keep at least
    one web replica while bringing up an environment; test callback and restart
    behavior with the exact deployed image before enabling scale-to-zero.
-2. **Prepare the release manifest.** Obtain the exact release
+2. **Evaluate a Microsoft SQL Server option.** The current installer and
+   application-image contract use PostgreSQL. Add another database choice only
+   after the release owner confirms application support and supplies the
+   connection, TLS, and persistence contract for that engine.
+3. **Prepare the release manifest.** Obtain the exact release
    manifest for all licensed images and verify ports, health
    paths, environment variable names, secret file paths, startup behavior,
    resource requirements, and supported persistence settings. The application
    source is proprietary; users of this repository cannot build or modify
    these images. Deployment config must reference the release owner's
    immutable digest, never a mutable tag. Record release provenance.
-3. **Configure Neon integration.** Select or provision a Neon project/database
+4. **Configure Neon integration.** Select or provision a Neon project/database
    and confirm ownership, region, and credentials. Verify service persistence
    and OIDC session storage against a non-production Neon database. Exercise
    startup migrations, pooled/direct connections, TLS, connection limits,
    restart durability, and audit/session retention.
-4. **Set public endpoint access policies.** Decide which callers
+5. **Set public endpoint access policies.** Decide which callers
    need the web console, token endpoint, and Gateway API. Specify authentication,
    authorization, domains, Entra redirect/callback URLs, forwarded-header
    trust, CORS if used, and outbound destinations. `authz` must remain internal.
    Do not rely on an unspecified edge service as the only protection.
-5. **Protect configuration and secrets.** Keep account-specific config and
+6. **Protect configuration and secrets.** Keep account-specific config and
    secret values out of Git, command arguments, deployment parameters, outputs,
    and logs. The public wrapper uploads local secret files to Key Vault and
    exposes Key Vault references to Container Apps; obtain the application
    licence asset from the release owner.
-6. **Plan and monitor spend.** The cost estimate excludes additional charges
+7. **Plan and monitor spend.** The cost estimate excludes additional charges
    such as Azure Monitor log ingestion, egress to Neon, networking, private
    registry, Key Vault operations, and edge protection. Azure budgets provide
    alerts rather than spending caps. Refresh prices and set operational alerts
