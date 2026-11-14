@@ -1,9 +1,10 @@
 # Agent Gateway Azure deployment proposal
 
-This guide describes a proposed, low-cost deployment in Azure. The `azure`
-branch currently provides architecture and pricing documentation only; it
-does not contain a deployment script or Infrastructure-as-Code, and no Azure
-resources are created by reading this guide.
+This guide describes the low-cost Azure deployment flow shared with the
+`agent-gateway` application repository. That repository contains the Azure
+Terraform scaffold, guarded lifecycle wrapper, and Key Vault uploader. This
+guide and the local Neon helper do not create Azure resources by themselves;
+no application resources are applied until the user runs the guarded apply.
 
 For service placement and trade-offs, see the
 [Azure architecture](azure/architecture.md). For monthly estimates and
@@ -24,21 +25,19 @@ region. Install Azure CLI, authenticate, select the subscription, and register t
 Register `Microsoft.DBforPostgreSQL` only if you explicitly choose Azure
 Database for PostgreSQL instead of the default Neon database.
 
-Obtain the current licensed image tags/digests, customer private key, and
-per-service signed licence tokens from the vendor. Keep activation material
-outside the repository and restrict access to the Azure operators who need it.
-Use Entra ID OIDC for the web console and configure an administrator allowlist.
+Pin the current licensed image digests. The application repository includes
+one public, time-limited demo licence for deployment. Keep vendor private keys
+and customer-specific licence files outside Git; a user with a private or
+extended licence may pass that file to the uploader. Use Entra ID OIDC for the
+web console and configure an administrator allowlist.
 
-The planned installer is driven by a user-created, non-secret environment
-config file. It will record Azure tenant/subscription, region/resource names,
-Neon project/database selection or creation settings, service endpoints,
-replica bounds, image digests, and Key Vault secret references. API keys,
-database passwords, customer keys, and licence tokens must be supplied through
-environment-based authentication or a secret manager, never config-file
-values. The template is committed, but no Azure deploy script or IaC currently
-consumes it; the installer must be implemented and validated before Azure
-deployment. See the [implementation plan](azure/implementation-plan.md) for
-the script's validation, confirmation, and test requirements.
+The deployment uses a user-created, non-secret Azure config for account,
+resource, image, and Key Vault reference values. Neon API keys and database
+credentials stay in protected local files or environment-based authentication;
+generated runtime secrets are uploaded directly to Key Vault. The uploader
+uses the bundled public demo licence by default and verifies its signature and
+expiry locally before upload. See the application repository's Azure README
+for config validation, required confirmations, and deploy/teardown commands.
 
 Provision or select the non-production Neon database and verify application
 persistence and web OIDC-session migrations before creating the Azure
@@ -89,8 +88,7 @@ after preparing that repository's ignored Azure config:
 python3 scripts/azure_secrets.py \
   --config deploy/azure/azure-config.json \
   upload \
-  --neon-credentials-file /path/to/agent-gateway-runtime/config/neon-credentials.json \
-  --licence-token-file /path/to/signed-licence-token
+  --neon-credentials-file /path/to/agent-gateway-runtime/config/neon-credentials.json
 ```
 
 The uploader generates JWT/admin secrets locally, reads only the configured
@@ -99,6 +97,15 @@ files using Azure CLI's file upload option. It does not print, download, or
 place values in Terraform inputs/state. The user must have Key Vault secret
 write permission. Secret names already present are never overwritten by
 default; explicit rotation requires `--replace` and a second confirmation.
+The one-year demo licence and its public verification key are selected
+automatically. To use a private or extended licence, pass
+`--licence-token-file /path/to/private-licence` and
+`--vendor-public-key-file /path/to/vendor_public.pem`; keep those files
+owner-only and out of Git.
+The bundled public demo licence expires on **31 December 2027**. The images
+enforce that signed expiry; users who need to continue afterwards should
+request a private replacement licence. See the
+[Pricing page in the main repository](https://github.com/stevef1uk/agent-gateway-demo/blob/main/docs/Pricing.md).
 See the application repository's Azure deployment README for details,
 including the optional private-registry token file. Entra OIDC uses PKCE and
 does not require a client secret.

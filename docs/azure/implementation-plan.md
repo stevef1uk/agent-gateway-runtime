@@ -51,8 +51,10 @@ deployable:
 5. **User config, Neon provisioning, and secret delivery need a safe contract.**
    Commit a template config and installer, not an account-specific config or
    secret values. Keep Neon API keys, generated database credentials, customer
-   private keys, signed licence tokens, JWT secrets, and OIDC client secrets
-   out of Git, command arguments, Terraform plans/state, outputs, and logs.
+   private keys, private/customer licence tokens, JWT secrets, and OIDC client
+   secrets out of Git, command arguments, Terraform plans/state, outputs, and
+   logs. The sibling application repository intentionally distributes a
+   time-limited public demo licence as a separate asset.
    Prefer writing generated runtime credentials directly to Key Vault and
    exposing only Key Vault references to Container Apps.
 6. **The cost estimate is not a cap.** It excludes several potentially material
@@ -237,7 +239,8 @@ produces no reliance on a developer's real credentials or cloud resources.
   approval before billable creation/apply/destroy, and emits only non-secret
   endpoints and resource identifiers. It must not silently select the current
   Azure subscription.
-- Keep credentials, private keys, signed licence tokens, `DATABASE_URL`, and
+- Keep credentials, private keys, private/customer licence tokens,
+  `DATABASE_URL`, and
   OIDC client secrets out of the config file. Provision values separately to
   Key Vault; the config may reference vault/resource IDs and secret names, not
   secret contents. Never print secret values or put them in Terraform outputs.
