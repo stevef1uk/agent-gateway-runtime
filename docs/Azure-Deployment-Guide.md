@@ -59,10 +59,14 @@ az account set --subscription YOUR_SUBSCRIPTION_ID
 az account show --query '{subscriptionId:id,tenantId:tenantId,name:name}' --output table
 ```
 
-Use the displayed subscription and tenant IDs in
-`deploy/azure/azure-config.json`. The deployment script checks that the active
-Azure account matches those configured IDs and stops if they differ. If Bicep
-is not installed, install it with `az bicep install`.
+The `tenantId` shown is your tenant (also called directory) ID. You can also
+find it in the Azure portal under **Microsoft Entra ID** > **Overview** >
+**Tenant ID**. Use the tenant ID for the directory that contains your Entra
+app registration and the subscription you selected. Enter the displayed
+subscription and tenant IDs in `deploy/azure/azure-config.json`. The
+deployment script checks that the active Azure account matches those
+configured IDs and stops if they differ. If Bicep is not installed, install
+it with `az bicep install`.
 
 The deploying identity needs permission to create the listed Azure resources,
 create a user-assigned managed identity, and create role assignments at the
@@ -94,13 +98,13 @@ permissions using your organization's approved RBAC process.
 ## External service setup
 
 1. **Database:** The current installer and release-image contract use
-   PostgreSQL. Run `scripts/neon_setup.py` to select an existing Neon project
-   or create a dedicated one; the helper writes the owner-only
-   `config/neon-credentials.json` used by the Azure secret uploader. Microsoft
-   SQL Server is not currently supported by the installer: the uploader
-   validates a PostgreSQL connection URL. Add a SQL Server option only after
-   the release owner confirms image support and the installer is updated for
-   that database contract.
+   PostgreSQL. Provide an existing PostgreSQL connection URL in the
+   owner-only `config/neon-credentials.json`, or optionally run
+   `scripts/neon_setup.py` to select/create a Neon project and prepare that
+   credentials file. Microsoft SQL Server is not currently supported by the
+   installer: the uploader validates a PostgreSQL connection URL. Add a SQL
+   Server option only after the release owner confirms image support and the
+   installer is updated for that database contract.
 2. **Entra sign-in:** Create or select an Entra OIDC app registration. The app
    registration does not come with a client secret automatically. In the
    Microsoft Entra admin center, open the app registration, select
@@ -111,27 +115,45 @@ permissions using your organization's approved RBAC process.
    closed the page without copying the value, create a new client secret and
    store that value instead.
 
-   Provide the app's client ID, tenant-specific issuer URL, and client-secret
-   file to the deployment workflow. The scripts use these values but do not
-   create or edit the app registration. After the first apply, add the exact
-   callback URI printed by the script to the app's Web redirect URIs.
+   Set `oidc_issuer_url` in `deploy/azure/azure-config.json` to the issuer for
+   that app's tenant. It has this format:
+
+   ```text
+   https://login.microsoftonline.com/YOUR_TENANT_ID/v2.0
+   ```
+
+   Replace `YOUR_TENANT_ID` with the tenant/directory ID shown under
+   **Microsoft Entra ID** > **Overview** > **Tenant ID**. It must be the same
+   ID as `tenant_id` in the deployment config and the directory containing
+   your app registration. You can also get the signed-in subscription's
+   tenant ID with `az account show --query tenantId --output tsv`. Do not leave
+   the all-zero example tenant ID in place when deploying.
+
+   The scripts use the app's client ID, issuer URL, and client-secret file but
+   do not create or edit the app registration. After the first apply, add the
+   exact callback URI printed by the script to the app's Web redirect URIs.
 3. **Azure secrets:** Select an RBAC-enabled Key Vault. The installer uploads
-   the local database, licence, and OIDC secret files there; it generates the
-   JWT and admin tokens when needed.
+   the local database and OIDC secret, and the bundled public evaluation
+   licence, there; it generates the JWT and admin tokens when needed.
 
 ## Release assets
 
-The deployment also needs the evaluation licence file and immutable `sha256`
-image references for `authz`, `gateway`, `tokensvc`, `web`, and the Emotion
-bridge image. Use the release assets supplied for your checkout; these are
-inputs consumed by the scripts, not additional Azure services to provision.
-If your release checkout includes the public evaluation token at
-`keys/token.txt`, pass that path to `--licence-token-file`; the uploader reads
-it locally and stores it in Key Vault. Copy the release image digests into the
-deployment config.
-The service images must be anonymously pullable unless `private_registry` is
-configured. Do not substitute tags such as `latest`. The public runtime repo's
-example config leaves image digests blank for the release owner to supply.
+The runtime repository includes the public evaluation licence at
+`keys/token.txt` and the development trial's immutable `sha256` image references
+for `authz`, `gateway`, `tokensvc`, `web`, and the Emotion bridge in
+`deploy/azure/azure-config.example.json`. Copying that example config is enough
+to select the bundled development-trial images; no separate licence or
+image-manifest download is needed. The licence is read locally and uploaded
+to Key Vault by default.
+Users with a private or extended licence can supply their own owner-only file
+with `--licence-token-file`.
+
+Keep the image references digest-pinned; do not replace them with mutable tags
+such as `latest`. For these bundled public images, leave `private_registry.server`
+and `private_registry.username` empty; you do not need to create a registry.
+Configure `private_registry` only if you choose private service images. The
+trial image references document the development release and do not guarantee
+production availability or support; see the [trial status](azure/trial-status.md).
 
 The optional `private_registry` config stores the registry password in Key
 Vault and configures the four service apps to use that secret. All four
@@ -222,9 +244,14 @@ cp deploy/azure/azure-config.example.json deploy/azure/azure-config.json
 
 Set the tenant/subscription UUIDs, Azure region, dedicated resource-group
 name, `name_prefix`, Key Vault name/resource group, Neon namespace, OIDC
-issuer/client ID, admin email allowlist, and the five image digests. If using
-a private registry, set its `server` and `username`. Leave all secret values
-out of this file. `deploy/azure/azure-config.json` is gitignored.
+client ID, issuer URL, and admin email allowlist. For `oidc_issuer_url`, use
+`https://login.microsoftonline.com/YOUR_TENANT_ID/v2.0`, replacing
+`YOUR_TENANT_ID` with the same ID entered for `tenant_id`. The example's
+all-zero tenant IDs are placeholders and must be replaced. The example
+already contains digest-pinned image references for the bundled release. If
+using a private registry instead, replace the service image references and
+set its `server` and `username`. Leave all secret values out of this file.
+`deploy/azure/azure-config.json` is gitignored.
 
 Validate the file without contacting Azure:
 
@@ -233,10 +260,11 @@ python3 -B scripts/deploy_azure.py validate \
   --config deploy/azure/azure-config.json
 ```
 
-Ensure input files are private. The Neon helper already writes its credential
-file with owner-only permissions; save the Entra client-secret **Value** in a
-local file and set owner-only permissions along with the licence and optional
-registry-password files. Then upload the values to the configured Key Vault.
+Ensure secret input files are private. The Neon helper already writes its
+credential file with owner-only permissions; save the Entra client-secret
+**Value** in a local file and set owner-only permissions. If using a private
+registry, also protect its optional registry-password file. Then upload the
+values to the configured Key Vault.
 The helper creates strong JWT and
 gateway-admin tokens if those names do not already exist. Existing Key Vault
 secrets are preserved, not overwritten. It uses `database-url`,
@@ -247,12 +275,16 @@ exist in a shared vault, verify their values through your approved secure
 process before deploying.
 
 ```sh
-chmod 600 /path/to/licence-token /path/to/oidc-client-secret
+chmod 600 /path/to/oidc-client-secret
 python3 -B scripts/deploy_azure.py upload-secrets \
   --config deploy/azure/azure-config.json \
-  --licence-token-file /path/to/licence-token \
+  --licence-token-file keys/token.txt \
   --oidc-client-secret-file /path/to/oidc-client-secret
 ```
+
+The licence path above is the bundled public evaluation licence. You do not
+need to change its permissions; keep `chmod 600` for private secret files
+such as the OIDC client secret.
 
 When using a private service-image registry, add:
 

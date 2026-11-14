@@ -21,7 +21,7 @@ outside the Azure teardown and were not deleted as part of it.
 
 The public repository now includes Azure Bicep deployment automation and a
 guarded lifecycle wrapper so operators can repeat the setup. The application
-source and container build files remain proprietary; deployments use
-release-owner-provided, immutable image digests. See the
-[deployment guide](../Azure-Deployment-Guide.md) for installation and
-acceptance steps.
+source and container build files remain proprietary; the runtime repository
+bundles the development release's immutable image digests and evaluation
+licence. See the [deployment guide](../Azure-Deployment-Guide.md) for
+installation and acceptance steps.

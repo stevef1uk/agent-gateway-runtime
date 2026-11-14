@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "deploy" / "azure" / "main.bicep"
+DEFAULT_LICENCE_TOKEN = ROOT / "keys" / "token.txt"
 MANAGED_BY = "agent-gateway-runtime-azure"
 KEY_VAULT_SECRETS_USER = "Key Vault Secrets User"
 CONTAINER_APPS_CONTRIBUTOR = "Container Apps Contributor"
@@ -319,6 +321,31 @@ def secure_file_bytes(path: Path) -> bytes:
         raise AzureError(f"Cannot read secret file: {path}") from exc
     if not data:
         raise AzureError(f"Secret file is empty: {path}")
+    return data
+
+
+def licence_file_bytes(path: Path) -> bytes:
+    if path.absolute() != DEFAULT_LICENCE_TOKEN:
+        return secure_file_bytes(path)
+    asset_path = DEFAULT_LICENCE_TOKEN
+    try:
+        info = asset_path.lstat()
+    except OSError as exc:
+        raise AzureError(
+            f"Bundled public evaluation licence is unavailable: {asset_path}"
+        ) from exc
+    if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+        raise AzureError(f"Bundled public evaluation licence is invalid: {asset_path}")
+    try:
+        data = asset_path.read_bytes().strip()
+    except OSError as exc:
+        raise AzureError(
+            f"Cannot read bundled public evaluation licence: {asset_path}"
+        ) from exc
+    if not data or b"\0" in data:
+        raise AzureError(
+            f"Bundled public evaluation licence is empty or invalid: {asset_path}"
+        )
     return data
 
 
@@ -716,7 +743,7 @@ def upload_secrets(
     secret_states = secret_states_in_vault(config)
     values = {
         SECRET_NAMES["database_url"]: neon_database_url(neon_file),
-        SECRET_NAMES["licence_token"]: secure_file_bytes(licence_file),
+        SECRET_NAMES["licence_token"]: licence_file_bytes(licence_file),
         SECRET_NAMES["oidc_client_secret"]: secure_file_bytes(oidc_secret_file),
     }
     registry = config.get("private_registry", {})
@@ -922,7 +949,9 @@ def main() -> int:
         default=ROOT / "deploy" / "azure" / "azure-config.json",
     )
     parser.add_argument("--neon-credentials-file", type=Path, default=ROOT / "config" / "neon-credentials.json")
-    parser.add_argument("--licence-token-file", type=Path)
+    parser.add_argument(
+        "--licence-token-file", type=Path, default=DEFAULT_LICENCE_TOKEN
+    )
     parser.add_argument("--oidc-client-secret-file", type=Path)
     parser.add_argument("--registry-password-file", type=Path)
     args = parser.parse_args()
@@ -934,16 +963,16 @@ def main() -> int:
             raise AzureError("Invalid deployment config:\n- " + "\n- ".join(errors))
         if args.action == "validate":
             print(f"Config is structurally valid: {args.config}")
-            print("Replace all example values and supply digest-pinned images before deployment.")
+            print("Replace example tenant, subscription, resource, and identity values before deployment.")
             return 0
 
         ensure_azure_tools(require_bicep=args.action in {"plan", "apply"})
         account(config)
         if args.action == "upload-secrets":
             vault = get_vault(config)
-            if not args.licence_token_file or not args.oidc_client_secret_file:
+            if not args.oidc_client_secret_file:
                 raise AzureError(
-                    "upload-secrets requires --licence-token-file and --oidc-client-secret-file."
+                    "upload-secrets requires --oidc-client-secret-file."
                 )
             upload_secrets(
                 config,

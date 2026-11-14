@@ -21,7 +21,9 @@ while operators manage the Azure environment here.
 
 The current deployment uses PostgreSQL through Neon. The Neon helper prepares
 the database credentials; operators provide an Entra app registration and add
-the printed redirect URI after deployment. Licence and immutable image
-references are release assets consumed by the installer, not additional cloud
-services to provision. Microsoft SQL Server is not currently supported by the
-installer and application-image contract.
+the printed redirect URI after deployment. The runtime repository includes the
+public evaluation licence and digest-pinned image references for its bundled
+development-trial release; no separate release-asset download is required.
+Leave `private_registry` empty to pull these public images without registry
+credentials. Microsoft SQL Server is not currently supported by the installer
+and application-image contract.

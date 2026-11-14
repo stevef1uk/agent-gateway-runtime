@@ -10,14 +10,16 @@ handling, and ownership-aware teardown.
 ## Get started
 
 Follow the [Azure deployment guide](docs/Azure-Deployment-Guide.md) to prepare
-your Azure subscription, configure the release images and external services,
-deploy the stack, and run the acceptance checks. The guide links to the
+your Azure subscription and external services, deploy the bundled release,
+and run the acceptance checks. The guide links to the
 [architecture](docs/azure/architecture.md), [teardown instructions](docs/azure/teardown.md),
 and [indicative cost model](docs/azure/serverless-pricing.md).
 
-Deployments use immutable container images and licence material supplied by
-the release owner. This keeps the application release consistent while letting
-operators manage the Azure infrastructure from this public repository.
+The repository includes digest-pinned images for the Azure development trial
+and its public evaluation licence, so operators do not need access to the
+application source repository or separate release assets. These references
+are development-trial assets, not a production availability or support
+guarantee. Private or extended licence files can be supplied as an override.
 
 ## Public evaluation licence expiry
 

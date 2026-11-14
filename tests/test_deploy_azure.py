@@ -81,6 +81,26 @@ class ValidateConfigTests(unittest.TestCase):
 
         self.assertEqual(deploy_azure.validate_config(config, require_images=False), [])
 
+    def test_bundled_azure_example_has_pinned_release_images(self):
+        config_path = (
+            Path(deploy_azure.__file__).resolve().parents[1]
+            / "deploy"
+            / "azure"
+            / "azure-config.example.json"
+        )
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+
+        errors = deploy_azure.validate_config(config)
+
+        self.assertFalse(
+            [
+                error
+                for error in errors
+                if "images." in error or "emotion_image" in error
+            ],
+            errors,
+        )
+
     def test_rejects_resource_group_collisions_with_key_vault_or_emotion(self):
         config = valid_config()
         config["key_vault_resource_group"] = config["resource_group"]
@@ -199,6 +219,15 @@ class SecretFileTests(unittest.TestCase):
             with self.assertRaises(deploy_azure.AzureError):
                 deploy_azure.secure_file_bytes(path)
 
+    def test_private_licence_override_still_requires_private_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "licence"
+            path.write_bytes(b"private-licence")
+            path.chmod(0o644)
+
+            with self.assertRaises(deploy_azure.AzureError):
+                deploy_azure.licence_file_bytes(path)
+
     def test_neon_database_url_is_extracted_without_printing(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "neon.json"
@@ -259,6 +288,33 @@ class SecretFileTests(unittest.TestCase):
         self.assertIn("deployment=agw-dev", observed["args"])
         self.assertNotIn("licence-value", observed["args"])
         self.assertFalse(observed["capture"])
+
+    def test_bundled_public_evaluation_licence_is_available_by_default(self):
+        token = deploy_azure.licence_file_bytes(deploy_azure.DEFAULT_LICENCE_TOKEN)
+
+        self.assertTrue(token)
+
+    def test_upload_secrets_defaults_to_bundled_licence(self):
+        argv = [
+            "deploy_azure.py",
+            "upload-secrets",
+            "--oidc-client-secret-file",
+            "/tmp/oidc-client-secret",
+        ]
+        with (
+            mock.patch.object(deploy_azure.sys, "argv", argv),
+            mock.patch.object(deploy_azure, "load_config", return_value=valid_config()),
+            mock.patch.object(deploy_azure, "ensure_azure_tools"),
+            mock.patch.object(deploy_azure, "account"),
+            mock.patch.object(deploy_azure, "get_vault", return_value={"id": "vault-id"}),
+            mock.patch.object(deploy_azure, "upload_secrets") as upload,
+        ):
+            self.assertEqual(deploy_azure.main(), 0)
+
+        self.assertEqual(
+            upload.call_args.kwargs["licence_file"],
+            deploy_azure.DEFAULT_LICENCE_TOKEN,
+        )
 
 
 if __name__ == "__main__":
