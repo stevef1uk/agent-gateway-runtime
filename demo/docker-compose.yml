@@ -142,6 +142,93 @@ services:
       timeout: 3s
       retries: 5
 
+  # Dedicated API PEP for the Console's Open-Meteo Geocoding example.
+  gateway-api-geocoding:
+    image: stevef1uk/agent-gateway-gateway:1.0.34
+    container_name: agent-gateway-gateway-api-geocoding
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - UPSTREAM_URL=${GEOCODING_API_UPSTREAM_URL:-https://geocoding-api.open-meteo.com}
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    depends_on:
+      authz: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Dedicated API PEP for the Console's JSONPlaceholder Users example.
+  gateway-api-users:
+    image: stevef1uk/agent-gateway-gateway:1.0.34
+    container_name: agent-gateway-gateway-api-users
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - UPSTREAM_URL=${USERS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    depends_on:
+      authz: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Dedicated API PEP for the Console's JSONPlaceholder Refunds example.
+  gateway-api-refunds:
+    image: stevef1uk/agent-gateway-gateway:1.0.34
+    container_name: agent-gateway-gateway-api-refunds
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - UPSTREAM_URL=${REFUNDS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    depends_on:
+      authz: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # Demo 9 — CRM MCP server PEP. UPSTREAM_URL is per-instance,
   # so MCP CRM traffic gets its own PEP here: /mcp in, mcpsrv:8091 out.
   gateway-mcp:
@@ -298,7 +385,7 @@ services:
       retries: 5
 
   web:
-    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.58}  # API tester and editable Wizard scopes
+    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.59}  # All built-in API Wizard examples
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -315,6 +402,9 @@ services:
       - OIDC_CONNECTOR_ID=mock        # one-click sign-in for the demo
       - WEB_ADDR=:8083
       - CATALOG_DEMO_UPSTREAM_URL=${CATALOG_DEMO_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
+      - GEOCODING_API_UPSTREAM_URL=${GEOCODING_API_UPSTREAM_URL:-https://geocoding-api.open-meteo.com}
+      - USERS_API_UPSTREAM_URL=${USERS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
+      - REFUNDS_API_UPSTREAM_URL=${REFUNDS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # forwarded to the gateway's operator endpoints
       - WEB_ADMIN_EMAILS=${WEB_ADMIN_EMAILS:-kilgore@kilgore.trout}  # fixed Dex mock identity; override for another verified email
       - DEMO_UI=1                     # serve the R&D pages (/demo.html, /policy.html); production omits this
@@ -329,6 +419,9 @@ services:
       authz: { condition: service_started }
       gateway: { condition: service_started }
       gateway-api-catalog-demo: { condition: service_started }
+      gateway-api-geocoding: { condition: service_started }
+      gateway-api-users: { condition: service_started }
+      gateway-api-refunds: { condition: service_started }
       gateway-mcp: { condition: service_started }
       gateway-mcp-emotion: { condition: service_started }
     healthcheck:
