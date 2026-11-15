@@ -51,7 +51,7 @@ cp gcp-config.env.example gcp-config.env
 ```
 
 Edit `gcp-config.env` with your project ID, resource prefix, published image
-namespace, and any local file paths or admin emails you want to configure.
+namespace, local file paths, and the required Console admin email allowlist.
 `GCP_PROJECT_ID` and `GCP_DOCKERHUB_NAMESPACE` are required; fill them in
 before continuing. This populated file is ignored by Git. Keep OAuth client secrets and other
 credentials out of it; supply an OAuth secret via a protected file or the
@@ -90,25 +90,25 @@ gcloud config get-value account
 
 ## 2. Deploy
 
-**Admin email configuration:** if you enable Google sign-in with
-`--oidc-client-id`, you must also provide `--admin-emails` with one or more
+**Admin email configuration:** provide `--admin-emails` with one or more
 comma-separated, verified Google account addresses allowed to administer the
-Console. For example:
+private Console, whether or not Google sign-in is enabled. The Console fails
+closed without this allowlist. For example:
 
 ```bash
 --admin-emails "admin@example.com,operator@example.com"
 ```
 
 You can set the same value in `GCP_ADMIN_EMAILS` instead. The deployment
-script rejects OIDC configuration without an admin allowlist; do not omit this
-flag from either the initial OIDC deployment or a later redeployment.
+script rejects any deployment without an admin allowlist; retain it on
+subsequent redeployments too.
 
 Run a validation-only pass first. It checks local inputs and does not change
 your active `gcloud` project or create or update cloud resources:
 
 ```bash
 scripts/deploy-gcp.sh \
-  --version latest \
+  --version YOUR_RELEASE_VERSION \
   --admin-emails "admin@example.com"
 ```
 
@@ -116,7 +116,7 @@ Then deploy:
 
 ```bash
 scripts/deploy-gcp.sh \
-  --version latest \
+  --version YOUR_RELEASE_VERSION \
   --admin-emails "admin@example.com" \
   --emotion \
   --apply
@@ -143,7 +143,7 @@ Do not use `keys/token.txt` or any `keys/local-activation/licences/*.token`
 file as the Emotion token; they license Agent Gateway components, not the
 Emotion model.
 
-The script enables APIs, creates Firestore, service accounts, Secret Manager secrets, the activation bucket, and the two Cloud Run services. It mirrors the public Docker Hub images into your project’s Artifact Registry with Cloud Build, then deploys Cloud Run from that private project registry. The main services fetch and verify only the signed licence token; the customer key is not mounted into them. Docker is not required on the customer machine.
+The script enables APIs, creates Firestore, service accounts, Secret Manager secrets (including the internal authorization read token), the activation bucket, and the two Cloud Run services. It mirrors the exact Docker Hub release tag specified by `--version` into your project’s Artifact Registry with Cloud Build, then deploys Cloud Run from that private project registry. The gateway and web service accounts receive access to the internal read token; the main services fetch and verify only the signed licence token, and the customer key is not mounted into them. Docker is not required on the customer machine.
 
 The configured Wizard demos route weather and geocoding to their respective
 Open-Meteo services, and users and simulated refunds to JSONPlaceholder. The

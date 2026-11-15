@@ -28,7 +28,7 @@ Options:
   --emotion-token-file FILE  Upload a vendor-issued Emotion token from outside Git
   --oidc-client-id ID        Google OAuth client ID
   --oidc-client-secret FILE  File containing the Google OAuth client secret
-  --admin-emails EMAILS      Comma-separated verified Google admin emails (required with OIDC)
+  --admin-emails EMAILS      Comma-separated verified Console admin emails (required)
   --apply                    Create/update resources; otherwise only validate inputs
   --help                     Show this help
 EOF
@@ -72,8 +72,8 @@ done
   echo 'Version must be a valid Docker tag.' >&2
   exit 2
 }
-if [[ -n "$oidc_client_id" && -z "$admin_emails" ]]; then
-  echo '--admin-emails or GCP_ADMIN_EMAILS is required when Google sign-in is enabled.' >&2
+if [[ -z "$admin_emails" ]]; then
+  echo '--admin-emails or GCP_ADMIN_EMAILS is required for the private Console.' >&2
   exit 2
 fi
 
@@ -119,6 +119,7 @@ gateway_sa="agw-${deployment_id}-gateway@${project_id}.iam.gserviceaccount.com"
 web_sa="agw-${deployment_id}-web@${project_id}.iam.gserviceaccount.com"
 jwt_secret="agw-${deployment_id}-jwt-secret"
 admin_secret="agw-${deployment_id}-admin-token"
+authz_read_secret="agw-${deployment_id}-authz-read-token"
 oidc_secret="agw-${deployment_id}-oidc-client-secret"
 artifact_repo="${region}-docker.pkg.dev/${project_id}/agent-gateway"
 
@@ -188,8 +189,10 @@ if [[ "$emotion" -eq 1 ]]; then
 fi
 ensure_secret "$jwt_secret"
 ensure_secret "$admin_secret"
+ensure_secret "$authz_read_secret"
 if gcloud secrets versions list "$jwt_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$jwt_secret" --data-file=- --project="$project_id"; fi
 if gcloud secrets versions list "$admin_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$admin_secret" --data-file=- --project="$project_id"; fi
+if gcloud secrets versions list "$authz_read_secret" --project="$project_id" --format='value(name)' | grep -q .; then :; else printf '%s' "$(openssl rand -base64 32)" | gcloud secrets versions add "$authz_read_secret" --data-file=- --project="$project_id"; fi
 
 if [[ -n "$oidc_client_id" ]]; then
   ensure_secret "$oidc_secret"
@@ -203,6 +206,7 @@ for service_account in "$gateway_sa" "$web_sa"; do
   gcloud projects add-iam-policy-binding "$project_id" --member="serviceAccount:$service_account" --role=roles/aiplatform.user --quiet >/dev/null
   gcloud secrets add-iam-policy-binding "$jwt_secret" --project="$project_id" --member="serviceAccount:$service_account" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
   gcloud secrets add-iam-policy-binding "$admin_secret" --project="$project_id" --member="serviceAccount:$service_account" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
+  gcloud secrets add-iam-policy-binding "$authz_read_secret" --project="$project_id" --member="serviceAccount:$service_account" --role=roles/secretmanager.secretAccessor --quiet >/dev/null
   policy="$(gcloud storage buckets get-iam-policy "gs://$bucket" --format=json)"
   if printf '%s' "$policy" | python3 -c '
 import json,sys
@@ -328,7 +332,7 @@ gcloud beta run deploy "$gateway_service" \
     --startup-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=24,httpGet.path=/healthz/,httpGet.port=8080" \
     --readiness-probe="timeoutSeconds=5,periodSeconds=5,failureThreshold=3,successThreshold=1,httpGet.path=/healthz/,httpGet.port=8080" \
   --set-env-vars="$gateway_env" \
-  --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
+  --set-secrets="JWT_SECRET=$jwt_secret:latest,GATEWAY_ADMIN_TOKEN=$admin_secret:latest,AUTHZ_READ_TOKEN=$authz_read_secret:latest"
 
 gcloud run services add-iam-policy-binding "$gateway_service" --region="$region" --project="$project_id" \
   --member="serviceAccount:$web_sa" --role=roles/run.invoker --quiet >/dev/null
@@ -361,7 +365,7 @@ web_env="SERVICE_NAME=web,PERSISTENCE=firestore,FIRESTORE_PROJECT_ID=$project_id
 web_env="${web_env// ,/,}"
 web_env="${web_env//,/|}"
 web_env+="|WEB_ADMIN_EMAILS=$admin_emails"
-secret_args="GATEWAY_ADMIN_TOKEN=$admin_secret:latest"
+secret_args="GATEWAY_ADMIN_TOKEN=$admin_secret:latest,AUTHZ_READ_TOKEN=$authz_read_secret:latest"
 if [[ -n "$oidc_client_id" ]]; then
   web_env+="|OIDC_ISSUER_URL=https://accounts.google.com|OIDC_CLIENT_ID=$oidc_client_id"
   secret_args+=",OIDC_CLIENT_SECRET=$oidc_secret:latest"
