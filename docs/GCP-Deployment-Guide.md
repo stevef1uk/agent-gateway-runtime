@@ -50,8 +50,8 @@ cd agent-gateway-runtime
 cp gcp-config.env.example gcp-config.env
 ```
 
-Edit `gcp-config.env` with your project ID, resource prefix, published image
-namespace, local file paths, and the required Console admin email allowlist.
+Edit `gcp-config.env` with your project ID, resource prefix, optional published
+image namespace, local file paths, and the required Console admin email allowlist.
 `GCP_PROJECT_ID` is required. Set `GCP_DOCKERHUB_NAMESPACE` for Docker Hub
 releases; it is not needed when deploying from this project's Artifact Registry.
 This populated file is ignored by Git. Keep OAuth client secrets and other

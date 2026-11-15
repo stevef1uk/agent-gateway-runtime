@@ -16,7 +16,7 @@ usage() {
 Usage: scripts/deploy-gcp.sh --version VERSION [options]
 
 Required:
-  --version VERSION          Published Docker Hub release tag, or latest (moving alias)
+  --version VERSION          Published image release tag, or latest (moving alias)
 
 Options:
   --project-id PROJECT       GCP project ID with billing enabled (or GCP_PROJECT_ID)
