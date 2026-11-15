@@ -255,7 +255,15 @@ func TestActorHeadersEchoedOnPayments(t *testing.T) {
 }
 
 func TestGeocodingReturnsCoordinates(t *testing.T) {
-	ts := httptest.NewServer(handler())
+	upstream := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/search" || r.URL.Query().Get("name") != "Berlin" {
+			t.Fatalf("unexpected upstream request: %s %s", r.Method, r.URL.String())
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		_, _ = rw.Write([]byte(`{"results":[{"name":"Berlin","latitude":52.52,"longitude":13.40}]}`))
+	}))
+	defer upstream.Close()
+	ts := httptest.NewServer(handlerWithGeocodingURL(upstream.URL))
 	defer ts.Close()
 
 	resp := call(t, ts, http.MethodGet, "/v1/search?name=Berlin&count=5", nil)
@@ -265,5 +273,92 @@ func TestGeocodingReturnsCoordinates(t *testing.T) {
 	results, ok := resp["results"].([]any)
 	if !ok || len(results) == 0 {
 		t.Fatalf("expected non-empty results array: %v", resp)
+	}
+	first := results[0].(map[string]any)
+	if first["name"] != "Berlin" || first["latitude"] != 52.52 {
+		t.Fatalf("actual upstream result was not preserved: %v", first)
+	}
+	if resp["service"] != "demoapi (open-meteo)" {
+		t.Fatalf("expected proxied Open-Meteo response metadata: %v", resp)
+	}
+}
+
+func TestGeocodingUpstreamFailureIsNotReportedAsSuccess(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		http.Error(rw, "temporarily unavailable", http.StatusServiceUnavailable)
+	}))
+	defer upstream.Close()
+	ts := httptest.NewServer(handlerWithGeocodingURL(upstream.URL))
+	defer ts.Close()
+
+	resp := call(t, ts, http.MethodGet, "/v1/search?name=Berlin", nil)
+	if resp["__http_status"] != float64(http.StatusBadGateway) {
+		t.Fatalf("want 502 when the geocoding upstream fails, got %v: %v", resp["__http_status"], resp)
+	}
+	if _, ok := resp["results"]; ok {
+		t.Fatalf("upstream failure must not return success-shaped fake results: %v", resp)
+	}
+	if resp["upstream_status"] != float64(http.StatusServiceUnavailable) {
+		t.Fatalf("expected upstream status in error response: %v", resp)
+	}
+}
+
+func TestUsersProxyReturnsUpstreamUsersAndMapsPagination(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/users" {
+			t.Errorf("unexpected upstream request: %s %s", r.Method, r.URL.String())
+		}
+		if r.URL.Query().Get("_limit") != "5" || r.URL.Query().Get("_start") != "0" {
+			t.Errorf("pagination parameters not mapped: %s", r.URL.RawQuery)
+		}
+		if r.URL.Query().Has("limit") || r.URL.Query().Has("offset") {
+			t.Errorf("demo pagination parameters should not be forwarded: %s", r.URL.RawQuery)
+		}
+		rw.Header().Set("Content-Type", "application/json; charset=utf-8")
+		rw.WriteHeader(http.StatusOK)
+		_, _ = rw.Write([]byte(`[{"id":1,"name":"Leanne Graham","username":"Bret"}]`))
+	}))
+	defer upstream.Close()
+	ts := httptest.NewServer(handlerWithUpstreamURLs("https://unused.invalid", upstream.URL))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/users?limit=5&offset=0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("upstream content type was not preserved: %q", got)
+	}
+	var users []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 || users[0]["name"] != "Leanne Graham" || users[0]["service"] != nil {
+		t.Fatalf("expected unwrapped JSONPlaceholder user response, got %v", users)
+	}
+	if got := resp.Header.Get("X-Demoapi-Call-Count"); got != "1" {
+		t.Fatalf("expected demo execution counter header, got %q", got)
+	}
+}
+
+func TestUsersProxyPreservesUpstreamErrorStatus(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+		http.Error(rw, `{"error":"not found"}`, http.StatusNotFound)
+	}))
+	defer upstream.Close()
+	ts := httptest.NewServer(handlerWithUpstreamURLs("https://unused.invalid", upstream.URL))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/users/999")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected upstream 404 to be preserved, got %d", resp.StatusCode)
 	}
 }

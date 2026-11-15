@@ -34,6 +34,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -44,29 +45,29 @@ import (
 )
 
 type supplier struct {
-	SupplierID       string `json:"supplier_id"`
-	Name             string `json:"name"`
-	IBAN             string `json:"iban"`
-	BIC              string `json:"bic"`
-	VATID            string `json:"vat_id"`
-	Verified         bool   `json:"verified"`
-	IBANOnFileSince  string `json:"iban_on_file_since"`
-	Country          string `json:"country"`
+	SupplierID      string `json:"supplier_id"`
+	Name            string `json:"name"`
+	IBAN            string `json:"iban"`
+	BIC             string `json:"bic"`
+	VATID           string `json:"vat_id"`
+	Verified        bool   `json:"verified"`
+	IBANOnFileSince string `json:"iban_on_file_since"`
+	Country         string `json:"country"`
 }
 
 type invoice struct {
-	InvoiceID         string  `json:"invoice_id"`
-	SupplierID        string  `json:"supplier_id"`
-	Amount            float64 `json:"amount"`
-	Currency          string  `json:"currency"`
-	Issued            string  `json:"issued"`
-	Due               string  `json:"due"`
-	Reference         string  `json:"reference,omitempty"`
-	RemitToBeneficiary string `json:"remit_to_beneficiary,omitempty"`
-	RemitToIBAN       string  `json:"remit_to_iban,omitempty"`
-	RemittanceNote    string  `json:"remittance_note,omitempty"`
-	Status            string  `json:"status"`
-	PaidWithPaymentID string  `json:"paid_with_payment_id,omitempty"`
+	InvoiceID          string  `json:"invoice_id"`
+	SupplierID         string  `json:"supplier_id"`
+	Amount             float64 `json:"amount"`
+	Currency           string  `json:"currency"`
+	Issued             string  `json:"issued"`
+	Due                string  `json:"due"`
+	Reference          string  `json:"reference,omitempty"`
+	RemitToBeneficiary string  `json:"remit_to_beneficiary,omitempty"`
+	RemitToIBAN        string  `json:"remit_to_iban,omitempty"`
+	RemittanceNote     string  `json:"remittance_note,omitempty"`
+	Status             string  `json:"status"`
+	PaidWithPaymentID  string  `json:"paid_with_payment_id,omitempty"`
 }
 
 type paymentRequest struct {
@@ -79,13 +80,15 @@ type paymentRequest struct {
 }
 
 type api struct {
-	mu        sync.Mutex
-	started   time.Time
-	calls     map[string]int
-	suppliers map[string]*supplier
-	invoices  map[string]*invoice
-	payments  []map[string]any
-	paySeq    int
+	mu           sync.Mutex
+	started      time.Time
+	calls        map[string]int
+	suppliers    map[string]*supplier
+	invoices     map[string]*invoice
+	payments     []map[string]any
+	paySeq       int
+	geocodingURL string
+	usersURL     string
 }
 
 func orDash(s string) string {
@@ -131,11 +134,29 @@ func seedSuppliers() map[string]*supplier {
 // missing); the demo API never embeds cross-origin resources, so the strict
 // defaults are safe.
 func handler() http.Handler {
+	geocodingURL := os.Getenv("GEOCODING_API_URL")
+	if geocodingURL == "" {
+		geocodingURL = "https://geocoding-api.open-meteo.com"
+	}
+	usersURL := os.Getenv("JSONPLACEHOLDER_API_URL")
+	if usersURL == "" {
+		usersURL = "https://jsonplaceholder.typicode.com"
+	}
+	return handlerWithUpstreamURLs(geocodingURL, usersURL)
+}
+
+func handlerWithGeocodingURL(geocodingURL string) http.Handler {
+	return handlerWithUpstreamURLs(geocodingURL, "https://jsonplaceholder.typicode.com")
+}
+
+func handlerWithUpstreamURLs(geocodingURL, usersURL string) http.Handler {
 	a := &api{
-		started:   time.Now(),
-		calls:     map[string]int{},
-		suppliers: seedSuppliers(),
-		invoices:  map[string]*invoice{},
+		started:      time.Now(),
+		calls:        map[string]int{},
+		suppliers:    seedSuppliers(),
+		invoices:     map[string]*invoice{},
+		geocodingURL: strings.TrimRight(geocodingURL, "/"),
+		usersURL:     strings.TrimRight(usersURL, "/"),
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(rw http.ResponseWriter, _ *http.Request) {
@@ -202,57 +223,89 @@ func (a *api) handle(rw http.ResponseWriter, r *http.Request) {
 		a.paymentsGet(rw, r, n)
 	case r.Method == http.MethodGet && (strings.HasPrefix(r.URL.Path, "/v1/search") || strings.Contains(r.URL.Path, "geocoding")):
 		a.geocodingGet(rw, r, n)
+	case strings.HasPrefix(r.URL.Path, "/users") && (r.Method == http.MethodGet || r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete):
+		a.usersProxy(rw, r, n)
 	default:
 		a.echo(rw, r, n)
+	}
+}
+
+// usersProxy forwards the demo's Users REST API to JSONPlaceholder, preserving
+// the upstream response rather than returning the demo API's generic echo.
+func (a *api) usersProxy(rw http.ResponseWriter, r *http.Request, n int) {
+	upstreamURL := a.usersURL + r.URL.EscapedPath()
+	query := r.URL.Query()
+	if limit := query.Get("limit"); limit != "" {
+		query.Set("_limit", limit)
+		query.Del("limit")
+	}
+	if offset := query.Get("offset"); offset != "" {
+		query.Set("_start", offset)
+		query.Del("offset")
+	}
+	if encoded := query.Encode(); encoded != "" {
+		upstreamURL += "?" + encoded
+	}
+
+	upstreamRequest, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
+	if err != nil {
+		writeJSON(rw, http.StatusBadGateway, map[string]any{"error": "users upstream request could not be created"})
+		return
+	}
+	for _, header := range []string{"Accept", "Content-Type"} {
+		if value := r.Header.Get(header); value != "" {
+			upstreamRequest.Header.Set(header, value)
+		}
+	}
+
+	response, err := (&http.Client{Timeout: 8 * time.Second}).Do(upstreamRequest)
+	if err != nil {
+		writeJSON(rw, http.StatusBadGateway, map[string]any{"error": "users upstream request failed"})
+		return
+	}
+	defer response.Body.Close()
+
+	if contentType := response.Header.Get("Content-Type"); contentType != "" {
+		rw.Header().Set("Content-Type", contentType)
+	}
+	rw.Header().Set("X-Demoapi-Call-Count", strconv.Itoa(n))
+	rw.WriteHeader(response.StatusCode)
+	if _, err := io.Copy(rw, response.Body); err != nil {
+		log.Printf("users upstream response copy failed: %v", err)
 	}
 }
 
 // geocodingGet proxies or responds to geocoding search queries, proving the
 // request was executed behind the Agent Gateway with verified actor headers.
 func (a *api) geocodingGet(rw http.ResponseWriter, r *http.Request, n int) {
-	qs := r.URL.RawQuery
-	if qs == "" {
-		qs = "name=Berlin&count=5&language=en&format=json"
+	openMeteoURL := a.geocodingURL + "/v1/search"
+	if r.URL.RawQuery != "" {
+		openMeteoURL += "?" + r.URL.RawQuery
 	}
-	openMeteoURL := "https://geocoding-api.open-meteo.com/v1/search?" + qs
 	client := &http.Client{Timeout: 4 * time.Second}
 	resp, err := client.Get(openMeteoURL)
-	if err == nil && resp.StatusCode == http.StatusOK {
-		defer resp.Body.Close()
-		var res map[string]any
-		if err := json.NewDecoder(resp.Body).Decode(&res); err == nil {
-			res["executed_count"] = n
-			res["note"] = "executed BEHIND the Agent Gateway"
-			res["service"] = "demoapi (open-meteo)"
-			res["actor_headers"] = actorHeaders(r)
-			writeJSON(rw, http.StatusOK, res)
-			return
-		}
+	if err != nil {
+		writeJSON(rw, http.StatusBadGateway, map[string]any{"error": "geocoding upstream request failed"})
+		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]any{
-		"status":            "ok",
-		"service":           "demoapi (geocoding)",
-		"executed_count":    n,
-		"path":              r.URL.Path,
-		"note":              "executed BEHIND the Agent Gateway",
-		"actor_headers":     actorHeaders(r),
-		"generationtime_ms": 0.15,
-		"results": []map[string]any{
-			{
-				"id":           2950159,
-				"name":         "Berlin",
-				"latitude":     52.52437,
-				"longitude":    13.41053,
-				"elevation":    74.0,
-				"feature_code": "PPLC",
-				"country_code": "DE",
-				"country":      "Germany",
-				"admin1":       "Land Berlin",
-				"timezone":     "Europe/Berlin",
-				"population":   3644826,
-			},
-		},
-	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		writeJSON(rw, http.StatusBadGateway, map[string]any{
+			"error":           "geocoding upstream returned an unsuccessful status",
+			"upstream_status": resp.StatusCode,
+		})
+		return
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		writeJSON(rw, http.StatusBadGateway, map[string]any{"error": "geocoding upstream returned invalid JSON"})
+		return
+	}
+	result["executed_count"] = n
+	result["note"] = "executed BEHIND the Agent Gateway"
+	result["service"] = "demoapi (open-meteo)"
+	result["actor_headers"] = actorHeaders(r)
+	writeJSON(rw, http.StatusOK, result)
 }
 
 func actorHeaders(r *http.Request) map[string]string {
@@ -418,8 +471,8 @@ func (a *api) paymentPost(rw http.ResponseWriter, r *http.Request, n int) {
 	if sup != nil && pr.IBAN != "" && normIBAN(pr.IBAN) != normIBAN(sup.IBAN) {
 		a.mu.Unlock()
 		writeJSON(rw, http.StatusConflict, map[string]any{
-			"status": "beneficiary_mismatch",
-			"error":  "proposed beneficiary does not match the supplier record on file — payment refused by the API's own control",
+			"status":               "beneficiary_mismatch",
+			"error":                "proposed beneficiary does not match the supplier record on file — payment refused by the API's own control",
 			"supplier_record_iban": sup.IBAN, "proposed_iban": pr.IBAN, "service": "demoapi",
 		})
 		return
@@ -430,18 +483,18 @@ func (a *api) paymentPost(rw http.ResponseWriter, r *http.Request, n int) {
 	inv.Status = "paid"
 	inv.PaidWithPaymentID = payID
 	record := map[string]any{
-		"status":        "executed",
-		"service":       "demoapi",
-		"payment_id":    payID,
-		"invoice_id":    pr.InvoiceID,
-		"supplier_id":   pr.SupplierID,
-		"beneficiary":   pr.Beneficiary,
-		"iban":          pr.IBAN,
-		"amount":        pr.Amount,
-		"currency":      pr.Currency,
+		"status":         "executed",
+		"service":        "demoapi",
+		"payment_id":     payID,
+		"invoice_id":     pr.InvoiceID,
+		"supplier_id":    pr.SupplierID,
+		"beneficiary":    pr.Beneficiary,
+		"iban":           pr.IBAN,
+		"amount":         pr.Amount,
+		"currency":       pr.Currency,
 		"executed_count": n,
-		"note":          "executed BEHIND the Agent Gateway",
-		"actor_headers": actorHeaders(r),
+		"note":           "executed BEHIND the Agent Gateway",
+		"actor_headers":  actorHeaders(r),
 	}
 	a.payments = append(a.payments, record)
 	a.mu.Unlock()

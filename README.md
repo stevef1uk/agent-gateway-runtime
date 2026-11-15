@@ -86,6 +86,8 @@ Then open the guided demo at [http://localhost:8083/demo.html](http://localhost:
 
 The walkthrough covers sign-in, delegation, agent activity, a held action, a human decision, revocation and audit. For the full catalogue—including MCP protection, egress, DPoP/RAR, the kill switch, public API and Gmail examples—see **[the demos guide](docs/Demos.md)**.
 
+In local Compose mode, the Console Wizard's `catalog-demo` API is preconfigured to use JSONPlaceholder. Compose does not dynamically provision PEPs for arbitrary Wizard API URLs: unsupported API names or URLs are rejected rather than silently routed to the demo API. Set `CATALOG_DEMO_UPSTREAM_URL` before starting Compose to change the catalog example's URL, or use Kubernetes mode for dynamically provisioned upstreams.
+
 You can also explore the live CRM demonstration at [agw.sjfisher.com](https://agw.sjfisher.com) using the [Claude CRM tutorial](docs/Claude-CRM-Tutorial.md). See [Claude integration](docs/Claude-Integration.md) for the wiring details.
 
 Recently added are **aws** , **gcp** and  **azure** branches to this repository which provide the ability to host Agent Gateway on your own Cloud infrastructure.

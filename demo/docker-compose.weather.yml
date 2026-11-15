@@ -2,12 +2,13 @@
 # docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml up -d --wait tokensvc gateway-weather
 services:
   gateway-weather:
-    image: stevef1uk/agent-gateway-gateway:1.0.33
+    image: stevef1uk/agent-gateway-gateway:1.0.34
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     ports: ["127.0.0.1:${WEATHER_HOST_PORT:-8087}:8080"]
     environment:
       - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0

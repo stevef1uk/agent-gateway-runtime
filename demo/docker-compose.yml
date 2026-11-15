@@ -1,20 +1,21 @@
 # Agent Gateway public demo stack — 7 containers from Docker Hub.
 #
-#   cd demo && docker compose up -d
+#   cd demo && docker compose up -d --build
 #   ./demo.sh                  (scripted walkthrough)
 #   open http://localhost:8083/demo.html   (graphical walkthrough)
 #
-# All binaries run from the published images; the images carry encrypted
+# Product binaries run from the published images; the images carry encrypted
 # payloads that need demo/keys/customer_private.pem + the vendor licence at
-# runtime (see ../docs/Security-and-Licensing.md).
+# runtime (see ../docs/Security-and-Licensing.md). The first-party demo API is
+# built from ./api so its geocoding proxy and demo behavior match this checkout.
 
 services:
   authz:
-    image: stevef1uk/agent-gateway-authz:1.0.13  # OpenTelemetry tracing/metrics + correlated JSON logs
+    image: stevef1uk/agent-gateway-authz:1.0.14  # Access-control security patch
     container_name: agent-gateway-authz
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
-    ports: ["8081:8081"]
+    ports: ["127.0.0.1:8081:8081"]
     environment:
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
@@ -24,6 +25,7 @@ services:
       - TOKEN_TTL=5m
       - OIDC_ISSUER_URL=http://dex:5556/dex
       - OIDC_CLIENT_ID=agent-gateway
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/authz.token:ro
@@ -38,7 +40,7 @@ services:
       retries: 5
 
   tokensvc:
-    image: stevef1uk/agent-gateway-tokensvc:1.0.7  # OpenTelemetry tracing/metrics + correlated JSON logs
+    image: stevef1uk/agent-gateway-tokensvc:1.0.8  # Access-control security patch
     container_name: agent-gateway-tokensvc
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -48,6 +50,7 @@ services:
       - JWT_ISSUER=agent-gateway
       - TOKEN_TTL=5m
       - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/tokensvc.token:ro
@@ -58,7 +61,7 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.33  # OpenTelemetry tracing/metrics + trace-linked audit
+    image: stevef1uk/agent-gateway-gateway:1.0.34  # Access-control security patch
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -67,6 +70,7 @@ services:
     ports: ["${GATEWAY_HOST_PORT:-8080}:8080", "8088:8088"]
     environment:
       - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
@@ -108,10 +112,40 @@ services:
       timeout: 3s
       retries: 5
 
+  # Dedicated API PEP for the Console's catalog-demo example. Local Compose
+  # does not dynamically provision PEPs for arbitrary Wizard entries.
+  gateway-api-catalog-demo:
+    image: stevef1uk/agent-gateway-gateway:1.0.34
+    container_name: agent-gateway-gateway-api-catalog-demo
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
+      - PERSISTENCE=postgres
+      - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_ISSUER=agent-gateway
+      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - UPSTREAM_URL=${CATALOG_DEMO_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
+    volumes:
+      - ./keys:/keys:ro
+      - ./keys/license.token:/licences/gateway.token:ro
+    depends_on:
+      authz: { condition: service_started }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # Demo 9 — CRM MCP server PEP. UPSTREAM_URL is per-instance,
   # so MCP CRM traffic gets its own PEP here: /mcp in, mcpsrv:8091 out.
   gateway-mcp:
-    image: stevef1uk/agent-gateway-gateway:1.0.33  # OpenTelemetry tracing/metrics + trace-linked MCP audit
+    image: stevef1uk/agent-gateway-gateway:1.0.34  # Access-control security patch
     container_name: agent-gateway-gateway-mcp
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -119,6 +153,7 @@ services:
     ports: ["${GATEWAY_MCP_HOST_PORT:-8085}:8080"]
     environment:
       - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
@@ -165,13 +200,14 @@ services:
 
   # Dedicated Gateway PEP fronting the Emotion Detection MCP server
   gateway-mcp-emotion:
-    image: stevef1uk/agent-gateway-gateway:1.0.33
+    image: stevef1uk/agent-gateway-gateway:1.0.34
     container_name: agent-gateway-gateway-mcp-emotion
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     ports: ["${GATEWAY_MCP_EMOTION_HOST_PORT:-8086}:8080"]
     environment:
       - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
@@ -203,7 +239,10 @@ services:
       retries: 5
 
   demoapi:
-    image: ${DEMOAPI_IMAGE:-stevef1uk/agent-gateway-demoapi:1.0.6}  # 1.0.6 adds security response headers (nosniff, CORP/COOP/COEP — ZAP findings) alongside the 1.0.5 Payments-API surface; source: demo/api (built from this repo; DEMOAPI_IMAGE to use your own registry)
+    image: ${DEMOAPI_IMAGE:-agent-gateway-demoapi:local}
+    build:
+      context: ./api
+    pull_policy: build
     container_name: agent-gateway-demoapi
     restart: unless-stopped
     ports: ["8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire
@@ -217,7 +256,11 @@ services:
   # In public docker-compose demo without customer_private.pem mounted,
   # the model remains encrypted and calls prompt the user to obtain a commercial license.
   emotion-api:
-    image: stevef1uk/emotion-service:${IMAGE_TAG:-amd64}
+    image: ${EMOTION_IMAGE:-agent-gateway-emotion-service:local}
+    build:
+      context: ./emotion
+      args:
+        EMOTION_BASE_IMAGE: ${EMOTION_BASE_IMAGE:-stevef1uk/emotion-service:amd64}
     container_name: agent-gateway-emotion-api
     restart: unless-stopped
     ports: ["8000:8000"]
@@ -255,7 +298,7 @@ services:
       retries: 5
 
   web:
-    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.56}  # OpenTelemetry tracing/metrics + correlated JSON logs
+    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.58}  # API tester and editable Wizard scopes
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -263,6 +306,7 @@ services:
     environment:
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - AUTHZ_URL=http://authz:8081
+      - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - GATEWAY_URL=http://gateway:8080
       - GATEWAY_MCP_URL=http://gateway-mcp:8080
       - TOKENSVC_URL=http://tokensvc:8082
@@ -270,7 +314,9 @@ services:
       - OIDC_CLIENT_ID=agent-gateway
       - OIDC_CONNECTOR_ID=mock        # one-click sign-in for the demo
       - WEB_ADDR=:8083
+      - CATALOG_DEMO_UPSTREAM_URL=${CATALOG_DEMO_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # forwarded to the gateway's operator endpoints
+      - WEB_ADMIN_EMAILS=${WEB_ADMIN_EMAILS:-kilgore@kilgore.trout}  # fixed Dex mock identity; override for another verified email
       - DEMO_UI=1                     # serve the R&D pages (/demo.html, /policy.html); production omits this
       - FREERIDE_URL=http://freeride:11434/v1/chat/completions
       - FREERIDE_MODEL=${FREERIDE_MODEL:-gpt-4o}
@@ -282,6 +328,7 @@ services:
       postgres: { condition: service_started }
       authz: { condition: service_started }
       gateway: { condition: service_started }
+      gateway-api-catalog-demo: { condition: service_started }
       gateway-mcp: { condition: service_started }
       gateway-mcp-emotion: { condition: service_started }
     healthcheck:

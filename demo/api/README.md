@@ -43,6 +43,28 @@ gateway's human approval: unknown invoice → 404, amount ≠ invoice → 409,
 already paid → 409, and a **beneficiary IBAN that does not match the
 supplier record → 409 `beneficiary_mismatch`** even if a human approved it.
 
+## Live geocoding proxy
+
+`GET /v1/search` proxies the query to Open-Meteo's Geocoding API and returns
+the upstream result fields, adding gateway actor headers and an execution
+counter for the demo. When Open-Meteo is unavailable or returns invalid data,
+the API responds with an explicit 502 rather than a synthetic successful
+response. `GEOCODING_API_URL` can override the upstream base URL for local
+testing; it defaults to `https://geocoding-api.open-meteo.com`.
+
+The Compose stack builds this first-party service from `demo/api` so the
+running behavior matches the checked-out source instead of an older published
+demo API image.
+
+## JSONPlaceholder Users API
+
+`GET`, `POST`, `PUT`, `PATCH`, and `DELETE` requests under `/users` are proxied
+to JSONPlaceholder (`https://jsonplaceholder.typicode.com` by default), and the
+upstream status, content type, and response body are preserved. Tester
+`limit`/`offset` query parameters are translated to JSONPlaceholder's
+`_limit`/`_start` pagination parameters. `JSONPLACEHOLDER_API_URL` can override
+the upstream base URL for local testing.
+
 ## Run it (one command)
 
 From this repository's root:

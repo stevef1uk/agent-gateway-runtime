@@ -25,12 +25,13 @@ services:
     # No published port, no membership of the agent/default network.
 
   gateway-gmail:
-    image: stevef1uk/agent-gateway-gateway:1.0.33
+    image: stevef1uk/agent-gateway-gateway:1.0.34
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     env_file: [./gmail/credentials/operator.env]
     environment:
       AUTHZ_URL: http://authz:8081
+      AUTHZ_READ_TOKEN: ${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       PERSISTENCE: postgres
       DATABASE_URL: postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       REDIS_URL: redis://redis:6379/0
