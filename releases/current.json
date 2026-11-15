@@ -1,36 +1,36 @@
 {
   "release_schema": 2,
   "emotion": {
-    "image": "stevef1uk/agent-gateway-emotion_l:2026-11-12-aws-e352d87",
+    "image": "stevef1uk/agent-gateway-emotion_l:2026-11-15-aws-41ed43b",
     "digest": "sha256:2c298958c356e92d62d66831dbd3889fa0105ffbd45a0c118ca41e9043c2fce8",
     "immutable_image": "stevef1uk/agent-gateway-emotion_l@sha256:2c298958c356e92d62d66831dbd3889fa0105ffbd45a0c118ca41e9043c2fce8"
   },
-  "version": "2026-11-12-aws-e352d87",
-  "source_commit": "e352d8724f446663704689b9ffb99b7ed48c2396",
+  "version": "2026-11-15-aws-41ed43b",
+  "source_commit": "41ed43b20b40355288d08ed7f7e4d6ff71646e14",
   "console_build": "1.0.97",
   "platform": "linux/arm64",
-  "registry_verified": "2026-11-12",
+  "registry_verified": "2026-11-15",
   "aws_deployed": false,
   "images": {
     "authz": {
-      "image": "stevef1uk/agent-gateway-authz_l:2026-11-12-aws-e352d87",
-      "digest": "sha256:02de4edadd31b19f500bc15d2af93ef33c6b809231d39c2925a1716035231174",
-      "immutable_image": "stevef1uk/agent-gateway-authz_l@sha256:02de4edadd31b19f500bc15d2af93ef33c6b809231d39c2925a1716035231174"
+      "image": "stevef1uk/agent-gateway-authz_l:2026-11-15-aws-41ed43b",
+      "digest": "sha256:417f1a0c24716a89a422e32a99d6b63ebcf3efcf05bd760ad5091639083a6d16",
+      "immutable_image": "stevef1uk/agent-gateway-authz_l@sha256:417f1a0c24716a89a422e32a99d6b63ebcf3efcf05bd760ad5091639083a6d16"
     },
     "tokensvc": {
-      "image": "stevef1uk/agent-gateway-tokensvc_l:2026-11-12-aws-e352d87",
-      "digest": "sha256:3022b0901070c9acf5c65c2dfe93e497d33d1647dcc1b567626db0224518d77d",
-      "immutable_image": "stevef1uk/agent-gateway-tokensvc_l@sha256:3022b0901070c9acf5c65c2dfe93e497d33d1647dcc1b567626db0224518d77d"
+      "image": "stevef1uk/agent-gateway-tokensvc_l:2026-11-15-aws-41ed43b",
+      "digest": "sha256:ee9fe98275a34df427fcfbe9a4473944fde87418a083e850972c7a30b56cc342",
+      "immutable_image": "stevef1uk/agent-gateway-tokensvc_l@sha256:ee9fe98275a34df427fcfbe9a4473944fde87418a083e850972c7a30b56cc342"
     },
     "gateway": {
-      "image": "stevef1uk/agent-gateway-gateway_l:2026-11-12-aws-e352d87",
-      "digest": "sha256:ab42d3167ec9674bb425ec674326f27b47306780d6d89928b2556d3225da1416",
-      "immutable_image": "stevef1uk/agent-gateway-gateway_l@sha256:ab42d3167ec9674bb425ec674326f27b47306780d6d89928b2556d3225da1416"
+      "image": "stevef1uk/agent-gateway-gateway_l:2026-11-15-aws-41ed43b",
+      "digest": "sha256:06634698048c68ad67c9ba1a43d260caaf4f50b68ed0ef8458d4f738003f7c43",
+      "immutable_image": "stevef1uk/agent-gateway-gateway_l@sha256:06634698048c68ad67c9ba1a43d260caaf4f50b68ed0ef8458d4f738003f7c43"
     },
     "web": {
-      "image": "stevef1uk/agent-gateway-web_l:2026-11-12-aws-e352d87",
-      "digest": "sha256:879a1440e75fb7b6f36a9c5e51cd61233514aae9f948c326a9d4e0a15f673ce3",
-      "immutable_image": "stevef1uk/agent-gateway-web_l@sha256:879a1440e75fb7b6f36a9c5e51cd61233514aae9f948c326a9d4e0a15f673ce3"
+      "image": "stevef1uk/agent-gateway-web_l:2026-11-15-aws-41ed43b",
+      "digest": "sha256:d742d6e421c7ce0a35902fe17b5ef37392feb5473c1116eec84a6c1b4e42345e",
+      "immutable_image": "stevef1uk/agent-gateway-web_l@sha256:d742d6e421c7ce0a35902fe17b5ef37392feb5473c1116eec84a6c1b4e42345e"
     }
   }
 }

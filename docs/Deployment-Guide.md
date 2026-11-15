@@ -158,6 +158,8 @@ ls releases/current.json
 
 **Expected:** the file exists with schema version 2.
 
+The currently bundled release is `2026-11-15-aws-41ed43b`, built from source commit `41ed43b20b40355288d08ed7f7e4d6ff71646e14`. Its image references are pinned by digest.
+
 To update it for a new release, obtain a schema-2 manifest from the vendor and save it to `releases/current.json`. It must target `linux/arm64` and include all four signed-licence product image digests plus the Emotion wrapper.
 
 ```bash
