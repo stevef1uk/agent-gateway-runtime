@@ -9,7 +9,7 @@ checkouts; see the latest status below for commit and Docker Hub release state.
 - Runtime: `/tmp/agent-gateway-runtime-main-release`, branch `main`.
 - Source: `/tmp/agent-gateway-main-fix-20261115`, branch `main`.
 - The source checkout was already ahead of `origin/main` by commits `a42f91a`
-  and `76ca40a` before the current uncommitted Console changes.
+  and `76ca40a` before this work; Console changes are committed as `d2c2434`.
 - Keep the checkouts separate. Do not copy credentials or private keys between
   them. Do not publish images, move `:latest` tags, commit, or push unless
   Steve explicitly requests it.
@@ -68,9 +68,14 @@ checkouts; see the latest status below for commit and Docker Hub release state.
 
 ## Current status
 
-- The source and runtime changes are being prepared for local commits and the
-  requested web-image release. Source `VERSION_WEB` and runtime Compose now
-  target `1.0.58`; the web HTML/assets cache marker is `1.0.92`.
+- Source changes are committed as `d2c2434`
+  (`fix(console): preserve API tester paths and editable scopes`); runtime
+  changes are committed as `7910410`
+  (`fix(demo): route APIs through their configured upstreams`). The runtime
+  worktree only has the pre-existing unrelated untracked `.gastown-ignore`.
+  Neither repository's Git commits were pushed.
+- Source `VERSION_WEB` and runtime Compose target `1.0.58`; the web HTML/assets
+  cache marker is `1.0.92`.
 - Built `stevef1uk/agent-gateway-web:1.0.58` locally from the current source
   using the verified runtime-demo public key pair, and recreated only the
   running web service with that tag. It is healthy, `/healthz` returns
@@ -84,9 +89,15 @@ checkouts; see the latest status below for commit and Docker Hub release state.
   `playwright-core` is not installed. JavaScript syntax checks, `go test
   ./cmd/web`, source/runtime `git diff --check`, and runtime Compose config
   validation pass.
-- Docker Hub `:1.0.58` does not exist yet; current `:latest` is a multi-arch
-  manifest. The push/commit request is in progress; record result hashes and
-  final tag digest below when complete.
+- Published `stevef1uk/agent-gateway-web:1.0.58` and `:latest` via the
+  documented `make push-web` workflow. Both resolve to the same multi-arch OCI
+  index digest `sha256:73ee5f47c2527e94951006604f86cd20d61141c7c64d68150cb1fbe30f127462`
+  for `linux/amd64` and `linux/arm64`.
+- The source repo's standard-key guard was bypassed with `KEYS_GUARD=skip`
+  because this runtime release uses the separate `keys/runtime-demo` public
+  keys. Those keys were verified to match the runtime demo's customer private
+  key and vendor public key before the build. No private key or licence token
+  was placed in the source build context or published.
 - The runtime Emotion API uses the verified local
   `agent-gateway-emotion-service:local` wrapper. Direct model inference and the
   authenticated browser/Gateway smoke passed.
