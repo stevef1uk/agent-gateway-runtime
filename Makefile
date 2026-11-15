@@ -18,6 +18,7 @@ DOMAIN_PREFIX ?=
 ADMIN_EMAILS ?=
 WORKLOAD_BOUNDARY_ARN ?=
 DEMO_DEPLOYMENT_ROLE_ARN ?= arn:aws:iam::$(AWS_ACCOUNT):role/$(AWS_STACK)-demo-deployer
+AGW_WEB_IMAGE_URI ?=
 DEMO ?= users
 DEMO_KIND ?= $(if $(filter emotion,$(DEMO)),mcp,api)
 PHASE ?= access
@@ -32,7 +33,7 @@ help:
 	@echo 'make check: offline checks; creates no AWS resources'
 	@echo 'make aws-preflight: verify signed licences and configuration without AWS calls'
 	@echo 'make aws-access-deploy: administrator setup; explicit AWS_ADMIN_PROFILE required'
-	@echo 'make aws-deploy: deploy prebuilt Docker Hub images into your account'
+	@echo 'make aws-deploy: deploy prebuilt images; optional AGW_WEB_IMAGE_URI selects a custom immutable Web image'
 	@echo 'make aws-outputs: print your actual console and baseline gateway URLs'
 	@echo 'make aws-demo-url DEMO=users: print the selected child gateway URL'
 	@echo 'make aws-demo DEMO=users: run a client using GATEWAY_URL; prompt for agent token'
@@ -75,7 +76,7 @@ aws-access-outputs:
 	@test -n "$(AWS_ADMIN_PROFILE)" || { echo 'Set AWS_ADMIN_PROFILE for access-stack inspection.' >&2; exit 2; }
 	aws cloudformation describe-stacks --profile "$(AWS_ADMIN_PROFILE)" --region "$(AWS_REGION)" --stack-name "$(AWS_ACCESS_STACK)" --query 'Stacks[0].Outputs' --output table --no-cli-pager
 aws-deploy: aws-preflight
-	@AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AGW_ACCOUNT="$(AWS_ACCOUNT)" AGW_ACCESS_STACK="$(AWS_ACCESS_STACK)" AGW_ACCESS_PROFILE="$(AWS_ADMIN_PROFILE)" AGW_ARTIFACT_STACK="$(AWS_ARTIFACT_STACK)" AGW_APP_STACK="$(AWS_STACK)" AGW_CUSTOMER_KEY_FILE="$(CUSTOMER_KEY_FILE)" AGW_VENDOR_PUBLIC_KEY_FILE="$(VENDOR_PUBLIC_KEY_FILE)" AGW_LICENCE_DIR="$(LICENCE_DIR)" AGW_DEMO_DEPLOYMENT_ROLE_ARN="$(DEMO_DEPLOYMENT_ROLE_ARN)" AGW_WORKLOAD_BOUNDARY_ARN="$(WORKLOAD_BOUNDARY_ARN)" bash scripts/deploy-aws.sh --release-manifest "$(RELEASE_MANIFEST)" --domain-prefix "$(DOMAIN_PREFIX)" --admin-emails "$(ADMIN_EMAILS)"
+	@AWS_PROFILE="$(AWS_PROFILE)" AWS_REGION="$(AWS_REGION)" AGW_ACCOUNT="$(AWS_ACCOUNT)" AGW_ACCESS_STACK="$(AWS_ACCESS_STACK)" AGW_ACCESS_PROFILE="$(AWS_ADMIN_PROFILE)" AGW_ARTIFACT_STACK="$(AWS_ARTIFACT_STACK)" AGW_APP_STACK="$(AWS_STACK)" AGW_CUSTOMER_KEY_FILE="$(CUSTOMER_KEY_FILE)" AGW_VENDOR_PUBLIC_KEY_FILE="$(VENDOR_PUBLIC_KEY_FILE)" AGW_LICENCE_DIR="$(LICENCE_DIR)" AGW_DEMO_DEPLOYMENT_ROLE_ARN="$(DEMO_DEPLOYMENT_ROLE_ARN)" AGW_WORKLOAD_BOUNDARY_ARN="$(WORKLOAD_BOUNDARY_ARN)" AGW_WEB_IMAGE_URI="$(AGW_WEB_IMAGE_URI)" bash scripts/deploy-aws.sh --release-manifest "$(RELEASE_MANIFEST)" --domain-prefix "$(DOMAIN_PREFIX)" --admin-emails "$(ADMIN_EMAILS)"
 aws-outputs:
 	@python3 -B scripts/aws-outputs.py --profile "$(AWS_PROFILE)" --region "$(AWS_REGION)" --stack "$(AWS_STACK)"
 aws-demo:

@@ -14,7 +14,7 @@ no shared free allowances or credits applied; tax excluded.
 The active scenarios assume four billed Lambda/API Gateway calls per external
 request, 512 MiB functions and a one-second mean per invocation except the final
 row. Billed time includes waiting for internal/upstream responses. The model includes
-DynamoDB requests/storage/PITR, logs, two secrets, S3 artifact versions and requests,
+DynamoDB requests/storage/PITR, logs, versioned S3 artifact storage and requests,
 Cognito Lite users and Internet egress. Storage/log/request assumptions vary with
 scenario; these figures are not fixed-price offers or load-tested capacity promises.
 
@@ -45,7 +45,7 @@ and should not load-test the public provider.
 
 The model uses current-at-review AWS regional rate dimensions, including ARM Lambda
 compute/requests, HTTP API (not REST API), DynamoDB Standard on-demand requests/PITR,
-CloudWatch Standard logs, S3 Standard and Cognito Lite. AWS Secrets Manager is not used by this demo (JWT/operator tokens are deploy-time `NoEcho` parameters); it is recommended for production at about $0.40 per secret per month:
+CloudWatch Standard logs, S3 Standard and Cognito Lite. AWS Secrets Manager is not used by this demo (JWT, operator, and Authz read tokens are deploy-time `NoEcho` parameters); it is recommended for production at about $0.40 per secret per month:
 
 - [Lambda Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AWSLambda/current/eu-west-3/index.json).
 - [HTTP API Paris rates](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonApiGateway/current/eu-west-3/index.json).

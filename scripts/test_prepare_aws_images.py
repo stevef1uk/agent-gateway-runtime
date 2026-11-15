@@ -16,7 +16,7 @@ class ImageParameters(unittest.TestCase):
     def test_four_service_release_matches_image_template(self):
         template=json.loads((ROOT/'deploy/aws/serverless-images.template.json').read_text())
         params={p['ParameterKey']:p['ParameterValue'] for p in module.prepare(self.config())}
-        self.assertEqual(set(params) | {'JWTSecretValue', 'AdminSecretValue'}, set(template['Parameters']))
+        self.assertEqual(set(params) | {'JWTSecretValue', 'AdminSecretValue', 'AuthzReadTokenValue'}, set(template['Parameters']))
         self.assertEqual(template['Parameters']['EnableRegoPolicy']['Default'],'true')
         self.assertEqual(params['EnableWeatherDemo'],'true')
         self.assertEqual(params['EnableRegoPolicy'],'true')
@@ -37,6 +37,16 @@ class ImageParameters(unittest.TestCase):
             elif mutation=='version':config['activation']['key_version']='null'
             else:config['workload_boundary_arn']='arn:aws:iam::999999999999:policy/other-account'
             with self.assertRaises(ValueError):module.prepare(config)
+    def test_custom_web_image_override_is_immutable_and_account_scoped(self):
+        image='123456789012.dkr.ecr.eu-west-3.amazonaws.com/agent-gateway-sec-r4q8/web-custom@sha256:'+'b'*64
+        params={p['ParameterKey']:p['ParameterValue'] for p in module.prepare(self.config(),image)}
+        self.assertEqual(params['WebImageUri'],image)
+        for invalid in [
+            '123456789012.dkr.ecr.eu-west-3.amazonaws.com/web:latest',
+            '999999999999.dkr.ecr.eu-west-3.amazonaws.com/web-custom@sha256:'+'b'*64,
+            '123456789012.dkr.ecr.us-east-1.amazonaws.com/web-custom@sha256:'+'b'*64,
+        ]:
+            with self.assertRaises(ValueError):module.prepare(self.config(),invalid)
     def test_inference_permission_is_limited_to_web_and_boundary(self):
         for filename in ['serverless-images.template.json']:
             template=json.loads((ROOT/'deploy/aws'/filename).read_text())
@@ -52,10 +62,14 @@ class ImageParameters(unittest.TestCase):
         env=template['Resources']['WebFunction']['Properties']['Environment']['Variables']
         self.assertEqual(env['JWT_SECRET'], {'Ref':'JWTSecretValue'})
         self.assertEqual(env['GATEWAY_ADMIN_TOKEN'], {'Ref':'AdminSecretValue'})
+        self.assertEqual(env['AUTHZ_READ_TOKEN'], {'Ref':'AuthzReadTokenValue'})
+        for name in ['AuthzFunction','TokensvcFunction','GatewayFunction','WebFunction']:
+            service_env=template['Resources'][name]['Properties']['Environment']['Variables']
+            self.assertEqual(service_env['AUTHZ_READ_TOKEN'], {'Ref':'AuthzReadTokenValue'})
         for value in [env['AWS_DEMO_CONFIGURATION']['Fn::If'][1],template['Outputs']['DemoConfiguration']['Value']]:
             config=json.loads(value['Fn::Sub'])
             self.assertFalse(any('secret' in key for key in config))
-        for name in ['JWTSecretValue','AdminSecretValue']:
+        for name in ['JWTSecretValue','AdminSecretValue','AuthzReadTokenValue']:
             self.assertTrue(template['Parameters'][name]['NoEcho'])
             self.assertNotIn('Default',template['Parameters'][name])
 if __name__=='__main__':unittest.main()

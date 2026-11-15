@@ -107,7 +107,7 @@
     "WebImageUri": {
       "Type": "String",
       "AllowedPattern": "^[0-9]{12}\\.dkr\\.ecr\\.eu-west-3\\.amazonaws\\.com/[a-z0-9][a-z0-9/._-]*@sha256:[0-9a-f]{64}$",
-      "Description": "Immutable ARM64 signed-licence release image in your Paris ECR registry; no latest tag."
+      "Description": "Immutable ARM64 web image in your Paris ECR registry; a custom console build may be supplied by digest. No latest tag."
     },
     "WebLicenceObject": {
       "Type": "String",
@@ -146,6 +146,12 @@
       "NoEcho": true,
       "MinLength": 32,
       "Description": "Deploy-time generated gateway admin token; supplied by scripts/deploy-aws.sh as a NoEcho parameter."
+    },
+    "AuthzReadTokenValue": {
+      "Type": "String",
+      "NoEcho": true,
+      "MinLength": 32,
+      "Description": "Independent deploy-time token for internal Authz delegation reads."
     }
   },
   "Resources": {
@@ -1201,6 +1207,9 @@
             "GATEWAY_ADMIN_TOKEN": {
               "Ref": "AdminSecretValue"
             },
+            "AUTHZ_READ_TOKEN": {
+              "Ref": "AuthzReadTokenValue"
+            },
             "PERSISTENCE": "dynamodb",
             "DYNAMODB_TABLE": {
               "Ref": "DomainState"
@@ -1411,6 +1420,9 @@
             "AUTHZ_URL": {
               "Fn::Sub": "https://${AuthzAPI}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
             },
+            "AUTHZ_READ_TOKEN": {
+              "Ref": "AuthzReadTokenValue"
+            },
             "AUTHZ_IAM_REGION": {
               "Ref": "AWS::Region"
             },
@@ -1617,6 +1629,9 @@
             "JWT_ISSUER": "agent-gateway",
             "GATEWAY_ADMIN_TOKEN": {
               "Ref": "AdminSecretValue"
+            },
+            "AUTHZ_READ_TOKEN": {
+              "Ref": "AuthzReadTokenValue"
             },
             "PERSISTENCE": "dynamodb",
             "DYNAMODB_TABLE": {
@@ -1930,6 +1945,9 @@
             "JWT_ISSUER": "agent-gateway",
             "GATEWAY_ADMIN_TOKEN": {
               "Ref": "AdminSecretValue"
+            },
+            "AUTHZ_READ_TOKEN": {
+              "Ref": "AuthzReadTokenValue"
             },
             "PERSISTENCE": "dynamodb",
             "DYNAMODB_TABLE": {

@@ -20,6 +20,7 @@ AGW_APP_STACK="${AGW_APP_STACK:-agent-gateway-dev}"
 AGW_ACCESS_STACK="${AGW_ACCESS_STACK:-agent-gateway-access-dev}"
 AGW_ACCESS_PROFILE="${AGW_ACCESS_PROFILE:-${AWS_ADMIN_PROFILE:-}}"
 AGW_UPSTREAM="${AGW_UPSTREAM:-https://api.open-meteo.com}"
+AGW_WEB_IMAGE_URI="${AGW_WEB_IMAGE_URI:-}"
 AGW_RELEASE_MANIFEST="${AGW_RELEASE_MANIFEST:-}"
 AGW_CUSTOMER_KEY_FILE="${AGW_CUSTOMER_KEY_FILE:-keys/local-activation/customer_private.pem}"
 AGW_VENDOR_PUBLIC_KEY_FILE="${AGW_VENDOR_PUBLIC_KEY_FILE:-keys/local-activation/vendor_public.pem}"
@@ -273,6 +274,22 @@ for svc in authz tokensvc gateway web emotion; do
   printf 'Verified ECR image: %s/%s@%s\n' "$ecr_registry" "$ecr_repo" "$actual_digest"
 done
 
+if [[ -n "$AGW_WEB_IMAGE_URI" ]]; then
+  if [[ "$AGW_WEB_IMAGE_URI" =~ ^${AGW_ACCOUNT}\.dkr\.ecr\.${AWS_REGION}\.amazonaws\.com/([a-z0-9][a-z0-9/._-]*)@sha256:([0-9a-f]{64})$ ]]; then
+    web_image_repository="${BASH_REMATCH[1]}"
+    web_image_digest="sha256:${BASH_REMATCH[2]}"
+  else
+    die "AGW_WEB_IMAGE_URI must be an immutable ECR digest URI in this account and region"
+  fi
+  actual_web_image_digest="$(aws ecr describe-images \
+    --repository-name "$web_image_repository" \
+    --image-ids "imageDigest=$web_image_digest" \
+    --query 'imageDetails[0].imageDigest' --output text)"
+  [[ "$actual_web_image_digest" == "$web_image_digest" ]] ||
+    die "The custom Web image digest is not present in the configured ECR repository"
+  printf 'Verified custom Web image digest in customer ECR.\n'
+fi
+
 # ---------------------------------------------------------------------------
 # 4. Generate Release Configuration & CloudFormation Parameters
 # ---------------------------------------------------------------------------
@@ -305,23 +322,33 @@ with open(out, 'w') as f:
  f.write('\n')
 PYCONFIG
 
-python3 -B scripts/prepare-aws-image-deployment.py \
-  "$PLAN_DIR/release-config.json" \
-  "$PLAN_DIR/parameters.json"
+if [[ -n "$AGW_WEB_IMAGE_URI" ]]; then
+  python3 -B scripts/prepare-aws-image-deployment.py \
+    "$PLAN_DIR/release-config.json" \
+    "$PLAN_DIR/parameters.json" \
+    --web-image-uri "$AGW_WEB_IMAGE_URI"
+else
+  python3 -B scripts/prepare-aws-image-deployment.py \
+    "$PLAN_DIR/release-config.json" \
+    "$PLAN_DIR/parameters.json"
+fi
 
 say "4b/6 Preparing deploy-time secrets (NoEcho, no Secrets Manager)"
 secrets_file="$PLAN_DIR/secrets.json"
 python3 - "$secrets_file" "$PLAN_DIR/parameters.json" <<'PYSECRETS'
 import json, os, secrets, sys
 path, params_path = sys.argv[1], sys.argv[2]
+alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 if os.path.exists(path):
     with open(path) as f:
         data = json.load(f)
+    if not isinstance(data, dict):
+        raise SystemExit('deploy-time secrets file must contain a JSON object')
 else:
-    alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
     data = {
         'jwt': ''.join(secrets.choice(alphabet) for _ in range(64)),
         'admin': ''.join(secrets.choice(alphabet) for _ in range(64)),
+        'authz_read': ''.join(secrets.choice(alphabet) for _ in range(64)),
     }
     tmp = path + '.tmp'
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -329,11 +356,24 @@ else:
         json.dump(data, f, indent=2)
         f.write('\n')
     os.replace(tmp, path)
+if 'authz_read' not in data:
+    data['authz_read'] = ''.join(secrets.choice(alphabet) for _ in range(64))
+    tmp = path + '.tmp'
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
+        json.dump(data, f, indent=2)
+        f.write('\n')
+    os.replace(tmp, path)
+for key in ('jwt', 'admin', 'authz_read'):
+    if not isinstance(data.get(key), str) or len(data[key]) < 32:
+        raise SystemExit(f'deploy-time secret {key!r} must be a string of at least 32 characters')
+os.chmod(path, 0o600)
 with open(params_path) as f:
     params = json.load(f)
-params = [p for p in params if p.get('ParameterKey') not in ('JWTSecretValue', 'AdminSecretValue')]
+params = [p for p in params if p.get('ParameterKey') not in ('JWTSecretValue', 'AdminSecretValue', 'AuthzReadTokenValue')]
 params.append({'ParameterKey': 'JWTSecretValue', 'ParameterValue': data['jwt']})
 params.append({'ParameterKey': 'AdminSecretValue', 'ParameterValue': data['admin']})
+params.append({'ParameterKey': 'AuthzReadTokenValue', 'ParameterValue': data['authz_read']})
 os.chmod(params_path, 0o600)
 with open(params_path, 'w') as f:
     json.dump(params, f, indent=2)

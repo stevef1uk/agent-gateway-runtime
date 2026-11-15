@@ -298,16 +298,18 @@ Keep Docker running, then:
 make aws-deploy
 ```
 
+For a locally built console image, pass its immutable same-account, same-region ECR digest with `AGW_WEB_IMAGE_URI`; the deployer verifies that digest exists before preparing the stack parameters. The other service images remain pinned to the reviewed release manifest. The override changes only the Web Lambda image, so review and build that image from the intended source revision before deployment.
+
 The script checks the selected account and profile, the current manifest, and live IAM prerequisites before any write. Missing boundary reads, log-index discovery or event diagnostics stop it immediately with the administrator recovery step. It then:
 
 1. Creates or reuses private, versioned activation storage.
 2. Uploads and pins your customer activation material.
-3. Pulls the four signed-licence `_l` images and the prebuilt Emotion wrapper from Docker Hub into private ECR, checking every digest.
-4. Generates CloudFormation parameters from your configuration and discovered S3 versions, including deploy-time JWT and operator secrets passed as `NoEcho` values.
+3. Pulls the signed-licence `_l` images and the prebuilt Emotion wrapper from Docker Hub into private ECR, checking every release digest. If `AGW_WEB_IMAGE_URI` is supplied, it uses that verified immutable Web image instead of the release Web image.
+4. Generates CloudFormation parameters from your configuration and discovered S3 versions, including deploy-time JWT, operator, and Authz read secrets passed as `NoEcho` values.
 5. Creates or updates the Lambda application, HTTP APIs, Cognito and DynamoDB through a change set.
 6. Saves a teardown inventory, checks public and internal HTTP boundaries, and sends the first operator's Cognito invitation if needed.
 
-JWT and operator secrets are generated once and stored in `dist/aws-lambda/plan/secrets.json` (mode 0600, Git-ignored). **Keep that file**: it preserves the same tokens across redeploys, and deleting it rotates both secrets and invalidates existing tokens and admin sessions. AWS Secrets Manager is the better production choice for rotation and audit; this demo avoids its per-secret monthly cost.
+JWT, operator, and Authz read secrets are generated once and stored in `dist/aws-lambda/plan/secrets.json` (mode 0600, Git-ignored). **Keep that file**: it preserves the same values across redeploys, and deleting it rotates the tokens, invalidating existing agent tokens, admin sessions, and internal delegation reads. AWS Secrets Manager is the better production choice for rotation and audit; this demo avoids its per-secret monthly cost.
 
 The parent deployment uses Lambda and managed services only; it creates no proxy VM or OpenClaw hosts. [Architecture](Architecture.md) covers single-region availability and limits. Bedrock configuration and permissions for the AI Wizard remain enabled, but successful model calls also depend on account and model availability.
 
@@ -349,7 +351,7 @@ For an existing hosted deployment, get the ConsoleURL and invitation from its ow
 
 In the signed-in console:
 
-1. Open **Protected APIs & MCP Servers** and click **AI Config Assistant (Freeride)**. This is not the separate **Delegation Wizard**.
+1. Open **Protected APIs & MCP Servers** and click **AI Config Assistant (Bedrock)**. This is not the standalone **+ Protect API or MCP Server (Wizard)** for custom public HTTPS targets, nor the separate **Delegation Wizard**.
 2. Select the **Users REST API** preset and click **Ask Freeride AI to Generate**.
 3. Review the generated configuration and choose **Open in 5-Step Wizard to Customize** (or deploy directly if offered).
 4. Review the public JSONPlaceholder upstream, permit read access to `/api-users/users*`, and choose **Deploy Demo & Create Delegation**. Wait for the demo deployment to succeed.
@@ -424,7 +426,7 @@ OpenClaw/OpenShell and custom stateful backends are **not** provisioned by these
 
 ### Demo signing secrets
 
-The signed-licence web function receives the same JWT signing value and operator value as the parent gateway. The wizard passes them to child stacks as separate `NoEcho` parameters; they never appear in `DemoConfiguration` outputs or child template bodies. Keep the private local `dist/aws-lambda/plan/secrets.json` for updates. The published web image handles this provisioning path; customers do not rebuild images or use the private source CLI.
+The signed-licence web function receives the same JWT signing value and operator value as the parent gateway, plus the dedicated Authz read token used by internal services to list delegations. The wizard passes the required values to child stacks as separate `NoEcho` parameters; they never appear in `DemoConfiguration` outputs or child template bodies. Keep the private local `dist/aws-lambda/plan/secrets.json` for updates. The published web image handles this provisioning path; customers do not rebuild images or use the private source CLI.
 
 ## 13. Troubleshooting
 

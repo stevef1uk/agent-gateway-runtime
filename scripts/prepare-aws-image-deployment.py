@@ -7,7 +7,7 @@ import re
 import urllib.parse
 
 
-def prepare(config):
+def prepare(config, web_image_uri_override=None):
     account = config['account']
     if not re.fullmatch(r'[0-9]{12}', account) or config['region'] != 'eu-west-3':
         raise ValueError('Use your 12-digit AWS account and region eu-west-3')
@@ -32,7 +32,7 @@ def prepare(config):
                   'CustomerKeyVersion': version(activation['key_version'])}
     for service in ['authz', 'tokensvc', 'gateway', 'web']:
         release = config['services'][service]
-        image = release['image_uri']
+        image = web_image_uri_override if service == 'web' and web_image_uri_override else release['image_uri']
         if not re.fullmatch(account + r'\.dkr\.ecr\.eu-west-3\.amazonaws\.com/[a-z0-9][a-z0-9/._-]*@sha256:[0-9a-f]{64}', image):
             raise ValueError('Each service needs an immutable image digest in your Paris ECR account')
         name = service.capitalize()
@@ -72,9 +72,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('release_config', type=pathlib.Path)
     parser.add_argument('parameters_output', type=pathlib.Path)
+    parser.add_argument('--web-image-uri', help='Optional immutable custom Web image URI in this account and region')
     args = parser.parse_args()
     try:
-        parameters = prepare(json.loads(args.release_config.read_text()))
+        parameters = prepare(json.loads(args.release_config.read_text()), args.web_image_uri)
     except (ValueError, KeyError, TypeError) as error:
         parser.error(str(error))
     args.parameters_output.write_text(json.dumps(parameters, indent=2) + '\n')
