@@ -231,11 +231,19 @@ gcloud projects add-iam-policy-binding "$GCP_PROJECT_ID" \
 
 `roles/oauthconfig.editor` permits creating OAuth clients and secrets, managing test users, and updating OAuth consent configuration. If these commands are denied, ask the organization or project administrator to grant the roles.
 
-Create a Google OAuth web client in **APIs & Services -> Credentials**. After the script prints the web URL, add this redirect URI to the OAuth client:
+Create a Google OAuth web client in **Google Auth Platform -> Clients**.
+Register the callback URI for the exact Cloud Run hostname users will open.
+Cloud Run may show both a stable `*.a.run.app` URL and a regional
+`*.europe-west9.run.app` service URL; Google treats them as different redirect
+URIs. If users may use either hostname, register both callbacks:
 
 ```text
 https://WEB_CLOUD_RUN_HOST/oidc/callback
 ```
+
+Append `/oidc/callback` to each URL printed for the web service. The callback
+must match the hostname in the browser's address bar exactly. Google may take
+several minutes to apply changes to OAuth client URIs.
 
 Then redeploy with the client ID and secret file. The examples below include
 `--emotion` to retain the optional Emotion upstream; omit it if you do not
