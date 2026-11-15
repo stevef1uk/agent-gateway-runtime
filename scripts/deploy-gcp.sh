@@ -24,6 +24,7 @@ Options:
   --deployment-id ID         Resource name prefix (default: agent-gateway-dev)
   --keys-directory DIR       Directory containing token.txt (default: ./keys)
   --dockerhub-namespace NAME Published image namespace (or GCP_DOCKERHUB_NAMESPACE)
+  --artifact-registry-source Deploy images already published to this project's Artifact Registry
   --emotion                  Deploy and wire the published Emotion MCP upstream
   --emotion-token-file FILE  Upload a vendor-issued Emotion token from outside Git
   --oidc-client-id ID        Google OAuth client ID
@@ -47,6 +48,7 @@ apply=0
 emotion=0
 emotion_token_file="${GCP_EMOTION_TOKEN_FILE:-${EMOTION_TOKEN_FILE:-}}"
 registry="${GCP_DOCKERHUB_NAMESPACE:-}"
+artifact_registry_source=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -56,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     --deployment-id) [[ $# -ge 2 ]] || usage; deployment_id=$2; shift 2 ;;
     --keys-directory) [[ $# -ge 2 ]] || usage; keys_directory=$2; shift 2 ;;
     --dockerhub-namespace) [[ $# -ge 2 ]] || usage; registry=$2; shift 2 ;;
+    --artifact-registry-source) artifact_registry_source=1; shift ;;
     --emotion-token-file) [[ $# -ge 2 ]] || usage; emotion_token_file=$2; shift 2 ;;
     --oidc-client-id) [[ $# -ge 2 ]] || usage; oidc_client_id=$2; shift 2 ;;
     --oidc-client-secret) [[ $# -ge 2 ]] || usage; oidc_client_secret_file=$2; shift 2 ;;
@@ -67,7 +70,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$project_id" && -n "$version" && -n "$registry" ]] || usage
+[[ -n "$project_id" && -n "$version" ]] || usage
+if [[ "$artifact_registry_source" -eq 0 && -z "$registry" ]]; then
+  echo 'Set --dockerhub-namespace or use --artifact-registry-source.' >&2
+  exit 2
+fi
 [[ "$version" == latest || "$version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
   echo 'Version must be a valid Docker tag.' >&2
   exit 2
@@ -297,10 +304,14 @@ EOF
   rm -rf "$context"
 }
 
-mirror_image gateway
-mirror_image web
-if [[ "$emotion" -eq 1 ]]; then
-  mirror_image emotion
+if [[ "$artifact_registry_source" -eq 0 ]]; then
+  mirror_image gateway
+  mirror_image web
+  if [[ "$emotion" -eq 1 ]]; then
+    mirror_image emotion
+  fi
+else
+  echo "Deploying release $version from $artifact_repo."
 fi
 
 echo "Creating/checking Firestore composite indexes; Google may take several minutes..."
