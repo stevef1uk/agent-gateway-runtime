@@ -205,6 +205,8 @@ When enabling Google sign-in, provide `--admin-emails` with the comma-separated,
 verified Google account email addresses that may administer this deployment.
 The private Console refuses to start with OIDC enabled but no configured admin
 allowlist; non-listed accounts cannot sign in to the private Console.
+When an OIDC client ID is supplied, the deployment script configures the Google
+issuer and connector for both the Gateway and Console.
 
 The account creating the OAuth client needs project visibility plus OAuth configuration permissions. Check the active account:
 

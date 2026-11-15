@@ -334,7 +334,7 @@ if [[ "$emotion" -eq 1 ]]; then
   gateway_env+=",GCP_EMOTION_DETAILED_APPROVAL=1"
 fi
 if [[ -n "$oidc_client_id" ]]; then
-  gateway_env+=",OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id"
+  gateway_env+=",OIDC_ISSUER_URL=https://accounts.google.com,OIDC_CLIENT_ID=$oidc_client_id,OIDC_CONNECTOR_ID=google"
 fi
 
 gcloud beta run deploy "$gateway_service" \
@@ -378,7 +378,7 @@ web_env="${web_env//,/|}"
 web_env+="|WEB_ADMIN_EMAILS=$admin_emails"
 secret_args="GATEWAY_ADMIN_TOKEN=$admin_secret:latest,AUTHZ_READ_TOKEN=$authz_read_secret:latest"
 if [[ -n "$oidc_client_id" ]]; then
-  web_env+="|OIDC_ISSUER_URL=https://accounts.google.com|OIDC_CLIENT_ID=$oidc_client_id"
+  web_env+="|OIDC_ISSUER_URL=https://accounts.google.com|OIDC_CLIENT_ID=$oidc_client_id|OIDC_CONNECTOR_ID=google"
   secret_args+=",OIDC_CLIENT_SECRET=$oidc_secret:latest"
 fi
 
