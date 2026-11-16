@@ -4,8 +4,6 @@
 
 **Running Agent Gateway images?** See [how to verify image signatures and digests](docs/Container-Image-Security.md).
 
-For the cloud image releases, the **Sign AWS**, **Sign GCP**, and **Sign Azure** workflows are available from the GitHub Actions tab. Select the matching cloud branch when starting a run; repository Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are required.
-
 <p align="center">
   <img src="images/overview_high_level.jpg"
        alt="Agent Gateway overview — governing AI agent access to tools, APIs and enterprise systems"
