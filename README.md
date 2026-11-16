@@ -2,6 +2,8 @@
 
 ## AI agents can act. Humans stay in control.
 
+**Running Agent Gateway images?** See [how to verify image signatures and digests](docs/Container-Image-Security.md).
+
 <p align="center">
   <img src="images/overview_high_level.jpg"
        alt="Agent Gateway overview — governing AI agent access to tools, APIs and enterprise systems"
@@ -85,9 +87,6 @@ docker compose up -d
 Then open the guided demo at [http://localhost:8083/demo.html](http://localhost:8083/demo.html).
 
 The walkthrough covers sign-in, delegation, agent activity, a held action, a human decision, revocation and audit. For the full catalogue—including MCP protection, egress, DPoP/RAR, the kill switch, public API and Gmail examples—see **[the demos guide](docs/Demos.md)**.
-
-For digest-pinned image references and how to verify published image
-signatures, see [Verifying Agent Gateway container images](docs/Container-Image-Security.md).
 
 In local Compose mode, the Console Wizard's `catalog-demo`, `users`, and `refunds` APIs are preconfigured to use JSONPlaceholder, and `geocoding` uses Open-Meteo Geocoding. Each runs behind a dedicated policy-enforcing gateway. Compose does not dynamically provision PEPs for arbitrary Wizard API URLs: unsupported API names or URLs are rejected rather than silently routed to the demo API. Set `CATALOG_DEMO_UPSTREAM_URL`, `USERS_API_UPSTREAM_URL`, `REFUNDS_API_UPSTREAM_URL`, or `GEOCODING_API_UPSTREAM_URL` before starting Compose to change those examples, or use Kubernetes mode for dynamically provisioned upstreams.
 
