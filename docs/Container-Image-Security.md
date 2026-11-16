@@ -36,11 +36,10 @@ platform you deploy. For example:
   intended versions, but tags alone are mutable. Resolve each tag to a digest
   and compare it with a publisher release record before relying on it.
 
-The signed digests listed below are for the four versioned Docker Hub product
-images published from the private `agent-gateway` repository's `main` branch.
-They do **not** cover the platform-specific AWS (`_l`), Azure (`_azure`), or
-GCP (`_g`) image repositories. Verify those only after signatures and trusted
-signer details are published for their exact digests.
+The signed digests listed below cover the specified Docker Hub main-release
+and Compose support images. The platform-specific AWS (`_l`), Azure
+(`_azure`), and GCP (`_g`) releases use separate signer identities and
+digests; do not use the main-release identity to verify them.
 
 For a public Docker Hub tag, inspect the registry manifest with Docker Buildx:
 
@@ -116,6 +115,40 @@ done
 
 The signatures authenticate approval of these digests by the specified
 workflow identity. They do not prove a source commit or observed build process.
+
+### Compose support images
+
+The [Sign Compose support images run](https://github.com/stevef1uk/agent-gateway/actions/runs/43830359477)
+signed these existing image indexes on 2026-11-16. Each signature was
+independently verified with the exact identity shown below.
+
+| Image | Compose tag when signed | Verified image digest |
+|---|---|---|
+| FreeRide | `1.4.0` | `docker.io/stevef1uk/freeride@sha256:59171d738c83a6f50ef07fd1ab3632f685b889fc6a3a7f0716c48333ed1b7174` |
+| Demo MCP server | `1.0.1` | `docker.io/stevef1uk/agent-gateway-mcpsrv@sha256:31f23588e0dbecd9588677ba9def5744c30a73b47fb03cbfaa41feb2525c099a` |
+| Emotion MCP | `latest` | `docker.io/stevef1uk/emotion-mcp@sha256:e3f9eee22aaec137290c1fc3f16845d56401b91ed46147e3f7dca4b503760a01` |
+
+`latest` is mutable: a later Emotion MCP image is not covered by this
+signature unless it has the same digest. Verify each digest before deployment:
+
+```bash
+set -euo pipefail
+SIGNER_ID='https://github.com/stevef1uk/agent-gateway/.github/workflows/sign-demo-images.yml@refs/heads/main'
+OIDC_ISSUER='https://token.actions.githubusercontent.com'
+images=(
+  docker.io/stevef1uk/freeride@sha256:59171d738c83a6f50ef07fd1ab3632f685b889fc6a3a7f0716c48333ed1b7174
+  docker.io/stevef1uk/agent-gateway-mcpsrv@sha256:31f23588e0dbecd9588677ba9def5744c30a73b47fb03cbfaa41feb2525c099a
+  docker.io/stevef1uk/emotion-mcp@sha256:e3f9eee22aaec137290c1fc3f16845d56401b91ed46147e3f7dca4b503760a01
+)
+for image in "${images[@]}"; do
+  cosign verify \
+    --certificate-identity "$SIGNER_ID" \
+    --certificate-oidc-issuer "$OIDC_ISSUER" \
+    "$image"
+done
+```
+
+These are signatures only, not SBOM or provenance attestations.
 
 ## 3. Verify optional attestations
 
