@@ -2,7 +2,7 @@
 
 The **`aws` branch** deploys Agent Gateway into your own AWS account using published plain-binary **`_l` images with signed licence verification from Docker Hub**. Application source and a Go compiler are not required. The `main` branch contains the separate local/container demos.
 
-**Image security:** See [how to verify published image signatures and digests](https://github.com/stevef1uk/agent-gateway-runtime/blob/main/docs/Container-Image-Security.md). The signatures documented there currently cover the four main-branch Docker Hub images, not these AWS-specific images.
+**Image security:** The AWS release images are signed. See [how to verify the AWS image signatures and digests](docs/Container-Image-Security.md).
 
 Start with the **[customer deployment and testing guide](docs/Deployment-Guide.md)**. It explains prerequisites, activation files, configuration, administrator setup, Make deployment, sign-in and your first demo.
 
