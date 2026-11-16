@@ -2,7 +2,7 @@
 
 The **`gcp` branch** deploys Agent Gateway into your own Google Cloud Platform (GCP) project using published container images with signed-licence verification. Application source, Terraform, Docker, and a Go compiler are not required for customer deployment. See the [GCP demo guide](docs/GCP-Demos.md) for the configured routes, live weather walkthrough, and compatibility with the `main` demos. The `main` branch contains separate local/container demos.
 
-**Image security:** See [how to verify published image signatures and digests](https://github.com/stevef1uk/agent-gateway-runtime/blob/main/docs/Container-Image-Security.md). The signatures documented there currently cover the four main-branch Docker Hub images, not these GCP-specific images.
+**Image security:** The GCP `2026-11-15-sec1` release images are signed. See [how to verify the GCP image signatures and digests](docs/Container-Image-Security.md).
 
 ## Target Serverless Architecture (`europe-west9` Paris)
 
