@@ -86,6 +86,9 @@ Then open the guided demo at [http://localhost:8083/demo.html](http://localhost:
 
 The walkthrough covers sign-in, delegation, agent activity, a held action, a human decision, revocation and audit. For the full catalogue—including MCP protection, egress, DPoP/RAR, the kill switch, public API and Gmail examples—see **[the demos guide](docs/Demos.md)**.
 
+For digest-pinned image references and how to verify published image
+signatures, see [Verifying Agent Gateway container images](docs/Container-Image-Security.md).
+
 In local Compose mode, the Console Wizard's `catalog-demo`, `users`, and `refunds` APIs are preconfigured to use JSONPlaceholder, and `geocoding` uses Open-Meteo Geocoding. Each runs behind a dedicated policy-enforcing gateway. Compose does not dynamically provision PEPs for arbitrary Wizard API URLs: unsupported API names or URLs are rejected rather than silently routed to the demo API. Set `CATALOG_DEMO_UPSTREAM_URL`, `USERS_API_UPSTREAM_URL`, `REFUNDS_API_UPSTREAM_URL`, or `GEOCODING_API_UPSTREAM_URL` before starting Compose to change those examples, or use Kubernetes mode for dynamically provisioned upstreams.
 
 You can also explore the live CRM demonstration at [agw.sjfisher.com](https://agw.sjfisher.com) using the [Claude CRM tutorial](docs/Claude-CRM-Tutorial.md). See [Claude integration](docs/Claude-Integration.md) for the wiring details.

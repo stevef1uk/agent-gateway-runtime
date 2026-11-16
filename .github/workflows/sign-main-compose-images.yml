@@ -1,0 +1,53 @@
+name: Sign main Compose images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    if: github.ref == 'refs/heads/main'
+    environment: image-signing
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
+        with:
+          cosign-release: v2.4.3
+
+      - name: Sign the existing Compose image digests
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          trap 'docker logout docker.io >/dev/null 2>&1 || true' EXIT
+
+          images=(
+            docker.io/stevef1uk/agent-gateway-authz:1.0.14
+            docker.io/stevef1uk/agent-gateway-tokensvc:1.0.8
+            docker.io/stevef1uk/agent-gateway-gateway:1.0.34
+            docker.io/stevef1uk/agent-gateway-mcpsrv:1.0.1
+            docker.io/stevef1uk/agent-gateway-web:1.0.59
+          )
+
+          for image in "${images[@]}"; do
+            digest="$(docker buildx imagetools inspect "$image" | awk '$1 == "Digest:" { print $2; exit }')"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              printf 'Could not resolve a valid digest for %s\n' "$image" >&2
+              exit 1
+            fi
+
+            repository="${image%:*}"
+            immutable_image="${repository}@${digest}"
+            printf 'Signing %s\n' "$immutable_image"
+            cosign sign --yes "$immutable_image"
+            printf -- '- `%s`\n' "$immutable_image" >> "$GITHUB_STEP_SUMMARY"
+          done

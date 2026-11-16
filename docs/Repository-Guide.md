@@ -7,6 +7,7 @@
 | [`docs/UI-Walkthrough.md`](./UI-Walkthrough.md) | **Admin Console UI Walk-Through**: Comprehensive visual tour of delegations, human-in-the-loop approvals, disaster recovery, AI configuration assistant, 5-step onboarding wizard, live endpoint tester, and audit explorer |
 | [`docs/FreeRide-Setup.md`](./FreeRide-Setup.md) | **FreeRide AI Configuration Assistant setup**: configuring `.env`, AI providers (Gemini, OpenRouter, Groq, Cerebras, etc.), models, and health-checked UI enablement |
 | [`docs/Deployment-Guide.md`](./Deployment-Guide.md) | From Docker Hub images to a highly available enterprise deployment (Kubernetes, OIDC against any IdP, SPIFFE mTLS, Postgres/Redis HA, SIEM integration) |
+| [`docs/Container-Image-Security.md`](./Container-Image-Security.md) | Verify Docker Hub image signatures and digests; understand what SBOMs and retrospective provenance establish |
 | [`docs/Observability.md`](./Observability.md) | Configure JSON logs, trace-linked audit records and optional OpenTelemetry traces/metrics with a ready-to-run Compose Collector override or your own Kubernetes collector |
 | [`docs/Observability_With_Jaegar.md`](./Observability_With_Jaegar.md) | **Observability with Jaeger**: run the local Compose stack, follow a real multi-service tool-call trace and capture its waterfall |
 | [`docs/Agent-Identity.md`](./Agent-Identity.md) | How proliferating agents are admitted, what stops name-impersonation, the credential ceremony |

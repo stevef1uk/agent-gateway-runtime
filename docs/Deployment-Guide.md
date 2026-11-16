@@ -8,6 +8,9 @@ For request-correlated logs, distributed traces and metrics, see
 [§6.7 Observability](#67-observability) and the detailed
 [Observability guide](Observability.md).
 
+For digest-pinned image references and how to verify publisher signatures,
+see [Verifying Agent Gateway container images](Container-Image-Security.md).
+
 ---
 
 ## 1. What Agent Gateway is
