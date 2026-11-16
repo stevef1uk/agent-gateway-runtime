@@ -1,6 +1,6 @@
 # Agent Gateway
 
-## AI agents can act. Humans stay in control.
+## Fine-grained delegation. Human approval when it matters.
 
 **Running Agent Gateway images?** See [how to verify image signatures and digests](docs/Container-Image-Security.md).
 
@@ -16,9 +16,9 @@ That creates a practical question:
 
 > **How do you give an AI agent enough freedom to be useful without giving it unlimited authority?**
 
-**Agent Gateway is a control layer between AI agents and the systems they can affect.** A human defines what an agent is allowed to do. The agent works autonomously within those boundaries. When an action needs a human decision—or falls outside those boundaries—the gateway intervenes.
+**Agent Gateway is a control layer between AI agents and the systems they can affect.** Its defining capability is fine-grained delegation: a human scopes an agent's authority by what it can access and do, sets limits and expiry, and decides which actions require approval. The gateway checks each request against that authority, lets permitted work proceed, and holds consequential actions for a human decision.
 
-**The agent gets to work. The human stays in control.**
+**The agent gets scoped authority to work autonomously. People retain control over consequential actions.**
 
 ## The problem
 
@@ -35,7 +35,7 @@ Agent Gateway is designed to enforce those boundaries where an agent tries to us
 
 ## What does Agent Gateway do?
 
-A human gives an agent a **delegation**: a defined set of permissions, limits and an expiry. The gateway checks each request against that authority and makes one of three decisions:
+A human gives an agent a **fine-grained delegation**: what it may access and do, the applicable limits, and when its authority expires. The gateway checks each request against that authority and makes one of three decisions:
 
 - **Allow** — the action is within the agent’s authority and can proceed.
 - **Hold for approval** — the action waits for a human decision before it is executed.
@@ -92,7 +92,7 @@ In local Compose mode, the Console Wizard's `catalog-demo`, `users`, and `refund
 
 You can also explore the live CRM demonstration at [agw.sjfisher.com](https://agw.sjfisher.com) using the [Claude CRM tutorial](docs/Claude-CRM-Tutorial.md). See [Claude integration](docs/Claude-Integration.md) for the wiring details.
 
-Recently added are **aws** , **gcp** and  **azure** branches to this repository which provide the ability to host Agent Gateway on your own Cloud infrastructure.
+Agent Gateway has been successfully deployed on Kubernetes and on AWS, Google Cloud Platform (GCP) and Microsoft Azure. Provider-specific deployment configurations are available for running it on your own cloud infrastructure; see the [deployment guide](docs/Deployment-Guide.md).
 
 ## Use it with your own systems
 
@@ -128,9 +128,9 @@ This README is the introduction. The technical detail lives in the supporting do
 
 ## Project status and feedback
 
-> 🚧 **Early preview — feedback helps shape the direction.**
+> **Successfully deployed on Kubernetes, AWS, GCP and Azure — and continuing to evolve.**
 
-Agent Gateway is published so people can run it, test the approach and help shape what comes next. If you try the demos, integrate it with your own agent or have a different view of how agent authority should work, please [open an issue](https://github.com/stevef1uk/agent-gateway-runtime/issues) or get in touch at **steve@sjfisher.com**.
+The project is actively developed, with deployment experience across Kubernetes and the major cloud platforms. Feedback is still welcome: if you try the demos, integrate it with your own agent or have a different view of how agent authority should work, please [open an issue](https://github.com/stevef1uk/agent-gateway-runtime/issues) or get in touch at **steve@sjfisher.com**.
 
 ## Pricing and licensing
 
