@@ -7,15 +7,7 @@ The public Azure package makes it practical for operators to deploy the
 licensed services with repeatable Bicep provisioning, secure Key Vault secret
 handling, and ownership-aware teardown.
 
-**Sign Azure images:** In GitHub Actions, run **Sign Azure release images** with the `azure` branch selected. It signs the five immutable image digests in `deploy/azure/azure-config.example.json` without rebuilding them. Set repository Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` first. The workflow summary lists the signed references. Verify one with Cosign identity `https://github.com/stevef1uk/agent-gateway-runtime/.github/workflows/sign-azure-images.yml@refs/heads/azure` and issuer `https://token.actions.githubusercontent.com`. This adds image signatures only—not an SBOM or provenance. See [image verification guidance](https://github.com/stevef1uk/agent-gateway-runtime/blob/main/docs/Container-Image-Security.md).
-
-```bash
-IMAGE='<exact immutable image reference from the workflow summary>'
-cosign verify \
-  --certificate-identity 'https://github.com/stevef1uk/agent-gateway-runtime/.github/workflows/sign-azure-images.yml@refs/heads/azure' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  "$IMAGE"
-```
+**Image security:** See [how to verify published image signatures and digests](https://github.com/stevef1uk/agent-gateway-runtime/blob/main/docs/Container-Image-Security.md). The signatures documented there currently cover the four main-branch Docker Hub images, not these Azure-specific images.
 
 ## Get started
 
