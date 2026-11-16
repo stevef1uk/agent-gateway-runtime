@@ -2,15 +2,7 @@
 
 The **`gcp` branch** deploys Agent Gateway into your own Google Cloud Platform (GCP) project using published container images with signed-licence verification. Application source, Terraform, Docker, and a Go compiler are not required for customer deployment. See the [GCP demo guide](docs/GCP-Demos.md) for the configured routes, live weather walkthrough, and compatibility with the `main` demos. The `main` branch contains separate local/container demos.
 
-**Sign GCP images:** In GitHub Actions, run **Sign GCP release images** with the `gcp` branch selected. Enter the exact published image tag used for deployment (do not use `latest`); optionally select Emotion. The workflow resolves and signs the existing image digests without rebuilding them, and lists the signed references in its summary. Set repository Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` first. Verify with Cosign identity `https://github.com/stevef1uk/agent-gateway-runtime/.github/workflows/sign-gcp-images.yml@refs/heads/gcp` and issuer `https://token.actions.githubusercontent.com`. This adds image signatures only—not an SBOM or provenance. See [image verification guidance](https://github.com/stevef1uk/agent-gateway-runtime/blob/main/docs/Container-Image-Security.md).
-
-```bash
-IMAGE='<exact immutable image reference from the workflow summary>'
-cosign verify \
-  --certificate-identity 'https://github.com/stevef1uk/agent-gateway-runtime/.github/workflows/sign-gcp-images.yml@refs/heads/gcp' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  "$IMAGE"
-```
+**Image security:** See [how to verify published image signatures and digests](https://github.com/stevef1uk/agent-gateway-runtime/blob/main/docs/Container-Image-Security.md). The signatures documented there currently cover the four main-branch Docker Hub images, not these GCP-specific images.
 
 ## Target Serverless Architecture (`europe-west9` Paris)
 
