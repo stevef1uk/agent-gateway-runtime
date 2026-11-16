@@ -7,6 +7,8 @@ The public Azure package makes it practical for operators to deploy the
 licensed services with repeatable Bicep provisioning, secure Key Vault secret
 handling, and ownership-aware teardown.
 
+**Image security:** See [how to verify published image signatures and digests](https://github.com/stevef1uk/agent-gateway-runtime/blob/main/docs/Container-Image-Security.md). The signatures documented there currently cover the four main-branch Docker Hub images, not these Azure-specific images.
+
 ## Get started
 
 Follow the [Azure deployment guide](docs/Azure-Deployment-Guide.md) to prepare
