@@ -45,6 +45,10 @@ Decisions are recorded for audit, and a delegation can be revoked so subsequent 
 
 > **Agent Gateway lets AI agents work autonomously within human-defined boundaries, while keeping people in control of consequential actions.**
 
+### Why not just use an existing API gateway, service mesh, or OPA sidecar?
+
+Those tools are valuable infrastructure controls, and Agent Gateway is designed to complement—not replace—them. Agent Gateway adds fine-grained, human-issued delegation for autonomous agents, including time-bounded authority, approval workflows, and revocation. Read [the full explanation](docs/Why-Agent-Gateway.md).
+
 ## 📺 Watch the videos
 
 A quick way to understand the project is to see it working:
@@ -123,6 +127,7 @@ This README is the introduction. The technical detail lives in the supporting do
 - **[Agent identity](docs/Agent-Identity.md)** — agent identity and delegated authority.
 - **[DPoP and RAR](docs/DPoP-and-RAR.md)** — sender-constrained tokens and fine-grained permission downscoping.
 - **[Policy and OPA](docs/Policy-and-OPA.md)** — policy-as-code and policy engine details.
+- **[Why Agent Gateway?](docs/Why-Agent-Gateway.md)** — how it complements API gateways, service meshes and policy engines.
 - **[Deployment guide](docs/Deployment-Guide.md)** — deployment and operational configuration.
 - **[Observability](docs/Observability.md)** — logs, audit and tracing.
 
