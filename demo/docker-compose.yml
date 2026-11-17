@@ -128,6 +128,7 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - UPSTREAM_PATH_PREFIX=/api-catalog-demo
       - UPSTREAM_URL=${CATALOG_DEMO_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
     volumes:
       - ./keys:/keys:ro
@@ -157,6 +158,9 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      # The governed route includes the service name; remove it before
+      # forwarding to Open-Meteo's /v1/search endpoint.
+      - UPSTREAM_PATH_PREFIX=/api-geocoding
       - UPSTREAM_URL=${GEOCODING_API_UPSTREAM_URL:-https://geocoding-api.open-meteo.com}
     volumes:
       - ./keys:/keys:ro
@@ -186,6 +190,7 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - UPSTREAM_PATH_PREFIX=/api-users
       - UPSTREAM_URL=${USERS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
     volumes:
       - ./keys:/keys:ro
@@ -200,7 +205,9 @@ services:
       timeout: 3s
       retries: 5
 
-  # Dedicated API PEP for the Console's JSONPlaceholder Refunds example.
+  # Dedicated API PEP for the Wizard's local demo Refunds endpoint.
+  # demoapi's counting echo accepts /refunds and makes approval execution
+  # visible; JSONPlaceholder does not implement a /refunds resource.
   gateway-api-refunds:
     image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway-api-refunds
@@ -215,7 +222,8 @@ services:
       - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
       - JWT_ISSUER=agent-gateway
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
-      - UPSTREAM_URL=${REFUNDS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
+      - UPSTREAM_PATH_PREFIX=/api-refunds
+      - UPSTREAM_URL=http://demoapi:8090
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/gateway.token:ro
@@ -223,6 +231,7 @@ services:
       authz: { condition: service_started }
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
+      demoapi: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8080/healthz"]
       interval: 5s
@@ -404,6 +413,8 @@ services:
       - CATALOG_DEMO_UPSTREAM_URL=${CATALOG_DEMO_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
       - GEOCODING_API_UPSTREAM_URL=${GEOCODING_API_UPSTREAM_URL:-https://geocoding-api.open-meteo.com}
       - USERS_API_UPSTREAM_URL=${USERS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
+      # The signed Web image's built-in refunds example submits this URL.
+      # Its Compose PEP is separately wired to demoapi for a working /refunds route.
       - REFUNDS_API_UPSTREAM_URL=${REFUNDS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
       - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # forwarded to the gateway's operator endpoints
       - WEB_ADMIN_EMAILS=${WEB_ADMIN_EMAILS:-kilgore@kilgore.trout}  # fixed Dex mock identity; override for another verified email
