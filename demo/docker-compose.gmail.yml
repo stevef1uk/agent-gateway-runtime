@@ -25,7 +25,7 @@ services:
     # No published port, no membership of the agent/default network.
 
   gateway-gmail:
-    image: stevef1uk/agent-gateway-gateway:1.0.34
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     env_file: [./gmail/credentials/operator.env]

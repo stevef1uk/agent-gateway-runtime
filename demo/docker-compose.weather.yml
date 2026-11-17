@@ -2,7 +2,7 @@
 # docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml up -d --wait tokensvc gateway-weather
 services:
   gateway-weather:
-    image: stevef1uk/agent-gateway-gateway:1.0.34
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     ports: ["127.0.0.1:${WEATHER_HOST_PORT:-8087}:8080"]

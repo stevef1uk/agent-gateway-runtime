@@ -44,7 +44,7 @@ digests; do not use the main-release identity to verify them.
 For a public Docker Hub tag, inspect the registry manifest with Docker Buildx:
 
 ```bash
-docker buildx imagetools inspect docker.io/stevef1uk/agent-gateway-gateway:1.0.34
+docker buildx imagetools inspect docker.io/stevef1uk/agent-gateway-gateway:1.0.35
 ```
 
 Use the digest only when it matches the publisher's trusted release record.
@@ -64,7 +64,7 @@ OIDC_ISSUER='https://token.actions.githubusercontent.com'
 cosign verify \
   --certificate-identity "$SIGNER_ID" \
   --certificate-oidc-issuer "$OIDC_ISSUER" \
-  'docker.io/stevef1uk/agent-gateway-gateway@sha256:73cebf00778402e2baa9a381d631a729c821bb96bb3b66370f753fb9f64a4fe4'
+  'docker.io/stevef1uk/agent-gateway-gateway@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47'
 ```
 
 If the publisher instead distributes a public key and its fingerprint through
@@ -80,17 +80,18 @@ signing information before running the image.
 
 ### Currently verified main-release images
 
-The GitHub Actions run [Sign main Docker Hub images, run 2](https://github.com/stevef1uk/agent-gateway/actions/runs/43824810341)
-completed successfully on 2026-11-16. Each digest below was independently
-verified with Cosign against the exact signer identity above. These digests
-are the multi-platform image indexes; use them instead of mutable tags.
+The images below were built and published on 2026-11-17, then signed by the
+GitHub Actions workflow identity above. Each signature was independently
+verified with Cosign. These are multi-platform image-index digests, and the
+Docker Hub `:latest` aliases currently resolve to the same digests. Prefer
+the immutable references below in deployments.
 
 | Image | Version tag | Verified image digest |
 |---|---|---|
-| Authz | `1.0.14` | `docker.io/stevef1uk/agent-gateway-authz@sha256:039f470e5534c2810a92e0b8493d789727231eaa1ad1e2ebedf6f5d039a63cb6` |
-| Token service | `1.0.8` | `docker.io/stevef1uk/agent-gateway-tokensvc@sha256:605cc6fd391e32371f03aa72164a8acf7dbb981092c52ae3218d35eca030fe67` |
-| Gateway | `1.0.34` | `docker.io/stevef1uk/agent-gateway-gateway@sha256:73cebf00778402e2baa9a381d631a729c821bb96bb3b66370f753fb9f64a4fe4` |
-| Web | `1.0.59` | `docker.io/stevef1uk/agent-gateway-web@sha256:05c6248b7ec964fc6ead2d7ac8a32287124ab39a8b5be721cd9e8875c582267e` |
+| Authz | `1.0.15` | `docker.io/stevef1uk/agent-gateway-authz@sha256:b72fde17f16448f1fcafcc2e8a7303eddd98a9074d2ed6190b100e0778a2582c` |
+| Token service | `1.0.9` | `docker.io/stevef1uk/agent-gateway-tokensvc@sha256:70f93246149afd85a71c4c63d7e043ecae7217634c2f961faa0834a5c513a748` |
+| Gateway | `1.0.35` | `docker.io/stevef1uk/agent-gateway-gateway@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47` |
+| Web | `1.0.60` | `docker.io/stevef1uk/agent-gateway-web@sha256:c9def2de9387fd9156fedcce81bca7b64decaafeb378a5d057b56f090ab04c58` |
 
 To re-verify all four, run:
 
@@ -99,10 +100,10 @@ set -euo pipefail
 SIGNER_ID='https://github.com/stevef1uk/agent-gateway/.github/workflows/sign-main-images.yml@refs/heads/main'
 OIDC_ISSUER='https://token.actions.githubusercontent.com'
 images=(
-  docker.io/stevef1uk/agent-gateway-authz@sha256:039f470e5534c2810a92e0b8493d789727231eaa1ad1e2ebedf6f5d039a63cb6
-  docker.io/stevef1uk/agent-gateway-tokensvc@sha256:605cc6fd391e32371f03aa72164a8acf7dbb981092c52ae3218d35eca030fe67
-  docker.io/stevef1uk/agent-gateway-gateway@sha256:73cebf00778402e2baa9a381d631a729c821bb96bb3b66370f753fb9f64a4fe4
-  docker.io/stevef1uk/agent-gateway-web@sha256:05c6248b7ec964fc6ead2d7ac8a32287124ab39a8b5be721cd9e8875c582267e
+  docker.io/stevef1uk/agent-gateway-authz@sha256:b72fde17f16448f1fcafcc2e8a7303eddd98a9074d2ed6190b100e0778a2582c
+  docker.io/stevef1uk/agent-gateway-tokensvc@sha256:70f93246149afd85a71c4c63d7e043ecae7217634c2f961faa0834a5c513a748
+  docker.io/stevef1uk/agent-gateway-gateway@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+  docker.io/stevef1uk/agent-gateway-web@sha256:c9def2de9387fd9156fedcce81bca7b64decaafeb378a5d057b56f090ab04c58
 )
 
 for image in "${images[@]}"; do
@@ -148,37 +149,24 @@ for image in "${images[@]}"; do
 done
 ```
 
-These are signatures only, not SBOM or provenance attestations.
-
-## 3. Verify optional attestations
-
-An SBOM or provenance statement is a separate signed attestation attached to
-an image digest. Verify it against the same trusted signer information and
-the exact digest:
-
-```bash
-cosign verify-attestation \
-  --certificate-identity "$SIGNER_ID" \
-  --certificate-oidc-issuer "$OIDC_ISSUER" \
-  --type spdxjson \
-  "$IMAGE"
-```
-
-For SLSA provenance v1, use:
+The four main images also contain BuildKit-generated SPDX SBOM and SLSA
+provenance attestation manifests. They were emitted during the multi-platform
+build with `--sbom=true` and `--provenance=mode=max`. The Cosign signatures
+above authenticate the complete OCI index digest, including its references to
+the attestation manifests. These BuildKit attestations are not separate
+Cosign-signed statements: `cosign verify-attestation` does not verify them
+and will report no matching attestations. Inspect the index descriptors with:
 
 ```bash
-cosign verify-attestation \
-  --certificate-identity "$SIGNER_ID" \
-  --certificate-oidc-issuer "$OIDC_ISSUER" \
-  --type https://slsa.dev/provenance/v1 \
-  "$IMAGE"
+docker buildx imagetools inspect \
+  docker.io/stevef1uk/agent-gateway-gateway@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
 ```
 
-After verification, inspect the statement's subject digest and ensure it
-matches the image you intend to run. Check the source repository, resolved
-commit, builder and build type in provenance. A provenance statement added
-after a build is a signed publisher assertion, not independently observed
-build evidence and not proof of a SLSA level.
+Look for `unknown/unknown` attestation manifests and the
+`vnd.docker.reference.type: attestation-manifest` annotation. Do not treat
+these attestations as independent build verification or proof of a SLSA
+level; provenance describes the local BuildKit build and is only as trustworthy
+as the publisher and build environment.
 
 ## Runtime keys are separate
 

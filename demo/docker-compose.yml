@@ -11,7 +11,7 @@
 
 services:
   authz:
-    image: stevef1uk/agent-gateway-authz:1.0.14  # Access-control security patch
+    image: stevef1uk/agent-gateway-authz:1.0.15@sha256:b72fde17f16448f1fcafcc2e8a7303eddd98a9074d2ed6190b100e0778a2582c
     container_name: agent-gateway-authz
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -40,7 +40,7 @@ services:
       retries: 5
 
   tokensvc:
-    image: stevef1uk/agent-gateway-tokensvc:1.0.8  # Access-control security patch
+    image: stevef1uk/agent-gateway-tokensvc:1.0.9@sha256:70f93246149afd85a71c4c63d7e043ecae7217634c2f961faa0834a5c513a748
     container_name: agent-gateway-tokensvc
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -61,7 +61,7 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.34  # Access-control security patch
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -115,7 +115,7 @@ services:
   # Dedicated API PEP for the Console's catalog-demo example. Local Compose
   # does not dynamically provision PEPs for arbitrary Wizard entries.
   gateway-api-catalog-demo:
-    image: stevef1uk/agent-gateway-gateway:1.0.34
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway-api-catalog-demo
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -144,7 +144,7 @@ services:
 
   # Dedicated API PEP for the Console's Open-Meteo Geocoding example.
   gateway-api-geocoding:
-    image: stevef1uk/agent-gateway-gateway:1.0.34
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway-api-geocoding
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -173,7 +173,7 @@ services:
 
   # Dedicated API PEP for the Console's JSONPlaceholder Users example.
   gateway-api-users:
-    image: stevef1uk/agent-gateway-gateway:1.0.34
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway-api-users
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -202,7 +202,7 @@ services:
 
   # Dedicated API PEP for the Console's JSONPlaceholder Refunds example.
   gateway-api-refunds:
-    image: stevef1uk/agent-gateway-gateway:1.0.34
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway-api-refunds
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -232,7 +232,7 @@ services:
   # Demo 9 — CRM MCP server PEP. UPSTREAM_URL is per-instance,
   # so MCP CRM traffic gets its own PEP here: /mcp in, mcpsrv:8091 out.
   gateway-mcp:
-    image: stevef1uk/agent-gateway-gateway:1.0.34  # Access-control security patch
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway-mcp
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -287,7 +287,7 @@ services:
 
   # Dedicated Gateway PEP fronting the Emotion Detection MCP server
   gateway-mcp-emotion:
-    image: stevef1uk/agent-gateway-gateway:1.0.34
+    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
     container_name: agent-gateway-gateway-mcp-emotion
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -385,7 +385,7 @@ services:
       retries: 5
 
   web:
-    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.59}  # All built-in API Wizard examples
+    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.60@sha256:c9def2de9387fd9156fedcce81bca7b64decaafeb378a5d057b56f090ab04c58}  # All built-in API Wizard examples
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
