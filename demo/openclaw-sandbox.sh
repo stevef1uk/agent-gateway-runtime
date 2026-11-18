@@ -185,11 +185,20 @@ ensure_sandbox() {
 }
 
 configure() {
-  ensure_sandbox
   if [ -z "$PROVIDER_API_KEY" ]; then
     bad "no API key. Set NVIDIA_API_KEY or PROVIDER_API_KEY and rerun 'configure'."
     exit 1
   fi
+  # SecretRef env values are resolved by the long-running OpenClaw gateway
+  # process, not by the `openclaw agent` CLI process. A ready sandbox may have
+  # been created before the current key was added/changed, so recreate it to
+  # inject the current value into the gateway process environment.
+  if sandbox_exists; then
+    step "Refresh the sandbox provider environment"
+    line "recreating '$SANDBOX_NAME' so the OpenClaw gateway receives the current API key"
+    openshell sandbox delete "$SANDBOX_NAME" >/dev/null 2>&1 || true
+  fi
+  ensure_sandbox
   step "Configure the model provider inside the sandbox"
 
   # Write the OpenClaw config directly rather than via `openclaw config set`:
@@ -630,10 +639,8 @@ down() {
 }
 
 restart() {
-  down
-  ensure_sandbox
-  status
   configure
+  status
 }
 
 case "${1:-}" in
@@ -655,7 +662,7 @@ case "${1:-}" in
   up                        Build + launch the sandbox (OpenClaw gateway)
   stack-up                  Start the Agent Gateway stack + set this machine's
                             Basic-auth source allowlist (PROXY_BASIC_AUTH_CIDRS)
-  configure                 Set the model provider + allow egress (needs a key)
+  configure                 Recreate sandbox with current provider key, configure model + egress
   chat "message"            Send one message to the agent
   chat-gateway "message"    Same, but layers the Agent Gateway (stack, allowlist,
                             supervisor credential) first

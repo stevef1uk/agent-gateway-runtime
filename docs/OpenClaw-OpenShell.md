@@ -20,7 +20,9 @@ as that command.
 
 The key is read from `demo/.env` (gitignored). You can also export
 `NVIDIA_API_KEY` directly, or point at any OpenAI-compatible endpoint with
-`PROVIDER_BASE_URL` / `PROVIDER_MODEL`.
+`PROVIDER_BASE_URL` / `PROVIDER_MODEL`. The configure step injects it into the
+sandbox environment because the OpenClaw gateway process resolves the env
+SecretRef there. Treat the key as available to the sandboxed agent.
 
 ### Installing OpenShell
 
@@ -233,8 +235,9 @@ echo 'NVIDIA_API_KEY=nvapi-...' >> demo/.env
 ```
 
 Treat the key like a password: `demo/.env` is gitignored, so it never reaches
-version control, and the sandbox only ever sees the *variable name* — the
-secret itself stays on your machine and in your environment.
+version control. The sandbox receives the key in its environment, where the
+OpenClaw gateway resolves the SecretRef; the sandboxed agent may also be able
+to read it. Use only a trusted demo agent, not a production credential.
 
 ## Quick start
 
@@ -245,9 +248,16 @@ secret itself stays on your machine and in your environment.
 > `docker compose` below reads as `podman compose`.
 
 ```bash
-# everything: build the image, create the sandbox, configure the provider, chat
+# everything: build the image, create/recreate the sandbox with the provider key,
+# configure the provider, chat
 make openclaw-demo
 ```
+
+`make openclaw-configure` recreates an existing sandbox so the running Gateway
+receives the current key from `demo/.env`; this replaces the sandbox and its
+local OpenClaw state. Run it again whenever you change the provider key or
+model settings. `make openclaw-up` alone reuses an already-ready sandbox and
+does not refresh its process environment.
 
 Expected result — a reply from the agent:
 
@@ -263,8 +273,8 @@ Or run the steps individually:
 
 ```bash
 make openclaw-image       # build the image
-make openclaw-up          # create the sandbox, start the gateway
-make openclaw-configure   # provider + egress allowlist
+make openclaw-up          # optionally create/check the sandbox first
+make openclaw-configure   # recreate with current key, then provider + egress allowlist
 make openclaw-chat MSG="hello"
 make openclaw-status      # sandbox + gateway health
 make openclaw-shell       # interactive shell inside the sandbox
@@ -371,7 +381,7 @@ macOS with Docker Desktop.
 | Console sign-in fails with `Bad Request — Unregistered redirect_uri` | this machine's URI is not in dex's allow-list. Run `./demo/refresh-dex-redirects.sh` (adds the machine's LAN IPv4s + recreates dex; bring-up paths run it automatically). From a *foreign* device only: `DEX_EXTRA_IPS="<that ip>" ./demo/refresh-dex-redirects.sh`. On k3s edit the `dex-config` ConfigMap in [`k3s/agentgw.yaml`](../k3s/agentgw.yaml). |
 | `sandbox create` returns immediately, sandbox phase `Error` | the gateway exited — run `openshell logs <name>`; usually a missing `--allow-unconfigured` |
 | `fts5: error creating shadow table … unable to open database file` | `SQLITE_TMPDIR=/tmp` is missing from the create `--env` list |
-| `Secret owner provider:… is unavailable` | `PROVIDER_API_KEY` is not in the gateway process env — recreate via `make openclaw-up` with `demo/.env` present |
+| `Secret owner provider:… is unavailable (secret reference was not found)` | The env SecretRef could not find `PROVIDER_API_KEY` in the running OpenClaw Gateway process. Even when `NVIDIA_API_KEY` is set in host `demo/.env`, an already-ready sandbox may have been created before it was set/changed. Run `make openclaw-configure` (or `make openclaw-restart`) to recreate the sandbox and inject the current key; this replaces the sandbox and its local OpenClaw state. |
 | `candidate policy introduces protocol: tcp` | the egress rule used a `::tcp` suffix — use `host:443` |
 | `LLM request failed: network connection error` | egress allowlist missing the provider host — rerun `make openclaw-configure` |
 | `HTTP 410` / `404 … Not found for account` | the model is EOL or not enabled on your key (see *Choosing a model*) |

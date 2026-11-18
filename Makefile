@@ -126,7 +126,7 @@ openclaw-up: ## Create the OpenShell sandbox and start the OpenClaw gateway
 	$(OPENCLAW_SH) up
 
 .PHONY: openclaw-configure
-openclaw-configure: ## Configure the model provider + egress allowlist inside the sandbox
+openclaw-configure: ## Recreate sandbox with current provider key, then configure model + egress
 	$(OPENCLAW_SH) configure
 
 .PHONY: openclaw-chat
@@ -158,7 +158,8 @@ openclaw-down: ## Delete the OpenShell sandbox
 	$(OPENCLAW_SH) down
 
 .PHONY: openclaw-demo
-openclaw-demo: openclaw-image openclaw-up openclaw-configure ## Full path: image → sandbox → provider → chat
+openclaw-demo: openclaw-image ## Full path: image → recreate/configure sandbox → chat
+	$(OPENCLAW_SH) configure
 	$(OPENCLAW_SH) chat "Reply with exactly: hello from the sandbox"
 
 .PHONY: human-delegation-demo
