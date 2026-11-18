@@ -11,7 +11,9 @@
 # ============================================================================
 
 set -euo pipefail
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$DEMO_DIR"
 
 RED=''; GRN=''; YLW=''; BLU=''; BLD=''; RST=''
 if [ -t 1 ]; then
@@ -25,10 +27,11 @@ warn() { printf "  ${YLW}• %s${RST}\n" "$*"; }
 line() { printf "  %s\n" "$*"; }
 
 # Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+source "$DEMO_DIR/lib/engine.sh"
 
 PROXY_URL="http://localhost:8088"
-ADMIN_TOKEN="${ADMIN_TOKEN:-agent-gateway-demo-admin}"
+source "$DEMO_DIR/lib/admin-token.sh"
+load_admin_token
 # Published PEP port: GATEWAY_HOST_PORT (env or .env) overrides 8080, e.g. when
 # a local OpenShell gateway already owns :8080.
 if [ -z "${GATEWAY_HOST_PORT:-}" ] && [ -f .env ]; then
@@ -58,33 +61,15 @@ else
 fi
 [ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
 
-# --- 1. SSO sign-in ----------------------------------------------------------
-step "Step 2 — sign in at the identity provider"
-DEX="http://localhost:5556"
-fixdex() { sed 's|//dex:5556|//localhost:5556|'; }
-JAR=$(mktemp)
-ID_TOKEN=""
-LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-CODE=""
-for _ in 1 2 3 4 5 6; do
-  NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //' | fixdex)
-  [ -z "$NX" ] && break
-  case "$NX" in
-    *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break;;
-    /*) LOC="$DEX$NX" ;;
-    *) LOC="$NX" ;;
-  esac
-done
-if [ -n "$CODE" ]; then
-  ID_TOKEN=$(curl -s -X POST "$DEX/dex/token" \
-    -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null || true)
-fi
+# --- 1. sign in to the local Dex fixture ------------------------------------
+step "Step 2 — sign in to the local demo identity provider"
+source "$DEMO_DIR/local-demo-auth.sh"
+ID_TOKEN=$(local_demo_id_token) || true
 if [ -n "${ID_TOKEN:-}" ]; then
   okk "SSO sign-in succeeded; human identity verified"
   APPROVER=$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))" 2>/dev/null || true)
 else
-  bad "could not complete SSO sign-in"
+  bad "could not complete local demo sign-in"
   exit 1
 fi
 

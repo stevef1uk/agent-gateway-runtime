@@ -14,7 +14,11 @@
 # Assert the audit trail for this delegation: holds, denied retries and executed
 # calls, with approval/approver correlation. Decisions alone do not execute calls.
 #
-# Prereqs:   cd demo && APPROVAL_TTL=10s docker compose up -d
+# Prereqs:   a gateway image that implements APPROVAL_TTL (the local
+#            security-test image in this checkout currently ignores it).
+#            cd demo && DEX_ISSUER_URL=http://dex:5556/dex APPROVAL_TTL=10s \
+#              docker compose -f docker-compose.yml -f docker-compose.egress.yml \
+#                -f docker-compose.opa.yml up -d
 # Usage:     ./demo/approval-edge-cases-demo.sh
 # ============================================================================
 set -euo pipefail
@@ -39,7 +43,8 @@ AUTHZ=${AUTHZ:-http://localhost:8081}
 TS=${TS:-http://localhost:8082}
 WEB=${WEB:-http://localhost:8083}
 DEX=${DEX:-http://localhost:5556}
-ADMIN_TOKEN=${ADMIN_TOKEN:-agent-gateway-demo-admin}
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/admin-token.sh"
+load_admin_token
 APPROVAL_WAIT=${APPROVAL_WAIT:-60}
 AGENT_ID=${AGENT_ID:-rnd-agent-1}
 
@@ -58,26 +63,11 @@ if ! curl -sf --max-time 5 "$DEX/dex/.well-known/openid-configuration" >/dev/nul
 fi
 okk "gateway · authz · tokensvc · console · dex all healthy"
 
-# --- 1. SSO sign-in (Dex mock connector) → verified subject ------------------
-step "1. SSO sign-in (mock connector) → verified subject"
-JAR=$(mktemp)
-trap 'rm -f "$JAR"' EXIT
-LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-CODE=""
-for _ in 1 2 3 4 5 6; do
-  NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //' | fixdex)
-  [ -z "$NX" ] && break
-  case "$NX" in
-    *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
-    /*)      LOC="$DEX$NX" ;;
-    *)       LOC="$NX" ;;
-  esac
-done
-[ -n "$CODE" ] || fail "SSO redirect chain did not produce a code"
-ID_TOKEN=$(curl -s -X POST "$DEX/dex/token" \
-  -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null || true)
-[ -n "$ID_TOKEN" ] || fail "could not exchange code for ID token"
+# --- 1. local Dex sign-in → verified subject --------------------------------
+step "1. Sign in to the local demo identity provider"
+source "$(dirname "${BASH_SOURCE[0]}")/local-demo-auth.sh"
+ID_TOKEN=$(local_demo_id_token "$DEX/dex/token") || true
+[ -n "$ID_TOKEN" ] || fail "local Dex sign-in failed"
 SUBJECT=$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))" 2>/dev/null || true)
 [ -n "$SUBJECT" ] || fail "no verified subject in ID token"
 okk "SSO sign-in succeeded; subject = $SUBJECT"

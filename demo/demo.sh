@@ -16,8 +16,12 @@ set -euo pipefail
 DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$DEMO_DIR"
 
+bash "$DEMO_DIR/ensure-secrets.sh"
+
 # Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
 source "$DEMO_DIR/lib/engine.sh"
+source "$DEMO_DIR/lib/admin-token.sh"
+load_admin_token
 
 RED=''; GRN=''; YLW=''; BLU=''; BLD=''; RST=''
 if [ -t 1 ]; then
@@ -69,36 +73,16 @@ else
 fi
 [ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
 
-# --- 1. sign in via SSO (Dex mock connector, one click) ----------------------
-step "Step 2 — sign in at the identity provider (SSO)"
-DEX="http://localhost:5556"
-fixdex() { sed 's|//dex:5556|//localhost:5556|'; }
-JAR=$(mktemp)
-# Follow the OIDC redirect chain (mock connector = no credentials):
-#   /dex/auth → /dex/auth/mock → /dex/callback?state → client callback with code
-ID_TOKEN=""
-LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-CODE=""
-for _ in 1 2 3 4 5 6; do
-  NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //' | fixdex)
-  [ -z "$NX" ] && break
-  case "$NX" in
-    *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break;;
-    /*) LOC="$DEX$NX" ;;
-    *)  LOC="$NX" ;;
-  esac
-done
-if [ -n "$CODE" ]; then
-  ID_TOKEN=$(curl -s -X POST "$DEX/dex/token" \
-    -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null || true)
-fi
+# --- 1. sign in to the loopback-only local Dex fixture ----------------------
+step "Step 2 — sign in to the local demo identity provider"
+source "$(dirname "${BASH_SOURCE[0]}")/local-demo-auth.sh"
+ID_TOKEN=$(local_demo_id_token) || true
 APPROVER=""
 if [ -n "${ID_TOKEN:-}" ]; then
   okk "SSO sign-in succeeded; human identity verified (ID token, ${#ID_TOKEN} chars)"
   APPROVER=$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))" 2>/dev/null || true)
 else
-  bad "could not complete SSO sign-in — is Dex running with the mock connector?"
+  bad "could not complete local demo sign-in — check Dex and the demo fixture credentials"
   warn "try:  open http://localhost:8083/oidc/login"
   exit 1
 fi
@@ -166,7 +150,7 @@ step "Step 7 — you decide: approve the €250 order"
 # the SSO subject the delegation was created with (APPROVAL_ENFORCE_APPROVER).
 DEC=$(curl -s -o /tmp/demo_appr.json -w "%{http_code}" -X POST $GW/v1/approvals/ \
   -H "Content-Type: application/json" \
-  -H "X-Admin-Token: ${ADMIN_TOKEN:-agent-gateway-demo-admin}" \
+  -H "X-Admin-Token: $ADMIN_TOKEN" \
   -d "{\"approval_id\":\"$APPROVAL_ID\",\"approver_id\":\"$APPROVER\",\"approved\":true}")
 if [ "$DEC" = "200" ]; then
   okk "approval granted (single-use, action-specific)"

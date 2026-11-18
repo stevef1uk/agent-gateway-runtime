@@ -53,6 +53,9 @@ NVIDIA_API_KEY=nvapi-...
 # 6. Cloudflare Workers AI
 CLOUDFLARE_ACCOUNT_ID=your-account-id
 CLOUDFLARE_API_TOKEN=your-api-token
+
+# 7. Ollama Cloud (leave unset when using a local Ollama server)
+OLLAMA_API_KEY=your-ollama-cloud-api-key
 ```
 
 ### Step C: Configure Target Model (Optional)

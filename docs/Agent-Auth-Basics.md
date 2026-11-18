@@ -161,10 +161,11 @@ human (delegating user) must prove who they are with an OIDC ID token.
 verifies it against the tenant's IdP (JWKS) and binds the delegation to
 the token's `sub` claim.
 
-On the local demo stack this happens automatically through Dex (the mock
-connector needs no credentials), which is why `demo.sh` and
-`kill-switch-demo.sh` sign you in transparently. On a remote tenant
-(preprod, k3s, cloud) you obtain it yourself:
+On the local demo stack, `demo.sh` and `kill-switch-demo.sh` sign in through
+the loopback-only Dex password fixture. This shared account is intentionally
+insecure and must not be used for a deployed or pen-test stack. On a remote
+tenant (preprod, k3s, cloud) you obtain the ID token through its configured
+identity provider:
 
 | Method | How |
 |--------|-----|

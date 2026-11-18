@@ -113,9 +113,21 @@ deny_reasons contains msg if {
 	some key
 	l := input.limits[key]
 	key == "max_count"
-	input.action.context.count != null
-	num(input.action.context.count) > num(l.max)
-	msg := sprintf("count %v exceeds limit %v", [input.action.context.count, l.max])
+	"count" in object.keys(input.action.context)
+	count := input.action.context.count
+	not valid_count(count)
+	msg := "count must be a non-negative integer"
+}
+
+deny_reasons contains msg if {
+	some key
+	l := input.limits[key]
+	key == "max_count"
+	"count" in object.keys(input.action.context)
+	count := input.action.context.count
+	valid_count(count)
+	count > l.max
+	msg := sprintf("count %v exceeds limit %v", [count, l.max])
 }
 
 # ---------------------------------------------------------------------------
@@ -136,9 +148,35 @@ extras_match(want, got) if {
 }
 
 extras_mismatch(want, got) if {
-	some k
-	v := want[k]
-	not got[k] == v
+	some k, _ in want
+	not k in object.keys(got)
+}
+
+extras_mismatch(want, got) if {
+	some k, v in want
+	not extra_value_matches(v, got[k])
+}
+
+extra_value_matches(want, got) if {
+	want == got
+}
+
+extra_value_matches(want, got) if {
+	is_string(want)
+	is_number(got)
+	to_number(want) == got
+}
+
+extra_value_matches(want, got) if {
+	is_string(want)
+	is_string(got)
+	to_number(want) == to_number(got)
+}
+
+extra_value_matches(want, got) if {
+	is_number(want)
+	is_string(got)
+	to_number(got) == want
 }
 
 require_approval if {
@@ -160,8 +198,19 @@ spend_breached if {
 	some key
 	l := input.limits[key]
 	key == "spend_per_order"
-	input.action.context.amount != null
-	num(input.action.context.amount) > num(l.max)
+	"amount" in object.keys(input.action.context)
+	amount := input.action.context.amount
+	not valid_amount(amount)
+}
+
+spend_breached if {
+	some key
+	l := input.limits[key]
+	key == "spend_per_order"
+	"amount" in object.keys(input.action.context)
+	amount := input.action.context.amount
+	valid_amount(amount)
+	amount > l.max
 }
 
 require_approval if {
@@ -173,18 +222,34 @@ assessment_reason := msg if {
 	some key
 	l := input.limits[key]
 	key == "spend_per_order"
+	"amount" in object.keys(input.action.context)
+	amount := input.action.context.amount
+	not valid_amount(amount)
+	msg := "amount is invalid; approval required"
+}
+
+assessment_reason := msg if {
+	spend_breached
+	some key
+	l := input.limits[key]
+	key == "spend_per_order"
+	"amount" in object.keys(input.action.context)
+	amount := input.action.context.amount
+	valid_amount(amount)
 	msg := sprintf("amount %v exceeds auto-approve limit %v %s; approval required",
-		[input.action.context.amount, l.max, l.unit])
+		[amount, l.max, l.unit])
 }
 
-# numeric coercion: JSON numbers stay numbers, strings convert
-num(x) := x if {
+valid_count(x) if {
 	is_number(x)
+	x >= 0
+	floor(x) == x
 }
 
-num(x) := n if {
-	is_string(x)
-	n := to_number(x)
+valid_amount(x) if {
+	is_number(x)
+	x >= 0
+	floor(x) == x
 }
 
 # ---------------------------------------------------------------------------

@@ -94,29 +94,11 @@ docker compose up -d
 
 Then open the guided demo at [http://localhost:8083/demo.html](http://localhost:8083/demo.html).
 
-The default Compose file uses signed, digest-pinned main images for the four
-Agent Gateway services and a shared local Dex test identity. It pulls those
-images when they are not present locally; it does not configure Google
-sign-in. To test Google login, the deployment guide explains how to select
-either the exact local images used by STRIX or the current published,
-signature-verified image digests, and how to configure the hardened Dex overlay:
-[Local Google IdP test](docs/Deployment-Guide.md#local-google-idp-test).
-An existing `demo/.env` can override these image defaults; use the pinned
-values from [demo/.env.example](demo/.env.example) when you want the published
-release rather than local test images.
-Google sign-in is optional; the ordinary demo does not need a public tunnel.
-The local fixture login is `alice@example.com` / `password` and is insecure,
-shared demo-only authentication. These explicit overrides matter if your
-gitignored `demo/.env` still contains external-IdP values: use the hardened
-overlay and its verified admin allowlist for Google/Microsoft instead of
-mixing that configuration with the local Dex fixture.
-The Google test uses a temporary third-party Cloudflare tunnel container to
-expose Dex for the OAuth callback, so review the security and image-trust
-notes in that guide before running it and stop the tunnel when finished.
-The published digests are signed, but are not the images used in that STRIX
-run. The scripted `./demo.sh` signs in with the local Dex fixture, so do not
-run it as part of the Google IdP procedure; use the browser console to test
-Google sign-in.
+The local demo signs in as `alice@example.com` with password `password`.
+These shared credentials are intentionally insecure: use them only for a
+loopback demo, never for production or security testing. For Google or
+Microsoft Entra ID sign-in and the hardened setup, see the
+[deployment guide](docs/Deployment-Guide.md#choose-an-authentication-mode).
 
 The walkthrough covers sign-in, delegation, agent activity, a held action, a human decision, revocation and audit. For the full catalogue—including MCP protection, egress, DPoP/RAR, the kill switch, public API and Gmail examples—see **[the demos guide](docs/Demos.md)**.
 

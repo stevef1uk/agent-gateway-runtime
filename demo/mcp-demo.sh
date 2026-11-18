@@ -24,13 +24,14 @@
 #      APPROVAL_WAIT seconds (default 300) for your console/Telegram decision,
 #      defaulting to DENY if nobody answers.
 #
-# Prereqs:  docker compose -f docker-compose.yml \
-#                  -f docker-compose.egress.yml up -d
+# Prereqs:  DEX_ISSUER_URL=http://dex:5556/dex docker compose \
+#           -f docker-compose.yml -f docker-compose.egress.yml \
+#           -f docker-compose.opa.yml up -d
 #           mcpsrv + gateway-mcp come up with the stack (compose
 #           builds demo/mcp locally on first use).
 #
 # Usage:    ./mcp-demo.sh                 # A + B, then C and D if the sandbox exists
-#           ./mcp-demo.sh --no-openclaw   # skip C and D's sandbox legs (CI-safe)
+#           ./mcp-demo.sh --no-openclaw --no-human  # no sandbox or approval wait
 #           ./mcp-demo.sh --no-human      # Part D: the scripted human APPROVES the delete
 #           ./mcp-demo.sh --keep-crm      # do not reset the server's CRM at start
 # ============================================================================
@@ -65,7 +66,8 @@ MCP_PORT=${MCP_HOST_PORT:-8091}
 MCP=${MCP:-http://localhost:$MCP_PORT}
 AUTHZ=${AUTHZ:-http://localhost:8081}
 TS=${TS:-http://localhost:8082}
-ADMIN_TOKEN=${ADMIN_TOKEN:-agent-gateway-demo-admin}
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/admin-token.sh"
+load_admin_token
 AGENT_TIMEOUT=${AGENT_TIMEOUT:-240}
 
 if [ -f "$DEMO_DIR/.env" ]; then set -a; . "$DEMO_DIR/.env"; set +a; fi
@@ -124,26 +126,10 @@ count_by_agent() { # $1=agent_id substring
         AND agent_id LIKE '%$1%';" 2>/dev/null | tr -d ' \n'
 }
 
-# SSO sign-in (Dex mock connector) → id_token. Same dance as demo.sh.
+# Local Dex sign-in → ID token. Same fixture as demo.sh.
 sso_id_token() {
-  local DEX="http://localhost:5556" JAR LOC NX CODE
-  JAR=$(mktemp)
-  LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-  CODE=""
-  for _ in 1 2 3 4 5 6; do
-    NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" \
-      | grep -i '^location' | head -1 | tr -d '\r' \
-      | sed 's/^Location: //; s|//dex:5556|//localhost:5556|')
-    [ -z "$NX" ] && break
-    case "$NX" in
-      *code=*) CODE=$(printf '%s' "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
-      /*) LOC="$DEX$NX" ;;
-      *)  LOC="$NX" ;;
-    esac
-  done
-  curl -s -X POST "$DEX/dex/token" \
-    -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null
+  source "$(dirname "${BASH_SOURCE[0]}")/local-demo-auth.sh"
+  local_demo_id_token
 }
 
 # Every sandbox exec gets a HOST-side hard timeout (same reasoning as
@@ -222,7 +208,8 @@ ID_TOKEN=$(sso_id_token)
   || { bad "SSO failed (Dex on :5556)"; return 1; }
 
 DELEG=$(curl -s -X POST "$AUTHZ/v1/delegations/" -H 'Content-Type: application/json' \
-  -d "{\"agent_id\":\"openclaw-crm-agent\",\"resources\":[\"/mcp*\"],\"actions\":[\"read\",\"create\"],\
+  -d "{\"agent_id\":\"openclaw-crm-agent\",\"resources\":[\"/mcp*\"],\
+\"actions\":[\"initialize\",\"list\",\"add_customer\",\"lookup_customer\"],\
 \"expires_in_seconds\":900,\"id_token\":\"$ID_TOKEN\"}")
 DELEG_ID=$(printf '%s' "$DELEG" | python3 -c "import sys,json; print(json.load(sys.stdin)['delegation']['id'])" 2>/dev/null || true)
 SECRET=$(printf '%s' "$DELEG" | python3 -c "import sys,json; print(json.load(sys.stdin).get('agent_secret',''))" 2>/dev/null || true)
@@ -230,7 +217,7 @@ SECRET=$(printf '%s' "$DELEG" | python3 -c "import sys,json; print(json.load(sys
   && okk "delegation $DELEG_ID — scope /mcp* per-tool tools, 15 min, bound to the SSO subject" \
   || { bad "delegation failed: $(printf '%s' "$DELEG" | head -c 200)"; return 1; }
 line "the gateway parses the JSON-RPC body: action = the invoked TOOL name"
-line "per call (per-tool enforcement); discovery (initialize / tools/list) is authorized too"
+line "per call (per-tool enforcement); initialize/list discovery and the two delegated tools are authorized"
 
 TOKEN=$(curl -s -X POST "$TS/token" -H 'Content-Type: application/json' \
   -d "{\"delegation_id\":\"$DELEG_ID\",\"ttl_seconds\":900,\"agent_secret\":\"$SECRET\"}" \
@@ -255,7 +242,7 @@ OUT=$(mcp_call "$GW_MCP" '{"jsonrpc":"2.0","id":4,"method":"tools/call","params"
 
 ROWS=$(audit_rows 4)
 printf '%s' "$ROWS" | grep -q "openclaw-crm-agent" \
-  && okk "audit trail rows for agent openclaw-crm-agent (resource /mcp, action create, outcome allow):" \
+  && okk "audit trail rows for agent openclaw-crm-agent (resource /mcp, per-tool action, outcome allow):" \
   || warn "no audit rows found?!!"
 printf '%s' "$ROWS" | grep . | head -4 | while IFS= read -r r; do line "  $r"; done
 
@@ -361,7 +348,8 @@ find_sandbox_route || return 1
 
 # --- 2. the agent's MCP delegation -------------------------------------------
 DELEG=$(curl -s -X POST "$AUTHZ/v1/delegations/" -H 'Content-Type: application/json' \
-  -d "{\"agent_id\":\"openclaw-crm-agent\",\"resources\":[\"/mcp*\"],\"actions\":[\"read\",\"create\"],\
+  -d "{\"agent_id\":\"openclaw-crm-agent\",\"resources\":[\"/mcp*\"],\
+\"actions\":[\"initialize\",\"list\",\"add_customer\",\"lookup_customer\"],\
 \"expires_in_seconds\":1800,\"id_token\":\"$ID_TOKEN\"}")
 DELEG_ID=$(printf '%s' "$DELEG" | python3 -c "import sys,json; print(json.load(sys.stdin)['delegation']['id'])" 2>/dev/null || true)
 SECRET=$(printf '%s' "$DELEG" | python3 -c "import sys,json; print(json.load(sys.stdin).get('agent_secret',''))" 2>/dev/null || true)
@@ -574,7 +562,8 @@ ID_TOKEN=$(sso_id_token)
 [ -n "$ID_TOKEN" ] || { bad "SSO failed (Dex on :5556)"; return 1; }
 APPROVER=$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))" 2>/dev/null)
 DELEG=$(curl -s -X POST "$AUTHZ/v1/delegations/" -H 'Content-Type: application/json' \
-  -d "{\"agent_id\":\"openclaw-crm-agent\",\"resources\":[\"/mcp*\",\"/customers*\"],\"actions\":[\"read\",\"create\",\"delete\"],\
+  -d "{\"agent_id\":\"openclaw-crm-agent\",\"resources\":[\"/mcp*\",\"/customers*\"],\
+\"actions\":[\"initialize\",\"list\",\"add_customer\",\"lookup_customer\",\"delete\"],\
 \"expires_in_seconds\":1800,\"id_token\":\"$ID_TOKEN\",\
 \"approval_rules\":[{\"when\":{\"resource_pattern\":\"/customers*\",\"action_pattern\":\"delete\"},\"require\":true,\
 \"rationale\":\"Deleting customer data: verify this is the right record before approving\"}]}")
@@ -767,10 +756,10 @@ UNREACHABLE=0
 mcpsrv_ready && gw_mcp_ready || UNREACHABLE=1
 [ "$UNREACHABLE" = 0 ] || { bad "stack not healthy — run: cd demo && $ENGINE compose -f docker-compose.yml -f docker-compose.egress.yml up -d"; compose ps; exit 1; }
 
-PartA || true
-PartB || true
-PartC || true
-PartD || true
+PartA || exit 1
+PartB || exit 1
+PartC || exit 1
+PartD || exit 1
 
 step "Wrap-up"
 line "A: the MCP server alone — anonymous writes, silent to your audit trail"

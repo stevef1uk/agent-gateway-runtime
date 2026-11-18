@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"strings"
@@ -24,11 +23,11 @@ import (
 )
 
 const (
-	green  = "\033[0;32m"
-	red    = "\033[0;31m"
-	cyan   = "\033[0;36m"
-	bold   = "\033[1m"
-	reset  = "\033[0m"
+	green = "\033[0;32m"
+	red   = "\033[0;31m"
+	cyan  = "\033[0;36m"
+	bold  = "\033[1m"
+	reset = "\033[0m"
 )
 
 func b64url(b []byte) string {
@@ -106,51 +105,22 @@ func main() {
 	resp.Body.Close()
 	fmt.Printf("%s✓ Agent Gateway services healthy on localhost:8080, :8081, :8082%s\n\n", green, reset)
 
-	// Step 1: SSO Authentication (Dex)
-	fmt.Printf("%s%sStep 1: Authenticate with Dex SSO%s\n", bold, cyan, reset)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	// Step 1: Authenticate to the loopback-only local Dex fixture.
+	fmt.Printf("%s%sStep 1: Authenticate with the local Dex fixture%s\n", bold, cyan, reset)
+	username := os.Getenv("DEMO_LOGIN_EMAIL")
+	if username == "" {
+		username = "alice@example.com"
 	}
-	loc := "http://localhost:5556/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-	var code string
-	for i := 0; i < 6; i++ {
-		r, err := client.Get(loc)
-		if err != nil {
-			fmt.Printf("%s✗ Dex error: %v%s\n", red, err, reset)
-			os.Exit(1)
-		}
-		r.Body.Close()
-		next := r.Header.Get("Location")
-		if next == "" {
-			break
-		}
-		if strings.Contains(next, "dex:5556") {
-			next = strings.Replace(next, "dex:5556", "localhost:5556", 1)
-		}
-		if strings.Contains(next, "code=") {
-			u, _ := url.Parse(next)
-			code = u.Query().Get("code")
-			break
-		}
-		if strings.HasPrefix(next, "/") {
-			loc = "http://localhost:5556" + next
-		} else {
-			loc = next
-		}
-	}
-	if code == "" {
-		fmt.Printf("%s✗ Could not get auth code from Dex%s\n", red, reset)
-		os.Exit(1)
+	password := os.Getenv("DEMO_LOGIN_PASSWORD")
+	if password == "" {
+		password = "password"
 	}
 	tokenForm := url.Values{
-		"grant_type":   {"authorization_code"},
-		"client_id":    {"agent-gateway"},
-		"code":         {code},
-		"redirect_uri": {"http://localhost:8083/oidc/callback"},
+		"grant_type": {"password"},
+		"client_id":  {"agent-gateway"},
+		"scope":      {"openid"},
+		"username":   {username},
+		"password":   {password},
 	}
 	r, err := http.PostForm("http://localhost:5556/dex/token", tokenForm)
 	if err != nil {
@@ -162,6 +132,10 @@ func main() {
 		IDToken string `json:"id_token"`
 	}
 	json.NewDecoder(r.Body).Decode(&dexToken)
+	if dexToken.IDToken == "" {
+		fmt.Printf("%s✗ Dex returned no ID token; check the local fixture credentials%s\n", red, reset)
+		os.Exit(1)
+	}
 	fmt.Printf("%s✓ Acquired Dex ID token (%d chars)%s\n\n", green, len(dexToken.IDToken), reset)
 
 	// Step 2: Create Human Delegation

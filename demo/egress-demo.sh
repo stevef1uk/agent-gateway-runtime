@@ -5,8 +5,9 @@
 #
 # Requires the gateway egress proxy listener (images >= gateway 1.0.22):
 #     GATEWAY_PROXY_ADDR=:8088   (+ published port 8088)
-# Enable it with the committed overlay:
-#     compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+# Enable it with the committed overlays (local Dex fixture):
+#     DEX_ISSUER_URL=http://dex:5556/dex compose -f docker-compose.yml \
+#       -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 # ============================================================================
 if [ -z "${BASH_VERSION:-}" ]; then
   echo "this script must run under BASH — the way it was invoked bypassed the" >&2
@@ -46,6 +47,8 @@ line()  { printf "  %s\n" "$*"; }
 
 # Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/admin-token.sh"
+load_admin_token
 
 PROXY_URL="http://localhost:8088"
 PROXY_HOST="${PROXY_URL#*//}"; PROXY_HOST="${PROXY_HOST%%:*}"
@@ -57,7 +60,6 @@ if [ -z "${GATEWAY_HOST_PORT:-}" ] && [ -f .env ]; then
 fi
 GW=${GW:-http://localhost:${GATEWAY_HOST_PORT:-8080}}
 GW_PORT=${GW##*:}
-ADMIN_TOKEN="${ADMIN_TOKEN:-agent-gateway-demo-admin}"
 HOST_ALLOW="example.com"
 HOST_DENY="nuiance.example.net"
 
@@ -88,34 +90,16 @@ else
 fi
 [ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
 
-# --- 1. sign in via SSO ------------------------------------------------------
-step "Step 2 — sign in at the identity provider (SSO)"
-DEX="http://localhost:5556"
-fixdex() { sed 's|//dex:5556|//localhost:5556|'; }
-JAR=$(mktemp)
-ID_TOKEN=""
-LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-CODE=""
-for _ in 1 2 3 4 5 6; do
-  NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //' | fixdex)
-  [ -z "$NX" ] && break
-  case "$NX" in
-    *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break;;
-    /*) LOC="$DEX$NX" ;;
-    *)  LOC="$NX" ;;
-  esac
-done
-if [ -n "$CODE" ]; then
-  ID_TOKEN=$(curl -s -X POST "$DEX/dex/token" \
-    -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null || true)
-fi
+# --- 1. sign in via local Dex -----------------------------------------------
+step "Step 2 — sign in to the local demo identity provider"
+source "$(dirname "${BASH_SOURCE[0]}")/local-demo-auth.sh"
+ID_TOKEN=$(local_demo_id_token) || true
 APPROVER=""
 if [ -n "${ID_TOKEN:-}" ]; then
   okk "SSO sign-in succeeded; human identity verified (ID token, ${#ID_TOKEN} chars)"
   APPROVER=$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))" 2>/dev/null || true)
 else
-  bad "could not complete SSO sign-in — is Dex running with the mock connector?"
+  bad "could not complete local demo sign-in — check Dex and the fixture credentials"
   exit 1
 fi
 

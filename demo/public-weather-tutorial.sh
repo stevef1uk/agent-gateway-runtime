@@ -24,7 +24,8 @@ GW=${GW:-http://localhost:${WEATHER_HOST_PORT:-8087}}
 AUTHZ=${AUTHZ:-http://localhost:8081}
 TS=${TS:-http://localhost:8082}
 DEX=${DEX:-http://localhost:5556}
-ADMIN_TOKEN=${ADMIN_TOKEN:-agent-gateway-demo-admin}
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/admin-token.sh"
+load_admin_token
 QUERY='latitude=51.5072&longitude=-0.1276'
 FORECAST="$GW/v1/forecast?$QUERY&current=temperature_2m,wind_speed_10m&forecast_days=1"
 ELEVATION="$GW/v1/elevation?$QUERY"

@@ -1,0 +1,10 @@
+# Use only with a real OIDC provider configured in dex/config.yaml and a
+# verified administrator email in demo/.env. This removes the local fixture
+# account from the default demo configuration.
+services:
+  web:
+    environment:
+      - WEB_ADMIN_EMAILS=${WEB_ADMIN_EMAILS:?Set WEB_ADMIN_EMAILS to the verified administrator account}
+
+  dex:
+    volumes: ["./dex/config.hardened.yaml:/etc/dex/config.yaml:ro"]

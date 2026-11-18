@@ -278,9 +278,12 @@ The same commands work directly: `./demo/openclaw-sandbox.sh <command>`.
 **Image** (`demo/openclaw/Dockerfile`) — Ubuntu 24.04 + Node 22 + OpenClaw,
 installed globally. A non-root `sandbox` user (uid 1001) owns a writable
 `/sandbox`. A minimal OpenClaw config is baked in with the provider defined
-and the API key as an **env SecretRef** — only the variable *name* is in the
-image, never the secret. OpenShell requires no `ENTRYPOINT`/`CMD` here; it
-injects its own supervisor.
+and an **env SecretRef** — only the variable *name* is in the image, never the
+secret. At sandbox creation, this demo passes the actual key as
+`PROVIDER_API_KEY` in the sandbox environment. OpenShell warns that the agent
+can read that variable, so use this demo only with a trusted agent; do not use
+this pass-through for untrusted prompts or production credentials. OpenShell
+requires no `ENTRYPOINT`/`CMD` here; it injects its own supervisor.
 
 **Sandbox create** — the start command is `openclaw gateway run --bind
 loopback --allow-unconfigured`. Three flags in that line are load-bearing:
@@ -292,7 +295,9 @@ loopback --allow-unconfigured`. Three flags in that line are load-bearing:
   the FTS5 shadow tables for the agent transcript DB. Skip it and the first
   chat turn dies with `fts5: … unable to open database file`.
 - `PROVIDER_API_KEY` (passed as `--env`) — the *gateway* process makes the
-  model call, so it is the one that must resolve the SecretRef.
+  model call, so it must resolve the SecretRef. This also makes the value
+  visible to the agent inside the sandbox; use a managed OpenShell provider
+  instead when the agent must not be able to read credentials.
 
 `sandbox create` is deliberately **not** given `--forward`: that flag holds the
 foreground command attached to an SSH tunnel, so it never returns. Every later
@@ -447,7 +452,7 @@ The steps are:
    which handles both. (`demo/openshell-gateway-setup.sh` shows the right
    command for the current install whenever it patches `gateway.toml`.)
 
-3. **Create a delegation for the NVIDIA model host** (via mock SSO):
+3. **Create a delegation for the NVIDIA model host** (via local Dex sign-in):
 
    The delegation grants the agent access to `integrate.api.nvidia.com:443`
    and returns an `agent_secret` (used to mint short-lived tokens via TokenSvc).
@@ -593,9 +598,11 @@ The web console (`agent-gateway-web`) currently doesn't filter by
 removes future approvals) and ignore expired entries in the UI.
 
 ```bash
+source demo/lib/admin-token.sh
+load_admin_token
 # Delete old delegations to prevent new expired approvals
 curl -X DELETE http://localhost:8081/v1/delegations/<delegation_id> \
-  -H "X-Admin-Token: agent-gateway-demo-admin"
+  -H "X-Admin-Token: $ADMIN_TOKEN"
 ```
 
 A proper fix would add an `expires_at` filter to the web console's

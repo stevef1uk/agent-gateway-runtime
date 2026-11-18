@@ -67,11 +67,16 @@ For the local demo, follow the repository's [setup instructions](../README.md)
 for Docker/Podman and the demo keys/licence. Then, **from `demo/`**, run:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+DEX_ISSUER_URL=http://dex:5556/dex docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 ```
 
 The base Compose file publishes `8088:8088`; the overlay enables the listener.
 Publishing the port alone does not start the proxy.
+The local-fixture command above overrides a tunnel issuer in `demo/.env`
+without changing that file. For external-IdP browser testing, omit the
+override and add `-f docker-compose.hardened.yml`; the generated IdP config and
+tunnel must be available.
 
 | Setting | Purpose |
 |---|---|
@@ -95,7 +100,7 @@ the caller's own network namespace.
 
 The following commands run from the **repository root**, in the same shell.
 They require `curl` and `jq`. First obtain the delegating human's OIDC ID
-token; the local demo's Dex mock connector is supported by:
+token; the local demo's loopback-only Dex account is supported by:
 
 ```bash
 export ID_TOKEN="$(./demo/obtain-id-token.sh)"
@@ -292,7 +297,8 @@ Use a public, reachable test host allowed by the deployment's egress policy:
 Inspect gateway logs with:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.egress.yml logs gateway
+docker compose -f docker-compose.yml -f docker-compose.egress.yml \
+  -f docker-compose.opa.yml logs gateway
 ```
 
 Run that command from `demo/`. Internal/private destinations may additionally

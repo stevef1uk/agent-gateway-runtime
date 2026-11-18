@@ -7,6 +7,19 @@
 .env
 **/.env
 !**/.env.example
+demo/dex/config.hardened.yaml
+
+# Local credentials, account-specific deployment settings and generated output.
+/config/neon-credentials.json
+/config/neon.json
+/deploy/azure/azure-config.json
+/dist/
+/keys/local-activation/
+/demo/strix_runs/
+/secret.txt
+/t.txt
+**/__pycache__/
+*.py[cod]
 
 # Never commit the vendor signing key (token-minting capability).
 demo/keys/vendor_private.pem

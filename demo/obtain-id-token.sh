@@ -18,7 +18,7 @@
 #      Supply --user and --pass and the script gets the token in one curl.
 #
 # Usage:
-#   # Local demo stack (works unattended — Dex mock connector needs no login)
+#   # Local loopback demo stack (shared fixture credentials; never use in production)
 #   ./obtain-id-token.sh
 #
 #   # Remote tenant — you complete the sign-in in a browser, then paste the code URL
@@ -59,16 +59,17 @@ AUTH_URL=""
 TOKEN_URL=""
 CLIENT_ID="agent-gateway"
 REDIRECT_URI="http://localhost:8083/oidc/callback"
-CONNECTOR_ID="mock"
+CONNECTOR_ID=""
 SCOPE="openid"
-USERNAME=""
-PASSWORD=""
-USE_PASSWORD=0
+USERNAME="${DEMO_LOGIN_EMAIL:-alice@example.com}"
+PASSWORD="${DEMO_LOGIN_PASSWORD:-password}"
+TOKEN_URL="http://localhost:5556/dex/token"
+USE_PASSWORD=1
 CODE_URL=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --auth)     AUTH_URL="$2"; shift 2 ;;
+    --auth)     AUTH_URL="$2"; USE_PASSWORD=0; shift 2 ;;
     --token)    TOKEN_URL="$2"; shift 2 ;;
     --client)   CLIENT_ID="$2"; shift 2 ;;
     --redirect) REDIRECT_URI="$2"; shift 2 ;;
@@ -77,7 +78,7 @@ while [ $# -gt 0 ]; do
     --user)     USERNAME="$2"; shift 2 ;;
     --pass)     PASSWORD="$2"; shift 2 ;;
     --password) USE_PASSWORD=1; shift ;;
-    --code-url) CODE_URL="$2"; shift 2 ;;
+    --code-url) CODE_URL="$2"; USE_PASSWORD=0; shift 2 ;;
     --help|-h)
       echo "usage: $0 [--auth URL] [--token URL] [--client ID] [--redirect URI] [--connector ID] [--scope SCOPE]"
       echo "       $0 --password --user <email> --pass <password>"
@@ -92,7 +93,7 @@ AUTH_URL="${AUTH_URL:-}"
 TOKEN_URL="${TOKEN_URL:-}"
 CLIENT_ID="${CLIENT_ID:-agent-gateway}"
 REDIRECT_URI="${REDIRECT_URI:-http://localhost:8083/oidc/callback}"
-CONNECTOR_ID="${CONNECTOR_ID:-mock}"
+CONNECTOR_ID="${CONNECTOR_ID:-}"
 SCOPE="${SCOPE:-openid}"
 USERNAME="${USERNAME:-}"
 PASSWORD="${PASSWORD:-}"
@@ -168,7 +169,10 @@ fixdex() { sed 's|//dex:5556|//localhost:5556|'; }
 
 step "Step 1 — start OIDC authorization request"
 JAR=$(mktemp)
-LOC="$AUTH_URL?response_type=code&client_id=$CLIENT_ID&redirect_uri=$ENCODED_REDIRECT&connector_id=$CONNECTOR_ID&scope=$SCOPE"
+LOC="$AUTH_URL?response_type=code&client_id=$CLIENT_ID&redirect_uri=$ENCODED_REDIRECT&scope=$SCOPE"
+if [ -n "$CONNECTOR_ID" ]; then
+  LOC="${LOC}&connector_id=$CONNECTOR_ID"
+fi
 CODE=""
 for _ in 1 2 3 4 5 6; do
   NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" \

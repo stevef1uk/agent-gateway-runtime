@@ -93,7 +93,7 @@ make push-m ALLOW_PUSH=yes
 ```
 
 ```bash
-kubectl create ns agentgw
+./k3s/create-secrets.sh
 # From the private source checkout, issue a fresh managed licence.
 cd /home/stevef/dev/agent-gateway
 TMP_OUT=/tmp/managed-licences ./scripts/issue-managed-licence.sh agentgw -d 100
@@ -210,13 +210,19 @@ tenant's console. Keep each tenant's IdP/password lifecycle and Telegram
 secret inside its own namespace; do not copy those settings into the shared
 connector deployment.
 
-## Rotate for anything real
+## Runtime credentials
 
-`JWT_SECRET`, `GATEWAY_ADMIN_TOKEN`, `POSTGRES_PASSWORD` are demo-grade
-values in `agentgw-secrets`; swap them before any shared use. The same goes
-for Dex's static users/mock connector — production points
-`OIDC_ISSUER_URL` at Okta/Entra/Keycloak instead (see docs in the product
-`Deployment.md` §7.2).
+`agentgw-secrets` is deliberately absent from the checked-in manifest.
+`./k3s/create-secrets.sh` creates independent random JWT and operator
+credentials for a new namespace and refuses missing, weak, or known published
+defaults in an existing Secret. Do not copy secret values into manifests,
+shell history, or tickets. Before applying an update to an existing deployment
+that used published demo credentials, rotate `JWT_SECRET` and
+`GATEWAY_ADMIN_TOKEN` in the cluster Secret, then restart all services that
+consume them; JWT rotation invalidates every existing agent token.
+
+The same deployment must replace Dex's static users/mock connector with a
+trusted OIDC provider before public use (see product `Deployment.md` §7.2).
 
 
 ## Telegram approval cards (tap-to-approve)

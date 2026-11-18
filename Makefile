@@ -30,6 +30,9 @@ NODE             ?= 192.168.1.74
 # succeeds while the socket is dead — so probe the daemon too.
 ENGINE ?= $(shell command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 && echo docker || echo podman)
 COMPOSE          ?= $(ENGINE) compose
+# Extra Compose overlays for targets that start demo services. For example:
+# make gmail-up COMPOSE_OVERLAYS="-f demo/docker-compose.egress.yml -f demo/docker-compose.opa.yml"
+COMPOSE_OVERLAYS ?=
 
 # Arguments passed through to the benchmark by `make bench` (see docs/Benchmarking.md).
 BENCH_ARGS       ?=
@@ -47,7 +50,7 @@ test: ## Vet + test the demo API, MCP and Gmail connector, and vet the benchmark
 .PHONY: gmail-up gmail-demo gmail-test
 gmail-up: ## Build/start Demo 14 (fake mail by default; GMAIL_MODE=live for Gmail)
 	python3 demo/gmail/demo.py --init
-	$(COMPOSE) -f demo/docker-compose.yml -f demo/docker-compose.gmail.yml up -d --build --wait tokensvc gmail-ingress
+	$(COMPOSE) -f demo/docker-compose.yml $(COMPOSE_OVERLAYS) -f demo/docker-compose.gmail.yml up -d --build --wait tokensvc gmail-ingress
 
 gmail-demo: ## Gmail demo; pauses for approval (ARGS=--yes for scripted fake mail)
 	CONTAINER_ENGINE=$(ENGINE) bash demo/gmail-demo.sh $(ARGS)
@@ -166,7 +169,7 @@ APPROVAL_TTL ?= 10s
 
 .PHONY: approval-edge-demo
 approval-edge-demo: ## R&D pilot — approval edge cases (expiry, action-change binding, single-use, audit trail)
-	APPROVAL_TTL=$(APPROVAL_TTL) $(COMPOSE) -f demo/docker-compose.yml up -d --wait gateway demoapi web tokensvc
+	APPROVAL_TTL=$(APPROVAL_TTL) $(COMPOSE) -f demo/docker-compose.yml $(COMPOSE_OVERLAYS) up -d --wait gateway demoapi web tokensvc
 	CONTAINER_ENGINE=$(ENGINE) ./demo/approval-edge-cases-demo.sh
 
 .PHONY: security-scan

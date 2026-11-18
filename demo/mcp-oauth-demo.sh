@@ -7,26 +7,13 @@ JAR=$(mktemp); CODE=; DEL_ID=; TOKEN=
 
 step() { echo; echo "== $1"; }
 
-# --- SSO id_token for delegation creation (Dex mock: auto sign-in) ---
+# --- ID token for delegation creation (local Dex fixture) ---
 sso_id_token() {
-  local jar LOC NX codewell="" C
-  jar=$(mktemp)
-  LOC="$DEX/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-  for _ in 1 2 3 4 5 6; do
-    NX=$(curl -s -b "$jar" -c "$jar" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //; s|//dex:5556|//localhost:5556|')
-    [ -z "$NX" ] && break
-    case "$NX" in
-      *code=*) codewell=$(printf '%s' "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
-      /*) LOC=$(printf '%s' "$NX" | sed 's|//dex:5556|//localhost:5556|' | xargs -0 -I{} echo http://localhost:5556{}) ;;
-      *)  LOC="$NX" ;;
-    esac
-  done
-  curl -s -X POST "$DEX/token" \
-    -d "grant_type=authorization_code&client_id=agent-gateway&code=$codewell&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" |
-    python3 -c 'import sys,json; print(json.load(sys.stdin).get("id_token",""))'
+  source "$(dirname "${BASH_SOURCE[0]}")/local-demo-auth.sh"
+  local_demo_id_token "$DEX/token"
 }
 
-step "SSO sign-in (alice via Dex mock)"
+step "Sign in as Alice to the local Dex fixture"
 ID_TOKEN=$(sso_id_token)
 [ -n "$ID_TOKEN" ] || { echo "FAILED: no id_token"; exit 1; }
 echo "id_token: ${ID_TOKEN:0:40}…"

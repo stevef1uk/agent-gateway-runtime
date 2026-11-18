@@ -23,8 +23,8 @@ figures tell you what the enforcement layer itself adds.
 The tool is a single, self-contained Go program (standard library only) that
 drives the gateway exactly as a real agent would:
 
-1. **Signs in** over OIDC using the demo IdP's **mock connector** (one-click,
-   no credentials) and captures the ID token.
+1. **Signs in** over OIDC using the local-only Dex password fixture and captures
+   the ID token.
 2. **Creates a delegation** for a throwaway agent, scoped to the allowed path.
 3. **Mints a short-lived access token** for that delegation.
 4. **Auto-detects the policy engine** (`basic` or `opa`) from the decision's
@@ -43,9 +43,10 @@ Everything is in this repository: the tool is the standalone Go module at
 
 ```bash
 cd demo
-docker compose up -d          # the built-in engine stack
+DEX_ISSUER_URL=http://dex:5556/dex docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 cd ..
-make bench                    # both engines: built-in, then OPA
+DEX_ISSUER_URL=http://dex:5556/dex make bench   # both engines: built-in, then OPA
 ```
 
 `make bench` runs the comparison driver
@@ -67,8 +68,9 @@ go run .                                # defaults: -c 20 -d 10s -w 2s
 go run . -c 50 -d 20s
 ```
 
-> **Requirements.** Go 1.26+ (to build the tool) and a running demo stack, since
-> the harness signs in through the demo IdP's mock connector. Against a
+> **Requirements.** Go 1.26+ (to build the tool) and a running local demo stack,
+> since the harness signs in through the loopback-only demo account. Do not use
+> the insecure local-demo account for pen testing. Against a
 > stack with a real IdP you would mint the agent token another way — the
 > measurement itself is engine- and IdP-agnostic.
 

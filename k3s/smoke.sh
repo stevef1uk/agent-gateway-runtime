@@ -7,6 +7,9 @@ TS=http://$NODE:30082
 AUTHZ=http://$NODE:30081
 EGRESS=http://$NODE:30088
 CALLBACK=http://$NODE:30083/oidc/callback
+ADMIN_TOKEN=$(kubectl -n agentgw get secret agentgw-secrets \
+  -o jsonpath='{.data.GATEWAY_ADMIN_TOKEN}' | base64 --decode)
+[ -n "$ADMIN_TOKEN" ] || { echo "ABORT: agentgw-secrets has no GATEWAY_ADMIN_TOKEN"; exit 1; }
 
 JAR=$(mktemp)
 LOC="$WEB/oidc/idp/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2F$NODE%3A30083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
@@ -45,10 +48,10 @@ echo "EUR150 -> $C1 (want 200)"
 APR=$(curl -s -X POST "$GW/orders" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -d '{"amount":250,"supplier":"acme"}' | python3 -c 'import sys,json; print(json.load(sys.stdin).get("approval_id",""))')
 echo "EUR250 held -> approval [$APR] (want 202 shape)"
 DEC=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/v1/approvals/" -H 'Content-Type: application/json' \
-  -H "X-Admin-Token: agent-gateway-demo-admin" -d "{\"approval_id\":\"$APR\",\"approver_id\":\"$SUBJECT\",\"approved\":true}")
+  -H "X-Admin-Token: $ADMIN_TOKEN" -d "{\"approval_id\":\"$APR\",\"approver_id\":\"$SUBJECT\",\"approved\":true}")
 echo "approve as bound subject -> $DEC (want 200)"
 BAD=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/v1/approvals/" -H 'Content-Type: application/json' \
-  -H "X-Admin-Token: agent-gateway-demo-admin" -d "{\"approval_id\":\"$APR\",\"approver_id\":\"mallory\",\"approved\":true}")
+  -H "X-Admin-Token: $ADMIN_TOKEN" -d "{\"approval_id\":\"$APR\",\"approver_id\":\"mallory\",\"approved\":true}")
 echo "replay/mallory approve -> $BAD (want 409/403/404, never 200)"
 C3=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW/orders" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' -d '{"amount":250,"supplier":"acme"}')
 echo "post-approval retry -> $C3 (want 200)"
@@ -61,4 +64,3 @@ EGRESS=http://$NODE:30088
 P=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$EGRESS/" || echo 000)
 echo "egress proxy unauth -> $P (want 407: opt-in listener refuses to relay without a delegation token)"
 curl -s -o /dev/null -X DELETE "$AUTHZ/v1/delegations/$DELEG" -H "Authorization: Bearer $ID_TOKEN" 2>/dev/null || true
-

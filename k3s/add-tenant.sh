@@ -65,15 +65,7 @@ kubectl create namespace "${NS}" 2>/dev/null && ok "namespace ${NS} created" || 
 
 # ------------------------------------------------------------- secrets (own)
 say "namespace ${NS}: secrets (random, own; never regenerated on re-run)"
-if ! kubectl -n "$NS" get secret agentgw-secrets >/dev/null 2>&1; then
-  kubectl -n "$NS" create secret generic agentgw-secrets \
-    --from-literal=JWT_SECRET="$(openssl rand -hex 32)" \
-    --from-literal=GATEWAY_ADMIN_TOKEN="$(openssl rand -hex 16)" \
-    --from-literal=POSTGRES_PASSWORD="$(openssl rand -hex 16)"
-  ok "agentgw-secrets (random per-tenant: JWT/admin/PG)"
-else
-  ok "agentgw-secrets exists (kept)"
-fi
+NAMESPACE="$NS" bash "$GW_DIR/create-secrets.sh"
 
 # Telegram approval cards (operator's channel in both lanes)
 if kubectl -n "$NS" get secret agentgw-telegram >/dev/null 2>&1; then

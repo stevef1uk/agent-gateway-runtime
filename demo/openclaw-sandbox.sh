@@ -26,9 +26,9 @@
 #     provider + OpenClaw catalog endpoints so the model call can leave. The
 #     sandbox routes egress through OpenShell's HTTP proxy (HTTPS_PROXY is
 #     pre-set inside the sandbox), so the allowlist is the control point.
-#   - the API key is stored as an env SecretRef inside the sandbox's own
-#     /sandbox/.openclaw config, and is only injected into the `exec` env for
-#     commands that need it. It is not written on the host or baked in the image.
+#   - the provider config stores only the PROVIDER_API_KEY variable name, but
+#     this demo passes the key into the sandbox environment. OpenShell warns
+#     that the agent can read it; use this only with a trusted demo agent.
 # ============================================================================
 
 set -euo pipefail
@@ -159,9 +159,8 @@ ensure_sandbox() {
   #      filesystem sandbox. SQLite needs a writable temp dir to create FTS5
   #      shadow tables for the agent transcript DB; without this the first
   #      chat turn fails with "fts5: ... unable to open database file".
-  #   3. PROVIDER_API_KEY in the *gateway's* env: the gateway process is the
-  #      one that makes the model call, so it must be able to resolve the
-  #      env SecretRef in the provider config.
+  #   3. PROVIDER_API_KEY in the *gateway's* env: the gateway process makes
+  #      the model call. OpenShell warns that the agent can read this env value.
   #   4. --detach: without it, `sandbox create` ATTACHES to the canonical main
   #      process (the in-sandbox OpenClaw gateway) whenever the caller has a
   #      terminal — verified on openshell 0.1.4 under a pty — so `up` streams
@@ -245,7 +244,7 @@ configure() {
   apply_egress_rule "api.github.com"
 
   okk "provider configured: $PROVIDER_BASE_URL (model: $model_ref)"
-  line "credential is an env SecretRef in the sandbox — not on the host, not in the image"
+  line "provider config stores the env-var name; the key is in demo/.env and the sandbox env (agent-readable)"
 }
 
 apply_egress_rule() {
@@ -390,7 +389,7 @@ gateway_token_state() {
 }
 
 ensure_gateway_token() {
-  # Mint an Agent Gateway credential for this sandbox's supervisor: mock SSO →
+  # Mint an Agent Gateway credential for this sandbox's supervisor: local Dex →
   # delegation → access token, written to the file the OpenShell driver copies
   # into the supervisor volume at sandbox START.
   #
@@ -441,27 +440,12 @@ except Exception:
     fi
   fi
 
-  step "Agent Gateway credential (mock SSO → delegation → access token)"
-  local DEX="http://localhost:5556" JAR LOC CODE NX ID_TOKEN
-  JAR=$(mktemp)
-  LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-  CODE=""
-  for _ in 1 2 3 4 5 6; do
-    NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" \
-         | grep -i '^location' | head -1 | tr -d '\r' \
-         | sed 's/^Location: //; s|//dex:5556|//localhost:5556|')
-    [ -z "$NX" ] && break
-    case "$NX" in
-      *code=*) CODE=$(printf '%s' "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
-      /*) LOC="$DEX$NX" ;;
-      *)  LOC="$NX" ;;
-    esac
-  done
-  ID_TOKEN=$(curl -s -X POST "$DEX/dex/token" \
-    -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null || true)
+  step "Agent Gateway credential (local Dex sign-in → delegation → access token)"
+  local ID_TOKEN
+  source "$(dirname "${BASH_SOURCE[0]}")/local-demo-auth.sh"
+  ID_TOKEN=$(local_demo_id_token) || true
   if [ -z "$ID_TOKEN" ]; then
-    bad "mock SSO sign-in failed (Dex on :5556)"
+    bad "local Dex sign-in failed (Dex on :5556)"
     exit 1
   fi
 

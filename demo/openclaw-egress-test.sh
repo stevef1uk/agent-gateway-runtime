@@ -2,6 +2,8 @@
 
 # Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/admin-token.sh"
+load_admin_token
 
 # ============================================================================
 # Prove the egress rules: HTTP outward calls from OpenClaw's sandbox.
@@ -175,26 +177,11 @@ if [ "$RUN_GW" = 1 ]; then
 fi
 
 if [ "$RUN_GW" = 1 ]; then
-  # 1. SSO sign-in via the Dex mock connector.
-  DEX="http://localhost:5556"; JAR=$(mktemp)
-  LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-  CODE=""
-  for _ in 1 2 3 4 5 6; do
-    NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" \
-         | grep -i '^location' | head -1 | tr -d '\r' \
-         | sed 's/^Location: //; s|//dex:5556|//localhost:5556|')
-    [ -z "$NX" ] && break
-    case "$NX" in
-      *code=*) CODE=$(printf '%s' "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break;;
-      /*) LOC="$DEX$NX" ;;
-      *)  LOC="$NX" ;;
-    esac
-  done
-  ID_TOKEN=$(curl -s -X POST "$DEX/dex/token" \
-    -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null || true)
+  # 1. Sign in with the loopback-only local Dex fixture.
+  source "$(dirname "${BASH_SOURCE[0]}")/local-demo-auth.sh"
+  ID_TOKEN=$(local_demo_id_token) || true
   if [ -z "$ID_TOKEN" ]; then
-    bad "SSO sign-in failed — Part B skipped"; FAIL=$((FAIL+1)); RUN_GW=0
+    bad "local Dex sign-in failed — Part B skipped"; FAIL=$((FAIL+1)); RUN_GW=0
   fi
 fi
 
@@ -291,7 +278,7 @@ if [ "$RUN_GW" = 1 ]; then
   # every held tunnel appears as a pending approval for this delegation.
   pending_hint() { # label
     curl -s --max-time 3 "$GW_URL/v1/approvals/" \
-      -H "X-Admin-Token: agent-gateway-demo-admin" \
+      -H "X-Admin-Token: $ADMIN_TOKEN" \
       | python3 -c "
 import sys, json
 try:
@@ -377,7 +364,7 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
   elif [ "$NO_HUMAN" = 1 ]; then
     info "--no-human: auto-approving without waiting"
     DEC=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW_URL/v1/approvals/" \
-      -H "Content-Type: application/json" -H "X-Admin-Token: agent-gateway-demo-admin" \
+      -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
       -d "{\"approval_id\":\"$APR_ID\",\"approver_id\":\"$SUBJ\",\"approved\":true}")
     record "auto-approve (script acts as the human)" "200" "$DEC"
   else
@@ -390,7 +377,7 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
     else
       info "no manual approval — auto-approving on your behalf"
       DEC=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW_URL/v1/approvals/" \
-        -H "Content-Type: application/json" -H "X-Admin-Token: agent-gateway-demo-admin" \
+        -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
         -d "{\"approval_id\":\"$APR_ID\",\"approver_id\":\"$SUBJ\",\"approved\":true}")
       record "auto-approve (script acts as the human)" "200" "$DEC"
     fi
@@ -423,7 +410,7 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
       fi
       if [ "$(pending_hint)" = "$APR2" ]; then
         curl -s -o /dev/null -X POST "$GW_URL/v1/approvals/" \
-          -H "Content-Type: application/json" -H "X-Admin-Token: agent-gateway-demo-admin" \
+          -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
           -d "{\"approval_id\":\"$APR2\",\"approver_id\":\"$SUBJ\",\"approved\":true}"
       fi
     else

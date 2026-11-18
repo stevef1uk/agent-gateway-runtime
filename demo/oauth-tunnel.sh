@@ -122,7 +122,7 @@ cat <<EOF
 Now, in claude.ai:
   1. Settings → Connectors → Add custom connector
   2. URL: $URL/mcp
-  3. Follow the OAuth popup (Dex mock: one click)
+  3. Follow the OAuth popup and sign in to the local Dex demo account
   4. CRM tools render — every call enforced + audited per tool.
 
 (The quick tunnel renumbers when cloudflared restarts; rerun this script

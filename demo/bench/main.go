@@ -5,7 +5,7 @@
 //   - a DENIED passthrough: refused at the enforcement point before any
 //     upstream call is made (expect 403).
 //
-// It is self-contained: mock-connector SSO sign-in -> scoped delegation ->
+// It is self-contained: local Dex sign-in -> scoped delegation ->
 // short-lived access token -> concurrent load. Results are per-path latency
 // percentiles and throughput.
 //
@@ -34,7 +34,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"runtime"
@@ -145,9 +144,9 @@ func run(o options) error {
 			engine = "opa"
 		}
 	} else {
-		idToken, s, err := mockSignIn(client, o.web)
+		idToken, s, err := localDemoSignIn(client)
 		if err != nil {
-			return fmt.Errorf("mock SSO sign-in: %w", err)
+			return fmt.Errorf("local Dex sign-in: %w", err)
 		}
 		sub = s
 		dID, secret, err := createDelegation(client, o.authz, idToken, o.agentID, o.allowPath)
@@ -484,53 +483,24 @@ func newClient(conc int) *http.Client {
 	}
 }
 
-// mockSignIn performs the mock-connector OIDC flow against the console's Dex
-// proxy and returns the ID token and its subject.
-func mockSignIn(client *http.Client, web string) (string, string, error) {
-	jar, _ := cookiejar.New(nil)
-	// This transport intentionally does not follow redirects: we walk the
-	// chain manually to capture the authorization code.
-	c := *client
-	c.Jar = jar
-	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-
-	redirect := web + "/oidc/callback"
-	loc := fmt.Sprintf("%s/oidc/idp/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=%s&connector_id=mock&scope=openid",
-		web, url.QueryEscape(redirect))
-
-	code := ""
-	for i := 0; i < 8 && code == ""; i++ {
-		req, _ := http.NewRequest(http.MethodGet, loc, nil)
-		resp, err := c.Do(req)
-		if err != nil {
-			return "", "", err
-		}
-		resp.Body.Close()
-		next := resp.Header.Get("Location")
-		if next == "" {
-			break
-		}
-		if u, perr := url.Parse(next); perr == nil && u.Query().Get("code") != "" {
-			code = u.Query().Get("code")
-			break
-		}
-		if strings.HasPrefix(next, "/") {
-			loc = web + next
-		} else {
-			loc = next
-		}
+// localDemoSignIn authenticates against the loopback-only Dex fixture.
+func localDemoSignIn(client *http.Client) (string, string, error) {
+	username := os.Getenv("DEMO_LOGIN_EMAIL")
+	if username == "" {
+		username = "alice@example.com"
 	}
-	if code == "" {
-		return "", "", fmt.Errorf("SSO redirect chain did not produce a code")
+	password := os.Getenv("DEMO_LOGIN_PASSWORD")
+	if password == "" {
+		password = "password"
 	}
-
 	form := url.Values{
-		"grant_type":   {"authorization_code"},
-		"client_id":    {"agent-gateway"},
-		"code":         {code},
-		"redirect_uri": {redirect},
+		"grant_type": {"password"},
+		"client_id":  {"agent-gateway"},
+		"scope":      {"openid"},
+		"username":   {username},
+		"password":   {password},
 	}
-	resp, err := c.PostForm(web+"/oidc/idp/dex/token", form)
+	resp, err := client.PostForm("http://localhost:5556/dex/token", form)
 	if err != nil {
 		return "", "", err
 	}

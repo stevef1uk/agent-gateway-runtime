@@ -115,13 +115,24 @@ key pairs must match: private key ≠ mismatched key pair will fail exactly at
 - Mounted keys: `customer_private.pem` and the licence token supplied by the
   vendor.
 
-### Local Google IdP test
+### Choose an authentication mode
 
-Use this procedure to run the demo locally and sign in through Google. It does
-not build Agent Gateway images. First choose which image set to run; the
-default demo Compose file uses the signed, digest-pinned main images and a
-shared Dex fixture account. Option A explicitly selects the local
-`security-test` images instead.
+The default Compose setup uses the local Dex fixture account
+`alice@example.com` / `password`. This shared password-grant account is
+intentionally insecure and is for loopback-only demos; do not expose it to a
+network, deploy it, or use it for security testing.
+
+For Google or Microsoft Entra ID, configure a real provider and use the
+hardened Compose overlay. It requires an explicit allowlist of verified
+administrator emails and generates a private Dex config. The local fixture
+and hardened provider modes are alternatives; do not combine their settings.
+
+### Local Google or Microsoft Entra ID test
+
+The steps below configure an external provider with an HTTPS callback. They
+do not build Agent Gateway images. First choose which image set to run; option
+A selects the local `security-test` images, while option B uses the published,
+signed release.
 
 > **Scope note:** STRIX's zero-finding run used the local `security-test`
 > images listed in option A below, not the published digests in option B. It
@@ -188,19 +199,18 @@ decryption key and licence. Keep `demo/keys/` as supplied for that demo; do
 not substitute local-activation or hosted-tenant keys. This published release
 is signed but was not the image set STRIX tested.
 
-#### 2. Start an HTTPS tunnel to local Dex
+#### 2. Start an HTTPS endpoint for local Dex
 
-Google needs to redirect the browser to an HTTPS callback that is reachable
-from the Internet. Dex also requires its issuer URL and upstream callback
-URL to match. The local Docker-only name `http://dex:5556/dex` is not a
-browser-reachable Google callback, and `http://localhost:5556/dex/callback`
-does not match that issuer; do not register either of those URLs for this
-Google connector.
+Google and Microsoft need to redirect the browser to an HTTPS callback
+reachable from the Internet. Dex also requires its issuer URL and upstream
+callback URL to match. The local Docker-only name `http://dex:5556/dex` is
+not a browser-reachable callback, and `http://localhost:5556/dex/callback`
+does not match that issuer; do not register either URL with the provider.
 
-The normal demo does not need a tunnel or a Google account: this step is only
-for users who specifically want to test Google sign-in. Since Docker is
-already running the demo, start Cloudflare's temporary tunnel as a container
-in the demo's Compose network (from `demo/`, in its own terminal):
+The normal local demo does not need an external provider or tunnel. For a
+local Google or Microsoft sign-in test, start Cloudflare's temporary tunnel
+as a container in the demo's Compose network (from `demo/`, in its own
+terminal):
 
 ```bash
 docker run --rm --network demo_default cloudflare/cloudflared:latest \
@@ -215,26 +225,24 @@ https://random-words.trycloudflare.com
 ```
 
 Copy the `https://...trycloudflare.com` URL shown on the next line. Do not
-copy the documentation link or the `http://dex:5556` origin. Use the copied
-URL plus `/dex/callback` as the Google authorized redirect URI, and use that
-same URL plus `/dex` for `DEX_ISSUER_URL`. Keep the tunnel running for the
+copy the documentation link or the `http://dex:5556` origin. Use that URL
+plus `/dex` for `DEX_ISSUER_URL`, and register the URL plus `/dex/callback`
+as the provider's authorized redirect URI. Keep the tunnel running for the
 whole sign-in test. The temporary URL changes when the tunnel is restarted;
-if it changes, update the Google OAuth client and `.env`, regenerate the Dex
+if it changes, update the provider application and `.env`, regenerate the Dex
 config, and recreate Dex, authz, and web.
 
 To have the helper detect the running container and print the exact redirect
-URI to enter in Google Cloud Console, run this from `demo/`:
+URI to enter in the provider's application settings, run this from `demo/`:
 
 ```bash
 python3 configure-idp.py --print-tunnel-url
 ```
 
 It saves the matching `DEX_ISSUER_URL` and `DEX_UPSTREAM_REDIRECT_URI` to
-`.env` and prints the Google authorized redirect URI. In Google Cloud Console,
-open the OAuth 2.0 Client ID used by Dex, edit **Authorized redirect URIs**,
-replace the old tunnel callback with the printed value, and save. The normal
-`python3 configure-idp.py` command also detects an active tunnel and updates
-these settings when generating the Dex config.
+`.env` and prints the callback to register with Google or Microsoft Entra ID.
+The normal `python3 configure-idp.py` command also detects an active tunnel
+and updates these settings when generating the Dex config.
 
 **Security and trust:** this is an optional local-test shortcut, not a
 production ingress. It makes Dex reachable from the public Internet through
@@ -269,23 +277,32 @@ under your control rather than a quick tunnel.
 If Docker reports that `demo_default` does not exist, start the demo Compose
 stack first from `demo/`; the `dex` service must be running on that network.
 
-#### 3. Create a Google OAuth client
+#### 3. Register an application with your provider
 
-In Google Cloud Console, configure the OAuth consent screen. If it is in
-Testing mode, add the Google account you will use as a test user. Create an
-OAuth client with application type **Web application** and register this exact
-authorized redirect URI, replacing the example host with the URL printed by
-the tunnel container:
+Choose one provider:
+
+- **Google:** In Google Cloud Console, configure the OAuth consent screen. If
+  it is in Testing mode, add your Google account as a test user. Create an
+  OAuth client with application type **Web application**.
+- **Microsoft Entra ID:** Create an app registration and add a **Web**
+  redirect URI. The generated Dex connector uses the `common` tenant; choose
+  supported account types that include the users who will sign in (for both
+  organizational and personal Microsoft accounts, select the corresponding
+  multi-tenant-and-personal-accounts option). Create a client secret and copy
+  its value for the local `.env`.
+
+For either provider, register this exact redirect URI, replacing the example
+host with the URL printed by the tunnel helper:
 
 ```text
 https://random-words.trycloudflare.com/dex/callback
 ```
 
-Google redirects to Dex through the HTTPS tunnel. Dex then redirects the
-browser to the Agent Gateway console at
+The provider redirects to Dex through the HTTPS tunnel. Dex then redirects
+the browser to the Agent Gateway console at
 `http://localhost:8083/oidc/callback`, a separate callback.
 
-#### 4. Configure local secrets and Google
+#### 4. Configure local secrets and the provider
 
 From the runtime repository:
 
@@ -296,25 +313,28 @@ chmod 600 .env
 ```
 
 Edit `.env` and keep the generated JWT/admin values. Set the image
-variables according to option A or B above, then set:
+variables according to option A or B above. Then set the provider-specific
+connector and credentials, plus the shared issuer/callback values:
 
 ```dotenv
-OIDC_CONNECTOR_ID=google
-DEX_UPSTREAM_CLIENT_ID=<Google OAuth client ID>
-DEX_UPSTREAM_CLIENT_SECRET=<Google OAuth client secret>
 DEX_ISSUER_URL=https://random-words.trycloudflare.com/dex
 DEX_UPSTREAM_REDIRECT_URI=https://random-words.trycloudflare.com/dex/callback
 WEB_PUBLIC_URL=http://localhost:8083
-WEB_ADMIN_EMAILS=<exact verified Google account email>
+WEB_ADMIN_EMAILS=<exact verified provider account email>
 ```
+
+For Google, set `OIDC_CONNECTOR_ID=google` and use the OAuth client ID and
+client secret from Google Cloud Console. For Microsoft Entra ID, set
+`OIDC_CONNECTOR_ID=microsoft` and use the Application (client) ID and a new
+client secret from the app registration.
 
 The issuer must be the tunnel URL plus `/dex`; the upstream callback must be
 that exact issuer plus `/callback`. `configure-idp.py` checks this before
 writing the config. Authz, web, and Dex all use that same issuer URL, while
 the browser-facing console remains on localhost.
 
-The email must be the verified address returned by Google. Do not commit
-`.env` or share the OAuth client secret. The helper writes
+The allowlist must contain the exact verified email returned by the selected
+provider. Do not commit `.env` or share the client secret. The helper writes
 `dex/config.hardened.yaml` with mode `0600`; that file contains the client
 secret and must stay private. It also records your POSIX host UID/GID in
 `demo/.env`, and the Dex Compose service uses those IDs to read the private
@@ -356,9 +376,10 @@ for p in 8081 8082 8080 8083; do
 done
 ```
 
-Visit [http://localhost:8083](http://localhost:8083) and choose Google sign-in.
-Use the browser console for this test. The scripted `./demo.sh` obtains a
-token from the local Alice fixture and does not automate Google sign-in.
+Visit [http://localhost:8083](http://localhost:8083) and choose the configured
+provider's sign-in option. Use the browser console for this test. The scripted
+`./demo.sh` obtains a token from the local Alice fixture and does not automate
+external-provider sign-in.
 If sign-in fails, inspect the Dex and web logs locally; redact credentials and
 tokens before sharing logs:
 

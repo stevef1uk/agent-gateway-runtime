@@ -52,16 +52,24 @@ Requirements:
   image registries. Ports 5556, 8081, 8082 and 8087 available locally.
 
 ```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+DEX_ISSUER_URL=http://dex:5556/dex docker compose \
+  -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+  -f demo/docker-compose.opa.yml -f demo/docker-compose.weather.yml \
   up -d --wait tokensvc gateway-weather
 ```
 
 This starts only the weather gateway, authorization service, token service,
-Dex identity provider, Postgres and Redis. Published images and the bundled
-demo licence/keys are used; there is nothing to build. The overlay adds a
-dedicated gateway with `UPSTREAM_URL=https://api.open-meteo.com`, published on
-loopback port 8087. It uses the same authorization and token services as the
-other demos. Requests keep their path and query string when forwarded.
+Dex identity provider, Postgres and Redis. The gateway uses the local
+`agent-gateway/gateway:security-test` image by default; build it first as
+described in [Container Image Security](Container-Image-Security.md), or
+explicitly select a verified published image. The overlay adds a dedicated
+gateway with `UPSTREAM_URL=https://api.open-meteo.com`, published on loopback
+port 8087. It uses the same authorization and token services as the other
+demos. Requests keep their path and query string when forwarded. The default
+Compose configuration is loopback-only and uses a shared local demo login:
+**alice@example.com** / **password**. This account is only for local
+tutorials; never expose it to a network, deploy it, or use it for security
+testing. Use the hardened overlay and a real IdP for those cases.
 
 For Podman, substitute `podman compose` for `docker compose` throughout.
 
@@ -112,7 +120,8 @@ GW=http://localhost:8087
 AUTHZ=http://localhost:8081
 TS=http://localhost:8082
 DEX=http://localhost:5556
-ADMIN_TOKEN=agent-gateway-demo-admin
+source demo/lib/admin-token.sh
+load_admin_token
 
 QUERY='latitude=51.5072&longitude=-0.1276'
 FORECAST="$GW/v1/forecast?$QUERY&current=temperature_2m,wind_speed_10m&forecast_days=1"
@@ -142,10 +151,11 @@ ID_TOKEN=$(curl --fail --silent --show-error "$DEX/dex/token" \
   | jq -er '.id_token')
 ```
 
-This password grant is enabled in **local demo Dex** so the entire exercise
-works via curl. In a real deployment, obtain the human's ID token through
-your organization's supported OIDC sign-in flow. The authorization service
-verifies the signed token; the client does not choose the delegating identity.
+This password grant is enabled only in the default loopback-only local demo so
+the exercise works via curl. In a real deployment, use the hardened Compose
+overlay and obtain the human's ID token through your organization's supported
+OIDC sign-in flow. The authorization service verifies the signed token; the
+client does not choose the delegating identity.
 
 ## 4. Create a narrowly scoped delegation
 
@@ -326,14 +336,16 @@ The second held elevation request cannot execute after revocation.
 To stop just the added weather gateway:
 
 ```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+  -f demo/docker-compose.opa.yml -f demo/docker-compose.weather.yml \
   stop gateway-weather
 ```
 
 If this stack was started solely for the tutorial, remove its containers with:
 
 ```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml down
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+  -f demo/docker-compose.opa.yml -f demo/docker-compose.weather.yml down
 ```
 
 `down` stops shared demo services too. Named database volumes are retained,
@@ -347,10 +359,10 @@ unset ID_TOKEN AGENT_SECRET AGENT_TOKEN DELEGATION ADMIN_TOKEN
 
 | Symptom | What to check |
 |---|---|
-| Connection refused | Finish `up -d --wait`; inspect `docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml ps`. |
+| Connection refused | Finish `up -d --wait`; inspect `docker compose` with the same four Compose files used for startup. |
 | Port 8087 occupied | Prefix the startup command with `WEATHER_HOST_PORT=18087`, and run `WEATHER_HOST_PORT=18087 bash demo/public-weather-tutorial.sh`. For manual calls set `GW=http://localhost:18087` before step 2's URL variables. |
 | Other ports occupied | Stop the conflicting local stack, or reuse the existing compatible demo authz/token/Dex services. |
-| Dex sign-in fails | Use the bundled `demo/dex/config.yaml`; it enables the local password grant and Alice's fixture account. |
+| Dex sign-in fails | The default local account is `alice@example.com` / `password`. For a real provider, configure `demo/dex/config.yaml` and use `demo/docker-compose.hardened.yml`. |
 | 401 on an agent call | Token expired or is missing. Re-mint before revocation, or rerun the script; complete its approval pause within five minutes. |
 | 403 on a forecast before revocation | Verify the delegation contains `/v1/forecast` and `read`, and is not expired/revoked. |
 | Approval returns 401 / 403 / 410 | Check the operator token / delegating subject / approval expiry respectively. This gateway uses a 15-minute approval TTL. |
@@ -360,7 +372,8 @@ unset ID_TOKEN AGENT_SECRET AGENT_TOKEN DELEGATION ADMIN_TOKEN
 Service logs:
 
 ```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+  -f demo/docker-compose.opa.yml -f demo/docker-compose.weather.yml \
   logs --tail=80 gateway-weather authz tokensvc dex
 ```
 

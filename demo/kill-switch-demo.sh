@@ -15,7 +15,8 @@
 # Nothing reaches demoapi after a kill switch is thrown — the upstream's own
 # call counter proves it.
 #
-# Prereqs:   cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+# Prereqs:   cd demo && DEX_ISSUER_URL=http://dex:5556/dex docker compose \
+#              -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 # Usage:     ./kill-switch-demo.sh          (compose, all scripted)
 #            ./kill-switch-demo.sh --node 192.168.1.74   (k3s cluster)
 # ============================================================================
@@ -66,7 +67,8 @@ else
   AUTHZ=${AUTHZ:-http://localhost:8081}
   TS=${TS:-http://localhost:8082}
 fi
-ADMIN_TOKEN=${ADMIN_TOKEN:-agent-gateway-demo-admin}
+source "$DEMO_DIR/lib/admin-token.sh"
+load_admin_token
 UPSTREAM=http://localhost:8090   # demoapi, only reachable out-of-band for counter proof
 
 # --- 0. stack & health -------------------------------------------------------
@@ -96,24 +98,9 @@ fi
 [ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
 
 # --- 1. SSO sign-in (verified subject = the delegating human) ----------------
-step "Step 2 — SSO sign-in → verified subject (the human who holds the kill switch)"
-DEX="http://localhost:5556"
-fixdex() { sed 's|//dex:5556|//localhost:5556|'; }
-JAR=$(mktemp)
-LOC="$DEX/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback&connector_id=mock&scope=openid"
-CODE=""
-for _ in 1 2 3 4 5 6; do
-  NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //' | fixdex)
-  [ -z "$NX" ] && break
-  case "$NX" in
-    *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
-    /*)    LOC="$DEX$NX" ;;
-    *)     LOC="$NX" ;;
-  esac
-done
-ID_TOKEN=$(curl -s -X POST "$DEX/dex/token" \
-  -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=http%3A%2F%2Flocalhost%3A8083%2Foidc%2Fcallback" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin).get('id_token',''))" 2>/dev/null || true)
+step "Step 2 — sign in to the local demo identity provider"
+source "$DEMO_DIR/local-demo-auth.sh"
+ID_TOKEN=$(local_demo_id_token) || true
 SUBJECT=$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))" 2>/dev/null || true)
 [ -n "$ID_TOKEN" ] && [ -n "$SUBJECT" ] || { bad "SSO sign-in failed"; exit 1; }
 okk "verified subject: $SUBJECT (this human creates delegations and holds the kill switch)"

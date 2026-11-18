@@ -34,7 +34,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
 # --no-dialogue, the OpenClaw sandbox (make openclaw-demo).
 # ============================================================================
 set -uo pipefail
-cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$DEMO_DIR/.." && pwd)"
+cd "$REPO_ROOT"
 
 # One instance at a time: every run rotates the sandbox supervisor's upstream
 # credential (stop + start) — two concurrent runs kick each other's tunnels
@@ -86,7 +88,8 @@ else
   TS=${TS:-http://localhost:8082}
   DEMOAPI_URL=${DEMOAPI_URL:-http://localhost:8090}
 fi
-ADMIN_TOKEN=${ADMIN_TOKEN:-agent-gateway-demo-admin}
+source "$DEMO_DIR/lib/admin-token.sh"
+load_admin_token
 APPROVAL_WAIT=${APPROVAL_WAIT:-180}
 POLL_INTERVAL=${POLL_INTERVAL:-3}
 AGENT_TIMEOUT=${AGENT_TIMEOUT:-120}
@@ -245,33 +248,15 @@ drop_invoice() { # json invoice-id
 }
 
 # ---------------------------------------------------------------------------
-step "2. SSO sign-in (mock connector) → verified subject"
-JAR=$(mktemp)
-HOST_PART=$(echo "$WEB" | sed -E 's|^https?://||')
-PORT_PART=${HOST_PART##*:}; HOST_PART=${HOST_PART%%:*}
-REDIR="http://${HOST_PART}:${PORT_PART}/oidc/callback"
-ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=''))" "$REDIR")
-LOC="$WEB/oidc/idp/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=$ENCODED&connector_id=mock&scope=openid%20email"
-CODE=""
-for _ in 1 2 3 4 5 6; do
-  NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //')
-  [ -z "$NX" ] && break
-  case "$NX" in
-    *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
-    /*)      LOC="$WEB$NX" ;;
-    *)       LOC="$NX" ;;
-  esac
-done
-[ -n "$CODE" ] || fail "SSO redirect chain did not produce a code"
-IT=$(curl -s -b "$JAR" -c "$JAR" -X POST "$WEB/oidc/idp/dex/token" \
-  -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=$REDIR" \
-  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("id_token",""))')
+step "2. Sign in to the local Dex fixture"
+source "$DEMO_DIR/local-demo-auth.sh"
+IT=$(local_demo_id_token) || true
 read_claims() { printf '%s' "$IT" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.dumps(json.loads(base64.urlsafe_b64decode(t))))"; }
 CLAIMS=$(read_claims)
 SUBJECT=$(printf '%s' "$CLAIMS" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("sub",""))')
 USER_EMAIL=$(printf '%s' "$CLAIMS" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("email",""))')
 [ -n "$SUBJECT" ] || fail "no verified subject (ID token exchange failed)"
-echo "   subject: $SUBJECT  ·  verified identity: ${USER_EMAIL:-(the mock IdP signs in as its fixed dev user)}"
+echo "   subject: $SUBJECT  ·  verified identity: $USER_EMAIL"
 
 # ---------------------------------------------------------------------------
 if [ "$NO_DIALOGUE" != 1 ]; then

@@ -47,28 +47,36 @@ curl -sf --max-time 5 "$GW/healthz" >/dev/null || fail "gateway $GW unhealthy"
 curl -sf --max-time 5 "$TS/hc" >/dev/null 2>&1 || curl -sf --max-time 5 "$TS/healthz" >/dev/null || fail "tokensvc $TS unhealthy"
 curl -s --max-time 5 -o /dev/null "$WEB/" || fail "console $WEB unreachable"
 
-step "1. SSO sign-in (mock connector) → verified subject"
-JAR=$(mktemp)
-HOST_PART=$(echo "$WEB" | sed -E 's|^http://||')
-PORT_PART=${HOST_PART##*:}
-HOST_PART=${HOST_PART%%:*}
-REDIR="http://${HOST_PART}:${PORT_PART}/oidc/callback"
-ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=''))" "$REDIR")
-LOC="$WEB/oidc/idp/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=$ENCODED&connector_id=mock&scope=openid"
-CODE=""
-for _ in 1 2 3 4 5 6; do
-  NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //')
-  [ -z "$NX" ] && break
-  case "$NX" in
-    *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
-    /*)      LOC="$WEB$NX" ;;
-    *)       LOC="$NX" ;;
-  esac
-done
-[ -n "$CODE" ] || fail "SSO redirect chain did not produce a code"
-IT=$(curl -s -b "$JAR" -c "$JAR" -X POST "$WEB/oidc/idp/dex/token" \
-  -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=$REDIR" \
-  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("id_token",""))')
+step "1. OIDC sign-in → verified subject"
+if [ -z "$NODE_ARG" ]; then
+  # The local Compose stack uses its loopback-only shared Dex password fixture.
+  # The --node mode retains its cluster authorization-code flow.
+  # shellcheck source=demo/local-demo-auth.sh
+  source demo/local-demo-auth.sh
+  IT=$(local_demo_id_token "http://localhost:5556/dex/token") || fail "local Dex sign-in failed"
+else
+  JAR=$(mktemp)
+  HOST_PART=$(echo "$WEB" | sed -E 's|^http://||')
+  PORT_PART=${HOST_PART##*:}
+  HOST_PART=${HOST_PART%%:*}
+  REDIR="http://${HOST_PART}:${PORT_PART}/oidc/callback"
+  ENCODED=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],safe=''))" "$REDIR")
+  LOC="$WEB/oidc/idp/dex/auth?response_type=code&client_id=agent-gateway&redirect_uri=$ENCODED&connector_id=mock&scope=openid"
+  CODE=""
+  for _ in 1 2 3 4 5 6; do
+    NX=$(curl -s -b "$JAR" -c "$JAR" -D - -o /dev/null "$LOC" | grep -i '^location' | head -1 | tr -d '\r' | sed 's/^Location: //')
+    [ -z "$NX" ] && break
+    case "$NX" in
+      *code=*) CODE=$(echo "$NX" | sed 's/.*code=\([^&]*\).*/\1/'); break ;;
+      /*)      LOC="$WEB$NX" ;;
+      *)       LOC="$NX" ;;
+    esac
+  done
+  [ -n "$CODE" ] || fail "SSO redirect chain did not produce a code"
+  IT=$(curl -s -b "$JAR" -c "$JAR" -X POST "$WEB/oidc/idp/dex/token" \
+    -d "grant_type=authorization_code&client_id=agent-gateway&code=$CODE&redirect_uri=$REDIR" \
+    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("id_token",""))')
+fi
 SUBJECT=$(printf '%s' "$IT" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))")
 [ -n "$SUBJECT" ] || fail "no verified subject (ID token exchange failed)"
 echo "   subject: $SUBJECT"

@@ -45,6 +45,46 @@ completed successfully.
 - Corrected approval-expiry guidance to state that the current main gateway
   image does not honor `APPROVAL_TTL`; the pilot requires a supporting build.
 
+## Security hardening and scan status
+
+- The checked-in K3s manifest no longer contains reusable JWT, admin, or
+  database credentials. `k3s/create-secrets.sh` generates independent secrets
+  and validates existing credentials before deployment.
+- The demo creates high-entropy JWT and admin secrets in ignored `demo/.env`.
+  The local Dex fixture account (`alice@example.com` / `password`) is
+  intentionally insecure and loopback-demo-only; it is not suitable for
+  production or security testing.
+- The tracked Dex template contains no upstream provider credentials.
+  `demo/configure-idp.py` supports Google and Microsoft Entra ID, validates
+  issuer/callback consistency, and writes the generated secret-bearing config
+  with owner-only permissions. The hardened Compose overlay also requires an
+  explicit allowlist of verified administrator emails.
+- The demo OPA policy fails closed for negative, fractional, or otherwise
+  invalid spend/count values and compares numeric approval conditions
+  consistently.
+
+STRIX assessments on 17 November 2026 reported six Medium findings in the
+local demo stack and four in the pre-production stack (three Medium, one Low).
+At a high level, the reports covered unsafe HTML handling, request-routing and
+authorization edge cases, malformed policy inputs, OAuth client
+authentication, and insecure callback transport. Separate full-stack main
+Compose assessments reported one Critical, two Medium, and one Low finding; a
+later run reported two Critical findings. At a high level, these involved
+operator-authentication trust, token trust boundaries, path/approval scope
+enforcement, and approval integrity. These findings are recorded here as
+assessment results; this runtime release does not claim that every
+product-level finding is resolved.
+
+The latest completed STRIX run on 17 November (21:43 UTC) reported no
+confirmed findings for the unauthenticated JSON API it tested. That deep
+black-box assessment was limited to that API surface; it did not cover the
+full Compose stack, the web console, Dex, Google/Microsoft sign-in, or
+authenticated API behavior. Its zero-finding result does not supersede the
+broader findings above or constitute a full-stack security certification.
+The demo OPA policy changes address malformed amount/count handling; rerun a
+full-stack assessment against the exact release images and hardened IdP
+configuration before treating the remaining findings as closed.
+
 ## Published images and verification
 
 The table below records the multi-platform OCI index digests for the versioned

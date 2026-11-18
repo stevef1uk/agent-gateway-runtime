@@ -1,5 +1,5 @@
 #!/bin/bash
-# Register THIS machine's redirect URIs in demo/dex/config.yaml.
+# Register THIS machine's redirect URIs in demo/dex/config.local-demo.yaml.
 #
 # Dex's OIDC client refuse a callback whose exact redirect_uri is not on the
 # list ("Bad Request — Unregistered redirect_uri") — and the list is per-host
@@ -7,14 +7,15 @@
 # therefore needs its own IP form registered the first time the console is
 # opened via anything other than localhost.
 #
-# This script is idempotent: it appends the machine's LAN IPv4 addresses
-# (localhost and 127.0.0.1 are always in the upstream file) to BOTH redirect
-# lists (the staticClient and the mock connector), and reports whether dex
-# needs recreating to re-read the file.
+# This script is idempotent: it appends requested IPv4 callback addresses to
+# the static client redirect list and reports whether Dex needs recreating.
+# It does not publish ports or enable remote access; the default Compose stack
+# remains loopback-only. For remote access, use the hardened overlay and set
+# the public URLs before running configure-idp.py.
 #
 #   ./demo/refresh-dex-redirects.sh                        # compose file only
 #   DEX_EXTRA_IPS="10.0.0.5 10.0.0.6" ./demo/refresh-dex-redirects.sh
-#   DEX_CONSOLE_PORT=30083 ./demo/refresh-dex-redirects.sh # k3s NodePort form
+#   DEX_CONSOLE_PORT=8084 ./demo/refresh-dex-redirects.sh # alternate local port
 #   ./demo/refresh-dex-redirects.sh --restart              # also recreate dex
 #
 # Nothing is removed: entries already present (other hosts' LAN URIs, etc.)
@@ -29,7 +30,7 @@ DO_RESTART=0
 [ "${1:-}" = "--restart" ] && DO_RESTART=1
 
 cd "$(dirname "$0")"
-CFG="dex/config.yaml"
+CFG="dex/config.local-demo.yaml"
 [ -f "$CFG" ] || { echo "no $CFG (run from the demo/ directory layout)" >&2; exit 1; }
 
 # Collect this machine's LAN IPv4s (Mac: the airport/proto interfaces; Linux:
@@ -84,9 +85,7 @@ for line in text.splitlines(keepends=True):
         out.append(line)
         for ip in new_ips:
             uri = "http://%s:%s/oidc/callback" % (ip, port)
-            # this list's membership only: dex validates the redirect at BOTH
-            # the staticClient and the connector list, so "uri anywhere in the
-            # file" would silently leave a half-registered (and failing) state
+            # Dex requires an exact match in the static client's redirect list.
             list_re = re.compile(
                 r"^%s- http://%s:%s/oidc/callback$" % (re.escape(m.group(1)), re.escape(ip), re.escape(port)), re.M)
             if not list_re.search(text):
