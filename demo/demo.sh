@@ -57,21 +57,41 @@ bash "$DEMO_DIR/refresh-dex-redirects.sh" || true
 # docker-compose.opa.yml, which switches authz to the Rego policy engine) is
 # not silently reverted to the base config by the demo.
 compose up -d --no-recreate 2>/dev/null | grep -c "Started\|Running" >/dev/null 2>&1 || true
-sleep 2
+attempt=0
+while [ "$attempt" -lt 15 ]; do
+  READY=1
+  for port in 8081 8082 "$GW_PORT" 8083; do
+    if ! curl -sf --connect-timeout 1 --max-time 2 "http://localhost:$port/healthz" >/dev/null 2>&1; then
+      READY=0
+    fi
+  done
+  if ! curl -sf --connect-timeout 1 --max-time 2 http://localhost:5556/dex/.well-known/openid-configuration >/dev/null 2>&1; then
+    READY=0
+  fi
+  [ "$READY" = 1 ] && break
+  attempt=$((attempt + 1))
+  sleep 2
+done
+
 HEALTHY=1
 for port in 8081 8082 "$GW_PORT" 8083; do
-  if curl -sf "http://localhost:$port/healthz" >/dev/null 2>&1; then
+  if curl -sf --connect-timeout 1 --max-time 2 "http://localhost:$port/healthz" >/dev/null 2>&1; then
     okk "service on :$port healthy"
   else
     bad "service on :$port not healthy"; HEALTHY=0
   fi
 done
-if ! curl -sf http://localhost:5556/dex/.well-known/openid-configuration >/dev/null 2>&1; then
+if ! curl -sf --connect-timeout 1 --max-time 2 http://localhost:5556/dex/.well-known/openid-configuration >/dev/null 2>&1; then
   bad "SSO (Dex) on :5556 not responding"; HEALTHY=0
 else
   okk "SSO (Dex) on :5556 responding"
 fi
-[ "$HEALTHY" = 1 ] || { bad "unhealthy stack — run: $ENGINE compose up -d"; exit 1; }
+if [ "$HEALTHY" != 1 ]; then
+  bad "unhealthy stack — inspect container status and gateway logs:"
+  compose ps gateway web
+  compose logs --tail=60 gateway
+  exit 1
+fi
 
 # --- 1. sign in to the loopback-only local Dex fixture ----------------------
 step "Step 2 — sign in to the local demo identity provider"
