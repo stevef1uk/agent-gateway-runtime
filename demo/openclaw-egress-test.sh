@@ -48,10 +48,10 @@ info()  { printf "  ${YLW}• %s${RST}\n" "$*"; }
 if [ -f demo/.env ]; then
   set -a; . demo/.env; set +a
 fi
-# GW_URL must be computed AFTER demo/.env loads: GATEWAY_HOST_PORT there
-# selects the PEP listener (:9000 in this demo, since :8080 is taken by the
-# OpenShell gateway).
-GW_URL="${GW_URL:-http://localhost:${GATEWAY_HOST_PORT:-8080}}"
+# GW_URL must be computed AFTER demo/.env loads: GATEWAY_HOST_PORT selects the
+# PEP listener. Use IPv4 explicitly because Compose publishes it on 127.0.0.1;
+# macOS may resolve localhost to ::1, which can reach a different listener.
+GW_URL="${GW_URL:-http://127.0.0.1:${GATEWAY_HOST_PORT:-8080}}"
 SANDBOX_NAME="${SANDBOX_NAME:-openclaw}"
 APPROVAL_WAIT="${APPROVAL_WAIT:-60}"
 # How often to re-check the approvals list while waiting for a human verdict.
