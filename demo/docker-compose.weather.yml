@@ -1,8 +1,11 @@
 # Curl-only public API tutorial. Run from the repository root:
-# docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml up -d --wait tokensvc gateway-weather
+# DEX_ISSUER_URL=http://dex:5556/dex docker compose \
+#   -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+#   -f demo/docker-compose.opa.yml -f demo/docker-compose.weather.yml \
+#   up -d --wait tokensvc gateway-weather
 services:
   gateway-weather:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     ports: ["127.0.0.1:${WEATHER_HOST_PORT:-8087}:8080"]
@@ -12,9 +15,9 @@ services:
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
       - APPROVAL_TTL=15m
       - UPSTREAM_URL=https://api.open-meteo.com
     volumes:

@@ -62,23 +62,25 @@ running more replicas in front of your load balancer.
 | Licence token file (e.g. `license.token`) | Time-limited right-to-run, signed by the vendor |
 
 Throughout this document replace the image prefix with the registry path on
-your licence, e.g. `docker.io/stevef1uk/agent-gateway-authz:1.0.12`.
+your licence, e.g. `docker.io/stevef1uk/agent-gateway-authz:1.0.16`.
 
 The images are published on Docker Hub under `stevef1uk` and can be pulled
 as:
 
 ```bash
-docker pull stevef1uk/agent-gateway-authz:1.0.12
-docker pull stevef1uk/agent-gateway-gateway:1.0.24
-docker pull stevef1uk/agent-gateway-tokensvc:1.0.5
-docker pull stevef1uk/agent-gateway-web:1.0.44
+docker pull stevef1uk/agent-gateway-authz:1.0.16
+docker pull stevef1uk/agent-gateway-gateway:1.0.36
+docker pull stevef1uk/agent-gateway-tokensvc:1.0.10
+docker pull stevef1uk/agent-gateway-web:1.0.61
 ```
 
 Each tag is a **multi-arch** manifest (`linux/amd64` + `linux/arm64`), so the
 same tag runs natively on x86-64 servers and Apple-silicon Macs.
 
-Choose specific version tags for production (`1.0.22`) over `latest` so
-rollback and licence enrolment are deterministic; record the pulled digests:
+For production, use the signed version and immutable digest for your licensed
+release instead of `latest`, so rollback and licence enrolment are
+deterministic. The main release digests are recorded in the
+[image verification guide](Container-Image-Security.md).
 
 ```bash
 docker images --digests --filter=reference='stevef1uk/agent-gateway-*'
@@ -112,6 +114,265 @@ key pairs must match: private key ≠ mismatched key pair will fail exactly at
 - An OIDC provider for SSO (Okta, Microsoft Entra ID, Keycloak, Dex — §7.2).
 - Mounted keys: `customer_private.pem` and the licence token supplied by the
   vendor.
+
+### Local Google IdP test
+
+Use this procedure to run the demo locally and sign in through Google. It does
+not build Agent Gateway images. First choose which image set to run; the
+default demo Compose file uses the signed, digest-pinned main images and a
+shared Dex fixture account. Option A explicitly selects the local
+`security-test` images instead.
+
+> **Scope note:** STRIX's zero-finding run used the local `security-test`
+> images listed in option A below, not the published digests in option B. It
+> covered the unauthenticated gateway API; it did not test Google sign-in, the
+> web console, or authenticated API behavior. A signature verifies publisher
+> identity for an image digest; it does not mean STRIX tested that image. See
+> [image verification](Container-Image-Security.md) for what signatures
+> establish.
+
+#### 1. Choose and select the images
+
+**A. Re-run with the exact local images from the STRIX test.** On the test
+machine, confirm the image IDs:
+
+```bash
+docker image inspect \
+  agent-gateway/authz:security-test \
+  agent-gateway/tokensvc:security-test \
+  agent-gateway/gateway:security-test \
+  agent-gateway/web:security-test \
+  --format '{{.RepoTags}} {{.Id}}'
+```
+
+The STRIX run used these exact local image IDs:
+
+| Image | Local image ID |
+|---|---|
+| Authz | `sha256:be753c811eb058119a7e75b4d5872a69e42bbf081c0daeff18b1a7561dd1e48c` |
+| Token service | `sha256:33dc90b93cae75227ef5a4d3a86faca5d8ac229cb60773ab3b8ae9a1003bc668` |
+| Gateway | `sha256:c685902bc10f2c4737b1a5d645bccffea50da566ff1e48f3c44d999cc5d38010` |
+| Web | `sha256:af6f2e813ac497330677300ac6b5ddae5be03a6ced7fbef99d84fc9b48276537` |
+
+If the IDs match, leave/set these values in `demo/.env` to make the image
+selection explicit:
+
+```dotenv
+AUTHZ_IMAGE=agent-gateway/authz:security-test
+TOKENSVC_IMAGE=agent-gateway/tokensvc:security-test
+GATEWAY_IMAGE=agent-gateway/gateway:security-test
+WEB_IMAGE=agent-gateway/web:security-test
+```
+
+Do not run `docker compose pull` for this option: these tags are local test
+images, not Docker Hub releases.
+
+**B. Run the current published, signed main release instead.** From the
+runtime repository root, verify its signatures:
+
+```bash
+./verify-images.sh
+```
+
+Then put these current immutable references in `demo/.env`:
+
+```dotenv
+AUTHZ_IMAGE=docker.io/stevef1uk/agent-gateway-authz:1.0.16@sha256:a0ce26b4f5fabae96e084d15b9777c4a730c6e530c1c4e5393e7ea170b22357f
+TOKENSVC_IMAGE=docker.io/stevef1uk/agent-gateway-tokensvc:1.0.10@sha256:e62ede0ee3a8308ccc5a060d95b9b2159f34b653b56514f3102833a8b5faff1c
+GATEWAY_IMAGE=docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8
+WEB_IMAGE=docker.io/stevef1uk/agent-gateway-web:1.0.61@sha256:12c13a7240547ed43b7cd84c37d24b751d29a0b1eef5f3fb0095acd3b9f0cc4d
+```
+
+These public image digests are built for the runtime demo's matching demo
+decryption key and licence. Keep `demo/keys/` as supplied for that demo; do
+not substitute local-activation or hosted-tenant keys. This published release
+is signed but was not the image set STRIX tested.
+
+#### 2. Start an HTTPS tunnel to local Dex
+
+Google needs to redirect the browser to an HTTPS callback that is reachable
+from the Internet. Dex also requires its issuer URL and upstream callback
+URL to match. The local Docker-only name `http://dex:5556/dex` is not a
+browser-reachable Google callback, and `http://localhost:5556/dex/callback`
+does not match that issuer; do not register either of those URLs for this
+Google connector.
+
+The normal demo does not need a tunnel or a Google account: this step is only
+for users who specifically want to test Google sign-in. Since Docker is
+already running the demo, start Cloudflare's temporary tunnel as a container
+in the demo's Compose network (from `demo/`, in its own terminal):
+
+```bash
+docker run --rm --network demo_default cloudflare/cloudflared:latest \
+  tunnel --no-autoupdate --url http://dex:5556
+```
+
+Wait for the output line that says:
+
+```text
+Your quick Tunnel has been created! Visit it at:
+https://random-words.trycloudflare.com
+```
+
+Copy the `https://...trycloudflare.com` URL shown on the next line. Do not
+copy the documentation link or the `http://dex:5556` origin. Use the copied
+URL plus `/dex/callback` as the Google authorized redirect URI, and use that
+same URL plus `/dex` for `DEX_ISSUER_URL`. Keep the tunnel running for the
+whole sign-in test. The temporary URL changes when the tunnel is restarted;
+if it changes, update the Google OAuth client and `.env`, regenerate the Dex
+config, and recreate Dex, authz, and web.
+
+To have the helper detect the running container and print the exact redirect
+URI to enter in Google Cloud Console, run this from `demo/`:
+
+```bash
+python3 configure-idp.py --print-tunnel-url
+```
+
+It saves the matching `DEX_ISSUER_URL` and `DEX_UPSTREAM_REDIRECT_URI` to
+`.env` and prints the Google authorized redirect URI. In Google Cloud Console,
+open the OAuth 2.0 Client ID used by Dex, edit **Authorized redirect URIs**,
+replace the old tunnel callback with the printed value, and save. The normal
+`python3 configure-idp.py` command also detects an active tunnel and updates
+these settings when generating the Dex config.
+
+**Security and trust:** this is an optional local-test shortcut, not a
+production ingress. It makes Dex reachable from the public Internet through
+Cloudflare's tunnel service; anyone who obtains the temporary URL can send
+requests to the exposed Dex endpoints. Cloudflare handles the public HTTPS
+connection, so use this only if you are comfortable routing this test
+authentication traffic through Cloudflare, and stop the tunnel container
+(Ctrl+C) as soon as the test is over. Do not use it for sensitive or
+production traffic.
+
+If you control a domain and have a publicly reachable host, you can instead
+use a stable hostname under your own DNS and a TLS reverse proxy to Dex.
+DNS by itself does not make a local machine reachable: the host still needs a
+public route (for example, suitable firewall/router rules or a hosted server)
+and the proxy must terminate HTTPS and forward the Dex paths correctly. Avoid
+exposing Dex or the rest of the Compose services directly to the Internet.
+
+The [`cloudflare/cloudflared` Docker image](https://hub.docker.com/r/cloudflare/cloudflared)
+is third-party code, separate from the Agent Gateway images and their
+signatures. The command uses the mutable `:latest` tag, which may resolve to
+different image contents over time. Check Cloudflare's
+[tunnel documentation](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/)
+and the Docker Hub publisher before running it; for repeatable use, pin the
+image to a reviewed version or digest instead of `:latest`. The container is
+attached to `demo_default` so it can reach Dex; like other containers on that
+Compose network, it can also make network connections to peer services. This
+command does not mount the Docker socket or host files, but you should still
+treat the tunnel image as trusted code with network access to the demo.
+For a persistent deployment, prefer a properly secured, stable HTTPS endpoint
+under your control rather than a quick tunnel.
+
+If Docker reports that `demo_default` does not exist, start the demo Compose
+stack first from `demo/`; the `dex` service must be running on that network.
+
+#### 3. Create a Google OAuth client
+
+In Google Cloud Console, configure the OAuth consent screen. If it is in
+Testing mode, add the Google account you will use as a test user. Create an
+OAuth client with application type **Web application** and register this exact
+authorized redirect URI, replacing the example host with the URL printed by
+the tunnel container:
+
+```text
+https://random-words.trycloudflare.com/dex/callback
+```
+
+Google redirects to Dex through the HTTPS tunnel. Dex then redirects the
+browser to the Agent Gateway console at
+`http://localhost:8083/oidc/callback`, a separate callback.
+
+#### 4. Configure local secrets and Google
+
+From the runtime repository:
+
+```bash
+cd demo
+./ensure-secrets.sh
+chmod 600 .env
+```
+
+Edit `.env` and keep the generated JWT/admin values. Set the image
+variables according to option A or B above, then set:
+
+```dotenv
+OIDC_CONNECTOR_ID=google
+DEX_UPSTREAM_CLIENT_ID=<Google OAuth client ID>
+DEX_UPSTREAM_CLIENT_SECRET=<Google OAuth client secret>
+DEX_ISSUER_URL=https://random-words.trycloudflare.com/dex
+DEX_UPSTREAM_REDIRECT_URI=https://random-words.trycloudflare.com/dex/callback
+WEB_PUBLIC_URL=http://localhost:8083
+WEB_ADMIN_EMAILS=<exact verified Google account email>
+```
+
+The issuer must be the tunnel URL plus `/dex`; the upstream callback must be
+that exact issuer plus `/callback`. `configure-idp.py` checks this before
+writing the config. Authz, web, and Dex all use that same issuer URL, while
+the browser-facing console remains on localhost.
+
+The email must be the verified address returned by Google. Do not commit
+`.env` or share the OAuth client secret. The helper writes
+`dex/config.hardened.yaml` with mode `0600`; that file contains the client
+secret and must stay private. It also records your POSIX host UID/GID in
+`demo/.env`, and the Dex Compose service uses those IDs to read the private
+file. This works on Linux and macOS without making the OAuth secret
+world-readable. Run the helper and Compose from the same host account.
+
+#### 5. Generate the hardened Dex config and start
+
+Run from the `demo/` directory:
+
+```bash
+python3 configure-idp.py
+docker compose -f docker-compose.yml -f docker-compose.hardened.yml config --images
+```
+
+Check that the four Agent Gateway image references shown match option A or B
+(the demo also uses supporting images).
+For option B, pull the four digest-pinned images, then start the stack:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.hardened.yml pull \
+  authz tokensvc gateway web
+docker compose -f docker-compose.yml -f docker-compose.hardened.yml up -d
+```
+
+For option A, do not pull the `security-test` images; start the stack directly:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.hardened.yml up -d
+```
+
+The overlay replaces the default Dex fixture configuration and requires an
+explicit `WEB_ADMIN_EMAILS` allowlist. Check health and open the console:
+
+```bash
+for p in 8081 8082 8080 8083; do
+  curl -fsS "http://localhost:$p/healthz"
+  echo
+done
+```
+
+Visit [http://localhost:8083](http://localhost:8083) and choose Google sign-in.
+Use the browser console for this test. The scripted `./demo.sh` obtains a
+token from the local Alice fixture and does not automate Google sign-in.
+If sign-in fails, inspect the Dex and web logs locally; redact credentials and
+tokens before sharing logs:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.hardened.yml logs --tail=100 dex web
+```
+
+Stop the tunnel container after the sign-in test (Ctrl+C in its terminal).
+The tunnel is only for this local test and should not be left running as a
+deployment ingress.
+
+This is a loopback-only functional test setup, not a production deployment.
+For a public deployment, use HTTPS origins and a tenant-scoped IdP
+configuration; do not reuse the localhost callback or the demo credentials.
 
 ---
 
@@ -164,6 +425,7 @@ services:
     environment:
       - AUTHZ_URL=http://authz:8081
       - JWT_SECRET=<same as authz>
+      - GATEWAY_ADMIN_TOKEN=<independent 32+ random bytes>
       # - DECISION_CACHE_TTL=5s    # optional: throughput ↔ revocation latency trade-off, see §5
     volumes:
       - ./keys:/keys:ro
@@ -176,6 +438,7 @@ services:
     environment:
       - AUTHZ_URL=http://authz:8081
       - GATEWAY_URL=http://gateway:8080
+      - GATEWAY_ADMIN_TOKEN=<same as gateway>
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/web.token:ro
@@ -183,7 +446,8 @@ services:
 
 > **Note** — `JWT_SECRET` must be identical on `authz`, `tokensvc` and
 > `gateway`: each service signs/validates the same short-lived agent tokens.
-> Generate once: `openssl rand -hex 32`.
+> Generate once: `openssl rand -hex 32`. `GATEWAY_ADMIN_TOKEN` must be an
+> independent high-entropy secret shared only by gateway and web.
 
 Start and verify:
 
@@ -197,7 +461,8 @@ You should see `{"status":"ok"}` four times. Login to the admin UI on
 
 ### 4.4 Demos you can run immediately
 
-* **Scripted demo** — `demo/demo.sh` (this repository): walks the whole
+* **Scripted demo** — `demo/demo.sh` (this repository; uses the local Dex
+  fixture account, not an external Google/Microsoft login): walks the whole
   authorization story live — SSO sign-in, delegation, token minting,
   auto-allow, approval hold, human approval, instant revocation — with
   explanations at each step.
@@ -259,10 +524,9 @@ APPROVAL=$(curl -s -X POST http://localhost:8080/orders \
   -d '{"amount": 250, "supplier": "acme"}' | jq -r .approval_id)
 
 # 5. A human approves (bound to this exact action hash); the gateway's
-#    operator endpoints require the admin token (GATEWAY_ADMIN_TOKEN — the
-#    demo compose sets it to agent-gateway-demo-admin)
+#    operator endpoints require the admin token (GATEWAY_ADMIN_TOKEN)
 curl -s -X POST http://localhost:8080/v1/approvals/ -H "Content-Type: application/json" \
-  -H "X-Admin-Token: ${ADMIN_TOKEN:-agent-gateway-demo-admin}" \
+  -H "X-Admin-Token: $GATEWAY_ADMIN_TOKEN" \
   -d "{\"approval_id\":\"$APPROVAL\",\"approver_id\":\"alice\",\"approved\":true}"
 
 # 6. Retry now succeeds (200); revoke kills the agent even with a valid token
@@ -282,7 +546,8 @@ All configuration is via environment variables (12-factor style).
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `JWT_SECRET` | `dev-secret-change-in-prod` | HMAC key for short-lived agent tokens. **Must match across authz/tokensvc/gateway. Set explicitly in production.** |
+| `JWT_SECRET` | required; no secure default | HMAC key for short-lived agent tokens. Must contain at least 32 random bytes, match across authz/tokensvc/gateway, and never use a published development placeholder. Updated source builds refuse to start if it is missing or weak; existing published images must be rebuilt from the fixed source to enforce that check. |
+| `GATEWAY_ADMIN_TOKEN` | unset disables operator endpoints; required by the local demo Compose stack | Independent high-entropy credential for operator endpoints. Use at least 32 random bytes and never reuse `JWT_SECRET`. |
 | `JWT_ISSUER` | `agent-gateway` | `iss` claim on issued agent tokens |
 | `AUDIENCE` | `agent-gateway` | `aud` claim on issued agent tokens |
 | `TOKEN_TTL` | `5m` | Default lifetime of agent tokens (Go duration) |
@@ -306,17 +571,21 @@ All configuration is via environment variables (12-factor style).
 
 ### Approval expiry (`APPROVAL_TTL`)
 
-Gateway images **1.0.32+** (managed **1.0.36+**) accept `APPROVAL_TTL` as a
-Go duration (`15m`, `30s`, `1h`). Default: **15 minutes**, also used for
-invalid or non-positive values. The TTL applies to newly created approvals
-and their single-use consumption window; existing requests retain their
-original expiry. Late decisions return **410 Gone**. Recording an approval
-does not execute the action: the agent retries the identical request.
+The published main gateway image `1.0.36` does not consume `APPROVAL_TTL` and
+uses the default **15-minute** expiry. The approval-edge pilot only works with
+a gateway build that implements this setting; its script detects when the
+configured TTL is ignored and stops. In a supporting build, `APPROVAL_TTL` is
+a Go duration (`15m`, `30s`, `1h`); invalid or non-positive values use the
+15-minute default. The TTL applies to newly created approvals and their
+single-use consumption window; existing requests retain their original
+expiry. Late decisions return **410 Gone**. Recording an approval does not
+execute the action: the agent retries the identical request.
 
 Compose forwards `${APPROVAL_TTL:-15m}` to the primary gateway. Recreate it
 after changing the value; `docker compose restart` keeps the old environment:
 
 ```bash
+# Only use this with a gateway build that implements APPROVAL_TTL.
 APPROVAL_TTL=10s docker compose -f demo/docker-compose.yml up -d --wait gateway
 make approval-edge-demo
 # Restore the normal human decision window afterward:
@@ -675,6 +944,8 @@ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/
 ```
 
 **Required secrets** in the `agentgw` namespace:
+- `agentgw-secrets` (keys: `JWT_SECRET`, `GATEWAY_ADMIN_TOKEN`, `POSTGRES_PASSWORD`) —
+  create with `./k3s/create-secrets.sh`; it generates independent random values
 - `agentgw-telegram` (keys: `bot_token`, `chat_id`) — for approval Telegram cards
 - `agentgw-keys` (keys: `license.token`, `customer_private.pem`) — licence + decryption key
 - `agent-gateway-runtime` (key: `jwt_secret`) — shared 32-byte HMAC secret
@@ -696,6 +967,7 @@ and Let's Encrypt challenges.
 
 **k3s manifest deployment**:
 ```bash
+./k3s/create-secrets.sh
 kubectl apply -f k3s/agentgw.yaml
 # Then verify:
 kubectl -n agentgw get pods -l app=gateway-mcp

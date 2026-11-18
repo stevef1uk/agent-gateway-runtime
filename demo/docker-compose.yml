@@ -1,17 +1,16 @@
-# Agent Gateway public demo stack — 7 containers from Docker Hub.
+# Agent Gateway local demo stack.
 #
-#   cd demo && docker compose up -d --build
+#   cd demo && ./ensure-secrets.sh && docker compose up -d --build
 #   ./demo.sh                  (scripted walkthrough)
 #   open http://localhost:8083/demo.html   (graphical walkthrough)
 #
-# Product binaries run from the published images; the images carry encrypted
-# payloads that need demo/keys/customer_private.pem + the vendor licence at
-# runtime (see ../docs/Security-and-Licensing.md). The first-party demo API is
-# built from ./api so its geocoding proxy and demo behavior match this checkout.
+# This default is a loopback-only local demo with a shared Dex test account.
+# It is intentionally insecure and must not be used for pen testing or
+# deployment. Use docker-compose.hardened.yml with a real IdP for those cases.
 
 services:
   authz:
-    image: stevef1uk/agent-gateway-authz:1.0.15@sha256:b72fde17f16448f1fcafcc2e8a7303eddd98a9074d2ed6190b100e0778a2582c
+    image: ${AUTHZ_IMAGE:-docker.io/stevef1uk/agent-gateway-authz:1.0.16@sha256:a0ce26b4f5fabae96e084d15b9777c4a730c6e530c1c4e5393e7ea170b22357f}
     container_name: agent-gateway-authz
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -20,10 +19,10 @@ services:
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
       - TOKEN_TTL=5m
-      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_ISSUER_URL=${DEX_ISSUER_URL:-http://dex:5556/dex}
       - OIDC_CLIENT_ID=agent-gateway
       - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
     volumes:
@@ -40,13 +39,13 @@ services:
       retries: 5
 
   tokensvc:
-    image: stevef1uk/agent-gateway-tokensvc:1.0.9@sha256:70f93246149afd85a71c4c63d7e043ecae7217634c2f961faa0834a5c513a748
+    image: ${TOKENSVC_IMAGE:-docker.io/stevef1uk/agent-gateway-tokensvc:1.0.10@sha256:e62ede0ee3a8308ccc5a060d95b9b2159f34b653b56514f3102833a8b5faff1c}
     container_name: agent-gateway-tokensvc
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
-    ports: ["8082:8082"]
+    ports: ["127.0.0.1:8082:8082"]
     environment:
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
       - TOKEN_TTL=5m
       - AUTHZ_URL=http://authz:8081
@@ -54,6 +53,8 @@ services:
     volumes:
       - ./keys:/keys:ro
       - ./keys/license.token:/licences/tokensvc.token:ro
+    depends_on:
+      authz: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8082/healthz"]
       interval: 5s
@@ -61,23 +62,26 @@ services:
       retries: 5
 
   gateway:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     container_name: agent-gateway-gateway
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     # GATEWAY_HOST_PORT overrides the published PEP port (default 8080) when
     # something else already owns :8080 on the host, e.g. an OpenShell gateway.
-    ports: ["${GATEWAY_HOST_PORT:-8080}:8080", "8088:8088"]
+    # Keep host-local access and expose only the Docker bridge address so
+    # isolated test containers can reach the pen-test target without opening
+    # the gateway on every host interface.
+    ports: ["127.0.0.1:${GATEWAY_HOST_PORT:-8080}:8080", "172.17.0.1:${GATEWAY_HOST_PORT:-8080}:8080", "127.0.0.1:8088:8088"]
     environment:
       - AUTHZ_URL=http://authz:8081
       - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # guards /v1/approvals + /v1/tokens/revoke (X-Admin-Token); rotate for anything real
-      - APPROVAL_TTL=${APPROVAL_TTL:-15m}             # approval hold TTL; shorten for tests (e.g. APPROVAL_TTL=10s)
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
+      - APPROVAL_TTL=${APPROVAL_TTL:-15m}             # honored only by gateway images that implement this setting
       # Egress enforcement (OpenShell/OpenClaw): uncomment to route ALL of an
       # agent's outbound traffic through the gateway — one delegated, audited,
       # approval-gated decision per destination. See demo/egress-demo.sh and
@@ -115,7 +119,7 @@ services:
   # Dedicated API PEP for the Console's catalog-demo example. Local Compose
   # does not dynamically provision PEPs for arbitrary Wizard entries.
   gateway-api-catalog-demo:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     container_name: agent-gateway-gateway-api-catalog-demo
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -125,9 +129,9 @@ services:
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
       - UPSTREAM_PATH_PREFIX=/api-catalog-demo
       - UPSTREAM_URL=${CATALOG_DEMO_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
     volumes:
@@ -145,7 +149,7 @@ services:
 
   # Dedicated API PEP for the Console's Open-Meteo Geocoding example.
   gateway-api-geocoding:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     container_name: agent-gateway-gateway-api-geocoding
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -155,9 +159,9 @@ services:
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
       # The governed route includes the service name; remove it before
       # forwarding to Open-Meteo's /v1/search endpoint.
       - UPSTREAM_PATH_PREFIX=/api-geocoding
@@ -177,7 +181,7 @@ services:
 
   # Dedicated API PEP for the Console's JSONPlaceholder Users example.
   gateway-api-users:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     container_name: agent-gateway-gateway-api-users
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -187,9 +191,9 @@ services:
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
       - UPSTREAM_PATH_PREFIX=/api-users
       - UPSTREAM_URL=${USERS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
     volumes:
@@ -209,7 +213,7 @@ services:
   # demoapi's counting echo accepts /refunds and makes approval execution
   # visible; JSONPlaceholder does not implement a /refunds resource.
   gateway-api-refunds:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     container_name: agent-gateway-gateway-api-refunds
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -219,9 +223,9 @@ services:
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
       - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
       - UPSTREAM_PATH_PREFIX=/api-refunds
       - UPSTREAM_URL=http://demoapi:8090
     volumes:
@@ -241,21 +245,22 @@ services:
   # Demo 9 — CRM MCP server PEP. UPSTREAM_URL is per-instance,
   # so MCP CRM traffic gets its own PEP here: /mcp in, mcpsrv:8091 out.
   gateway-mcp:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     container_name: agent-gateway-gateway-mcp
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
     # GATEWAY_MCP_HOST_PORT overrides the published host port (default 8085).
-    ports: ["${GATEWAY_MCP_HOST_PORT:-8085}:8080"]
+    ports: ["127.0.0.1:${GATEWAY_MCP_HOST_PORT:-8085}:8080"]
     environment:
       - AUTHZ_URL=http://authz:8081
       - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
-      - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # same operator token as the primary gateway
+      # Authz mints the bearer JWT returned by the Console for every PEP, so
+      # every gateway must validate with Authz's shared signing key/issuer.
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
       # CRM MCP server (Demo 9)
       - UPSTREAM_URL=http://mcpsrv:8091
       # MCP One Ring OAuth layer (Claude remote connector + any MCP client):
@@ -270,10 +275,10 @@ services:
       # ./oauth-tunnel.sh overrides it (via .env) with an HTTPS tunnel URL
       # so claude.ai's cloud connector can reach the stack.
       - OAUTH_ISSUER_URL=${OAUTH_PUBLIC_BASE:-http://localhost:${GATEWAY_MCP_HOST_PORT:-8085}}
-      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_ISSUER_URL=${DEX_ISSUER_URL:-http://dex:5556/dex}
       - OIDC_CLIENT_ID=agent-gateway
+      - OIDC_CONNECTOR_ID=${OIDC_CONNECTOR_ID:-}
       - OAUTH_IDP_BROWSER_URL=http://localhost:5556/dex
-      - OIDC_CONNECTOR_ID=mock
       # MCP holds notify like every other gateway instance: without these the
       # only channel is the console poll (and the human may not be watching).
       - APPROVAL_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
@@ -296,27 +301,28 @@ services:
 
   # Dedicated Gateway PEP fronting the Emotion Detection MCP server
   gateway-mcp-emotion:
-    image: stevef1uk/agent-gateway-gateway:1.0.35@sha256:a134b49079afd15f172c4f1926b94cb0eba8e38261e9409699c05e5e37375f47
+    image: ${GATEWAY_IMAGE:-docker.io/stevef1uk/agent-gateway-gateway:1.0.36@sha256:2dce006ce0b53bdeb57525b3d993809fbc802a24e1dcfd39e46dde1a4ee72ce8}
     container_name: agent-gateway-gateway-mcp-emotion
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
-    ports: ["${GATEWAY_MCP_EMOTION_HOST_PORT:-8086}:8080"]
+    ports: ["127.0.0.1:${GATEWAY_MCP_EMOTION_HOST_PORT:-8086}:8080"]
     environment:
       - AUTHZ_URL=http://authz:8081
       - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
       - PERSISTENCE=postgres
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - REDIS_URL=redis://redis:6379/0
-      - JWT_SECRET=agent-gateway-demo-secret-change-in-prod
-      - JWT_ISSUER=agent-gateway
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin
+      # Authz mints the bearer JWT returned by the Console for every PEP, so
+      # every gateway must validate with Authz's shared signing key/issuer.
+      - JWT_SECRET=${JWT_SECRET:?Set a high-entropy JWT_SECRET in demo/.env}
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
       - UPSTREAM_URL=http://emotion-mcp:9000
       - OAUTH_ENABLED=1
       - OAUTH_ISSUER_URL=${OAUTH_PUBLIC_BASE_EMOTION:-http://localhost:${GATEWAY_MCP_EMOTION_HOST_PORT:-8086}}
-      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_ISSUER_URL=${DEX_ISSUER_URL:-http://dex:5556/dex}
       - OIDC_CLIENT_ID=agent-gateway
+      - OIDC_CONNECTOR_ID=${OIDC_CONNECTOR_ID:-}
       - OAUTH_IDP_BROWSER_URL=http://localhost:5556/dex
-      - OIDC_CONNECTOR_ID=mock
       - APPROVAL_TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - APPROVAL_TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
       - APPROVAL_CONSOLE_URL=${APPROVAL_CONSOLE_URL:-}
@@ -341,7 +347,7 @@ services:
     pull_policy: build
     container_name: agent-gateway-demoapi
     restart: unless-stopped
-    ports: ["8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire
+    ports: ["127.0.0.1:8090:8090"]   # counter visible from the host: curl :8090/api/sensitive/wire
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8090/healthz"]
       interval: 5s
@@ -359,7 +365,7 @@ services:
         EMOTION_BASE_IMAGE: ${EMOTION_BASE_IMAGE:-stevef1uk/emotion-service:amd64}
     container_name: agent-gateway-emotion-api
     restart: unless-stopped
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     environment:
       - MODEL_PATH=/app/model
       - GO_SERVER_PORT=8000
@@ -371,7 +377,7 @@ services:
     image: ${MCP_IMAGE:-stevef1uk/emotion-mcp:latest}
     container_name: agent-gateway-emotion-mcp
     restart: unless-stopped
-    ports: ["9000:9000"]
+    ports: ["127.0.0.1:9000:9000"]
     environment:
       - EMOTION_SERVICE_URL=http://emotion-api:8000/predict
       - MCP_PORT=9000
@@ -386,7 +392,7 @@ services:
     container_name: agent-gateway-mcpsrv
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
-    ports: ["8091:8091"]   # MCP server visible from the host: curl :8091/customers
+    ports: ["127.0.0.1:8091:8091"]   # MCP server visible from the host: curl :8091/customers
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8091/healthz"]
       interval: 5s
@@ -394,11 +400,11 @@ services:
       retries: 5
 
   web:
-    image: ${WEB_IMAGE:-stevef1uk/agent-gateway-web:1.0.60@sha256:c9def2de9387fd9156fedcce81bca7b64decaafeb378a5d057b56f090ab04c58}  # All built-in API Wizard examples
+    image: ${WEB_IMAGE:-docker.io/stevef1uk/agent-gateway-web:1.0.61@sha256:12c13a7240547ed43b7cd84c37d24b751d29a0b1eef5f3fb0095acd3b9f0cc4d}  # All built-in API Wizard examples
     container_name: agent-gateway-web
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
-    ports: ["8083:8083"]
+    ports: ["127.0.0.1:8083:8083"]
     environment:
       - DATABASE_URL=postgres://agentgw:agentgw@postgres:5432/agent_gateway?sslmode=disable
       - AUTHZ_URL=http://authz:8081
@@ -406,9 +412,10 @@ services:
       - GATEWAY_URL=http://gateway:8080
       - GATEWAY_MCP_URL=http://gateway-mcp:8080
       - TOKENSVC_URL=http://tokensvc:8082
-      - OIDC_ISSUER_URL=http://dex:5556/dex
+      - OIDC_ISSUER_URL=${DEX_ISSUER_URL:-http://dex:5556/dex}
       - OIDC_CLIENT_ID=agent-gateway
-      - OIDC_CONNECTOR_ID=mock        # one-click sign-in for the demo
+      - OIDC_CONNECTOR_ID=${OIDC_CONNECTOR_ID:-}
+      - WEB_PUBLIC_URL=${WEB_PUBLIC_URL:-http://localhost:8083}
       - WEB_ADDR=:8083
       - CATALOG_DEMO_UPSTREAM_URL=${CATALOG_DEMO_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
       - GEOCODING_API_UPSTREAM_URL=${GEOCODING_API_UPSTREAM_URL:-https://geocoding-api.open-meteo.com}
@@ -416,8 +423,9 @@ services:
       # The signed Web image's built-in refunds example submits this URL.
       # Its Compose PEP is separately wired to demoapi for a working /refunds route.
       - REFUNDS_API_UPSTREAM_URL=${REFUNDS_API_UPSTREAM_URL:-https://jsonplaceholder.typicode.com}
-      - GATEWAY_ADMIN_TOKEN=agent-gateway-demo-admin  # forwarded to the gateway's operator endpoints
-      - WEB_ADMIN_EMAILS=${WEB_ADMIN_EMAILS:-kilgore@kilgore.trout}  # fixed Dex mock identity; override for another verified email
+      - GATEWAY_ADMIN_TOKEN=${GATEWAY_ADMIN_TOKEN:?Run ./ensure-secrets.sh from demo/}
+      - PUBLIC_SIGNUP_ENABLED=0
+      - WEB_ADMIN_EMAILS=${WEB_ADMIN_EMAILS:-alice@example.com}
       - DEMO_UI=1                     # serve the R&D pages (/demo.html, /policy.html); production omits this
       - FREERIDE_URL=http://freeride:11434/v1/chat/completions
       - FREERIDE_MODEL=${FREERIDE_MODEL:-gpt-4o}
@@ -435,6 +443,8 @@ services:
       gateway-api-refunds: { condition: service_started }
       gateway-mcp: { condition: service_started }
       gateway-mcp-emotion: { condition: service_started }
+      freeride: { condition: service_started }
+      tokensvc: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8083/healthz"]
       interval: 5s
@@ -471,18 +481,18 @@ services:
     image: ghcr.io/dexidp/dex:v2.46.0
     container_name: agent-gateway-dex
     restart: unless-stopped
-    ports: ["5556:5556"]
+    # configure-idp.py sets these to the owner of its mode-0600 config file.
+    user: "${DEX_UID:-1001}:${DEX_GID:-1001}"
+    ports: ["127.0.0.1:5556:5556"]
     volumes:
-      - ./dex/config.yaml:/etc/dex/config.yaml:ro
-    environment:
-      - DEX_MOCK_REDIRECT_URIS=${DEX_MOCK_REDIRECT_URIS:-http://localhost:8083/oidc/callback,http://host.docker.internal:8083/oidc/callback}
+      - ./dex/config.local-demo.yaml:/etc/dex/config.yaml:ro
     command: ["dex", "serve", "/etc/dex/config.yaml"]
 
   freeride:
     image: ${FREERIDE_IMAGE:-stevef1uk/freeride:1.4.0}
     container_name: agent-gateway-freeride
     restart: unless-stopped
-    ports: ["${FREERIDE_HOST_PORT:-11435}:11434"]
+    ports: ["127.0.0.1:${FREERIDE_HOST_PORT:-11435}:11434"]
     environment:
       - PORT=11434
       # Configure whichever provider API keys you wish to use (passed from demo/.env)

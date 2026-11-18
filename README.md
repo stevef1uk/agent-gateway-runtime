@@ -80,17 +80,68 @@ One of the project's demonstrations explores this under **prompt injection**. Th
 
 ## Try it yourself
 
-The repository includes a local demonstration stack. Requirements are Docker Engine 24+ or Podman 4.7+, Compose, and `curl` (`jq` is optional).
+The repository includes a local demonstration stack. Requirements are Docker Engine 24+ or Podman 4.7+, Compose, and `curl` (`jq` is optional). The short walkthrough below uses the signed, digest-pinned main images by default; the exact local image IDs used by STRIX and published-image verification steps are in the [image verification guide](docs/Container-Image-Security.md).
 
 ```bash
 cd demo
+./ensure-secrets.sh
+DEX_ISSUER_URL=http://dex:5556/dex \
+OIDC_CONNECTOR_ID= \
+WEB_ADMIN_EMAILS=alice@example.com \
 docker compose up -d
 ./demo.sh
 ```
 
 Then open the guided demo at [http://localhost:8083/demo.html](http://localhost:8083/demo.html).
 
+The default Compose file uses signed, digest-pinned main images for the four
+Agent Gateway services and a shared local Dex test identity. It pulls those
+images when they are not present locally; it does not configure Google
+sign-in. To test Google login, the deployment guide explains how to select
+either the exact local images used by STRIX or the current published,
+signature-verified image digests, and how to configure the hardened Dex overlay:
+[Local Google IdP test](docs/Deployment-Guide.md#local-google-idp-test).
+An existing `demo/.env` can override these image defaults; use the pinned
+values from [demo/.env.example](demo/.env.example) when you want the published
+release rather than local test images.
+Google sign-in is optional; the ordinary demo does not need a public tunnel.
+The local fixture login is `alice@example.com` / `password` and is insecure,
+shared demo-only authentication. These explicit overrides matter if your
+gitignored `demo/.env` still contains external-IdP values: use the hardened
+overlay and its verified admin allowlist for Google/Microsoft instead of
+mixing that configuration with the local Dex fixture.
+The Google test uses a temporary third-party Cloudflare tunnel container to
+expose Dex for the OAuth callback, so review the security and image-trust
+notes in that guide before running it and stop the tunnel when finished.
+The published digests are signed, but are not the images used in that STRIX
+run. The scripted `./demo.sh` signs in with the local Dex fixture, so do not
+run it as part of the Google IdP procedure; use the browser console to test
+Google sign-in.
+
 The walkthrough covers sign-in, delegation, agent activity, a held action, a human decision, revocation and audit. For the full catalogue—including MCP protection, egress, DPoP/RAR, the kill switch, public API and Gmail examples—see **[the demos guide](docs/Demos.md)**.
+
+To run the **OPA/Rego Policy Playground** together with the egress demo,
+start Compose with both overlays from `demo/`:
+
+```bash
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com \
+docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml \
+  -f docker-compose.opa.yml up -d
+```
+
+For Google/Microsoft sign-in, also include
+`-f docker-compose.hardened.yml` so Compose keeps the generated IdP config.
+For that external-IdP configuration, omit the local `DEX_ISSUER_URL` override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.egress.yml \
+  -f docker-compose.opa.yml -f docker-compose.hardened.yml up -d
+```
+
+Then open [http://localhost:8083/policy.html](http://localhost:8083/policy.html).
+The full overlay combinations and setup details are in the
+[Demos guide](docs/Demos.md#running-the-demos).
 
 In local Compose mode, the Console Wizard's `catalog-demo`, `users`, and `refunds` APIs are preconfigured to use JSONPlaceholder, and `geocoding` uses Open-Meteo Geocoding. Each runs behind a dedicated policy-enforcing gateway. Compose does not dynamically provision PEPs for arbitrary Wizard API URLs: unsupported API names or URLs are rejected rather than silently routed to the demo API. Set `CATALOG_DEMO_UPSTREAM_URL`, `USERS_API_UPSTREAM_URL`, `REFUNDS_API_UPSTREAM_URL`, or `GEOCODING_API_UPSTREAM_URL` before starting Compose to change those examples, or use Kubernetes mode for dynamically provisioned upstreams.
 
@@ -144,3 +195,6 @@ The project is free to explore, with a non-expiring licence token available to i
 ---
 
 **The challenge isn't simply making AI agents autonomous. It's deciding where autonomy should end and human authority should begin.**
+
+For the latest main image versions, verification details, and changes since
+the previous release, see [RELEASE_NOTE.md](RELEASE_NOTE.md).

@@ -10,17 +10,69 @@ For the system design behind these demonstrations, see [Architecture](Architectu
 
 # Running the demos
 
-The demos run against the same seven-container stack in [`demo/`](../demo/)
-and make **real gateway** calls. Demo 14 optionally simulates the Gmail
-backend while retaining live authorization and approvals. Run the stack first:
+The demos run against the Compose stack in [`demo/`](../demo/) and make
+**real gateway** calls. Demo 14 optionally simulates the Gmail backend while
+retaining live authorization and approvals. The command below enables both
+the egress proxy (Demos 5–7) and the OPA/Rego policy playground (Demo 3):
 
 ```bash
 cd demo
-docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
-                            # pulls published images from Docker Hub;
-                            # the egress overlay adds the gateway's :8088 proxy (Demos 5–7)
+./ensure-secrets.sh
+DEX_ISSUER_URL=http://dex:5556/dex \
+OIDC_CONNECTOR_ID= \
+WEB_ADMIN_EMAILS=alice@example.com \
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.egress.yml \
+  -f docker-compose.opa.yml \
+  up -d
 ./demo.sh
 ```
+
+The base Compose file defaults to signed, digest-pinned main images for the
+four Agent Gateway services and pulls them if they are not already present.
+To test the exact local `security-test` images used by STRIX, explicitly set
+the four image overrides as described in the
+[Deployment Guide](Deployment-Guide.md#local-google-idp-test).
+
+Choose one sign-in mode and use its matching Compose configuration:
+
+| Mode | Identity provider and console allowlist | Compose files |
+|---|---|---|
+| **Local demo (insecure; default)** | Loopback-only Dex fixture; sign in as `alice@example.com` with password `password`. The local account is shared and only for demos. The command above explicitly clears external-IdP settings that may remain in `demo/.env`. | base + egress + OPA |
+| **Hardened external IdP (Google/Microsoft)** | Real Dex connector and a verified administrator email in `WEB_ADMIN_EMAILS`; requires the provider callback/tunnel setup. Do not use the local fixture credentials or scripts. | base + egress + OPA + hardened |
+
+For Google or Microsoft sign-in, first follow [Local Google IdP test](Deployment-Guide.md#local-google-idp-test)
+to configure the OAuth client, tunnel, `demo/.env`, and generated hardened
+Dex config. Preserve that configuration by including the hardened overlay
+and **do not** set the local issuer, empty connector, or fixture allowlist
+overrides:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.egress.yml \
+  -f docker-compose.opa.yml \
+  -f docker-compose.hardened.yml \
+  up -d
+```
+
+For Google sign-in, keep the configured tunnel running as well. The hardened
+overlay requires `WEB_ADMIN_EMAILS` to contain the verified administrator
+email. Open the console at http://localhost:8083 and the policy playground at
+http://localhost:8083/policy.html. The OPA overlay shares
+`demo/policies/authorizer.rego` between the authorization service and the
+console; edits are validated and picked up by the running service.
+
+The local-fixture overrides are per-command and do not edit `.env`. Repeat
+them on each local-fixture `docker compose up`: Compose reads `.env`, so an
+old `OIDC_CONNECTOR_ID=google` or real `WEB_ADMIN_EMAILS` value otherwise
+overrides the local fixture's Dex connector and `alice@example.com` allowlist.
+For external-IdP testing, use the hardened overlay and browser console; do not
+run the local-fixture scripts. For every later `docker compose up`, repeat
+the same mode-specific environment overrides and overlays used to start the
+stack so Compose does not recreate services with a reduced or mismatched
+configuration.
 
 When you are done trying the demos, run `make clean` from the repo root (or `cd demo && docker compose down --remove-orphans`) to tear down all containers — see [Cleaning up](#cleaning-up).
 
@@ -66,8 +118,16 @@ notifications/model turns.
 | `APPROVAL_CONSOLE_URL` | compose → gateway | the console URL stamped on approval cards/webhooks; must be **routable from the approver's device** — Telegram refuses `localhost` in buttons, so a LAN address (e.g. `http://192.168.1.53:8083`) |
 | `APPROVAL_TTL` | compose → primary gateway | Lifetime of new approvals, including consumption after consent; Go duration, default `15m`. Demo 12 uses `10s`; recreate the gateway to change it. Requires gateway 1.0.32+ (managed 1.0.36+). |
 | `DEMO_CONSOLE_URL` | the egress overlay (`docker-compose.egress.yml`) for `APPROVAL_CONSOLE_URL` | same sentence, but used when the stack is brought up **with the egress overlay** (Demos 5–7); keep it the same value |
-| `NVIDIA_API_KEY` | `openclaw-sandbox.sh` (`configure`, `chat*`) and `openclaw-egress-test.sh` | your NVIDIA API key (nvapi-…); wired to the in-sandbox provider as an env SecretRef for model calls (Demo 6/7) |
+| `NVIDIA_API_KEY` | `openclaw-sandbox.sh` (`configure`, `chat*`) and `openclaw-egress-test.sh` | NVIDIA API key for model calls (Demo 6/7); it is passed into the sandbox environment, which OpenShell warns is readable by the agent—use only with a trusted demo agent |
 | `GATEWAY_HOST_PORT` | compose `ports` and every script | the PEP's **published host port** (default 8080); use e.g. `9000` when a local OpenShell gateway already owns 8080 — scripts fall back to 8080 unless told |
+| `OIDC_CONNECTOR_ID` | web console → Dex connector selection | `google`/`microsoft` for configured external IdP; empty for the local Dex fixture |
+| `WEB_ADMIN_EMAILS` | web console administrator allowlist | verified external-IdP admin email(s), comma-separated; use `alice@example.com` only with the insecure local fixture |
+| `GATEWAY_MCP_HOST_PORT` | MCP gateway compose service and MCP scripts | published host port for the dedicated MCP gateway (default `8085`); change it if that host port is already in use |
+| `FREERIDE_HOST_PORT` | compose `freeride` service | host port for FreeRide's OpenAI-compatible API (default `11435`, container port `11434`) |
+| `OLLAMA_API_KEY` | compose → FreeRide | optional Ollama Cloud credential; leave empty when not using Ollama Cloud |
+| `JWT_SECRET_MCP`, `JWT_SECRET_MCP_EMOTION` | legacy MCP gateway setups only | not consumed by the current demo Compose files; retained only for older/manual setups |
+| `AUTHZ_IMAGE`, `TOKENSVC_IMAGE`, `GATEWAY_IMAGE`, `WEB_IMAGE` | Compose image selection | optional image overrides; defaults are the signed, digest-pinned main images. See the [Deployment Guide](Deployment-Guide.md) for versioned references and verification. Set local `agent-gateway/*:security-test` tags only to test locally built product images. |
+| `DEX_UID`, `DEX_GID` | Dex container user | written by `configure-idp.py` to match the host owner of its mode-0600 generated config; normally leave these generated values alone |
 | `PROXY_BASIC_AUTH_CIDRS` | the egress overlay → gateway's source gate for **Basic** proxy auth | allow-list of client CIDRs that may use the token-as-username Basic credential (initial: `127.0.0.0/8,::1/128,172.16.0.0/12`); **leave it alone** — `openclaw-sandbox.sh` measures and rewrites it per machine (`refresh-dex-redirects.sh`'s sibling) |
 
 ## Demo 1 — scripted (`demo/demo.sh`)
@@ -125,17 +185,22 @@ message is identical, the audience differs.
 
 ## Demo 3 — the OPA policy playground (`/policy.html`)
 
-This one needs the policy engine switched on, which is a single extra flag:
+This needs the OPA policy overlay. For the standard local fixture, retain the
+base and egress overlays:
 
 ```bash
 cd demo
-docker compose -f docker-compose.yml -f docker-compose.opa.yml up -d
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com \
+docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 ```
 
-Then open **http://localhost:8083/policy.html**. (If you opened it on a stack
-started without the override, the page shows a banner with the exact command
-above — the playground needs the OPA engine and the shared policy file.) The
-page edits the *live*
+For Google/Microsoft browser testing, add `-f docker-compose.hardened.yml` and
+use the external issuer from `demo/.env`; do not use the local-issuer override
+above. Then open **http://localhost:8083/policy.html**. (If you opened it on
+a stack started without the OPA override, the page shows a banner with the
+command above — the playground needs the OPA engine and the shared policy
+file.) The page edits the *live*
 Rego file the authorization service watches ([`demo/policies/authorizer.rego`](../demo/policies/authorizer.rego)),
 applies it, and shows the decisions the **running** engine returns:
 
@@ -172,11 +237,13 @@ is the default).
 
 ### Run it
 
-For compose, the stack must already be up (base + egress overlay, the same
-stack the other demos use):
+For compose, the stack must already be up (base + egress + OPA overlays):
 
 ```bash
-cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+cd demo
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com \
+docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 cd ..
 demo/protected-api-demo.sh                        # compose, scripted approval
 demo/protected-api-demo.sh --await-human          # stop at the hold: YOU approve
@@ -207,7 +274,7 @@ nothing runs. Wiring up the card is covered in
 | `GW` | `http://localhost:8080` · `http://<node>:30080` | gateway (PEP) base URL |
 | `AUTHZ` | `http://localhost:8081` · `http://<node>:30081` | authz service base URL |
 | `TS` | `http://localhost:8082` · `http://<node>:30082` | token service base URL |
-| `ADMIN_TOKEN` | `agent-gateway-demo-admin` | operator token used for the approval call |
+| `ADMIN_TOKEN` | generated in ignored `demo/.env` by `demo/ensure-secrets.sh` | operator token used for approval calls; never use a published demo token |
 | `AWAIT_HUMAN` | `0` | set to `1` for the same behaviour as `--await-human` |
 
 `--node` sets `WEB`/`GW`/`AUTHZ`/`TS` for you; an explicit env value wins.
@@ -243,11 +310,11 @@ each call, audit for every allow/deny).
 
 ```bash
 cd demo
-# enable the listener first (images >= gateway 1.0.22; the pinned public
-# images gain it when the version lands on Docker Hub; locally:
-#   make image-gateway   # from the agent-gateway repo, then point
-#                        # docker-compose at the local tag
-docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+# This script uses the local Dex fixture. Preserve egress + OPA settings;
+# include the hardened overlay only for non-scripted browser testing.
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com \
+docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 ./egress-demo.sh
 ```
 
@@ -283,8 +350,12 @@ Notes:
 
 Runs the whole agent — process, filesystem, network — inside an
 [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandbox, then chats
-with it. This is the sandbox-step-only path: it proves isolation and a working
-model call, without the Agent Gateway egress proxy.
+with it. The model key is passed into the sandbox environment; OpenShell warns
+that the agent can read it, so use only with a trusted demo agent. If your
+OpenShell gateway has the Agent Gateway upstream-proxy stanza configured, keep
+the local Agent Gateway stack (base + egress overlay) running too; otherwise
+the chat cannot mint its supervisor credential. This is the sandbox-step-only
+path when that upstream stanza is absent.
 
 ```bash
 # needs Docker + the openshell CLI + NVIDIA_API_KEY in demo/.env
@@ -298,7 +369,8 @@ make openclaw-demo
 What you will see:
 
 1. the image builds (Ubuntu 24.04 + Node 22 + OpenClaw, non-root `sandbox`
-   user, provider config baked in with the key as an env SecretRef)
+   user; the provider config refers to an environment variable, not a key
+   baked into the image)
 2. the sandbox is created and the OpenClaw gateway starts as its main process
 3. `configure` writes the provider config and applies the default-deny egress
    allowlist (model provider + OpenClaw catalog, no `::tcp`)
@@ -386,21 +458,30 @@ in three states plus a human-gated delete, every step live wire traffic:
 | Part | What you see | What it proves |
 |---|---|---|
 | **A — unprotected** | the MCP server reached directly (`:8091/mcp`): `initialize`, `tools/list`, `tools/call add_customer` all answer **HTTP 200 with no credentials**; a customer named *Mallory Anonymous* is written | every MCP server in your estate today: whoever reaches the port, writes — and the gateway audit trail gains **zero rows** during Part A |
-| **B — protected** | the same server behind a dedicated gateway instance (`gateway-mcp`, `:8085`): unauthenticated call → **401**; SSO sign-in → delegation (`/mcp*`, `read`+`create`) → token → the same MCP calls now **200, attributed and audited**; revoke → next call **403** while the token is still valid | one URL change (integration Pattern C) puts identity, delegation, audit and instant revocation around the whole MCP surface — the wire protocol does not change |
+| **B — protected** | the same server behind a dedicated gateway instance (`gateway-mcp`, `:8085`): unauthenticated call → **401**; SSO sign-in → delegation (`/mcp*`, `initialize` + `list` + named tool actions) → token → the same MCP calls now **200, attributed and audited**; revoke → next call **403** while the token is still valid | one URL change (integration Pattern C) puts identity, per-tool delegation, audit and instant revocation around the MCP surface — the wire protocol does not change |
 | **C — OpenClaw** | the real agent (OpenShell sandbox, `make openclaw-demo` first) registers `demo-crm → http://<host>:8085/mcp` as a vanilla remote streamable-http MCP server with a static Bearer header; `openclaw mcp probe` lists the tools through the gateway; then one agent turn — *“add a customer named Jane Doe, then look her up”* — runs as the model chooses, and every tool call lands in the audit trail under the agent's identity | an MCP-native agent works with **zero agent-side gateway code**; the gateway governs MCP calls exactly like REST calls |
 | **D — delete approval** | the agent is asked to offboard a customer and attempts `DELETE /customers/{id}` through the gateway; the delegation's `approval_rules` (`resource_pattern:/customers*`, `action_pattern:delete`, `require:true`) **holds the delete (202) — upstream never called, the CRM proves it** — and the human decides in the console (or Telegram) within `APPROVAL_WAIT`s (default 300). **Approve** → the retry executes exactly once, the customer is gone (CRM count ↓ 1). **Deny** → the retry is refused (**403**), the customer remains, the refusal is on the audit record — and the binding outlives the delegation: the same action by the same agent is refused on sight under a fresh delegation too. `--no-human` approves immediately for unattended runs; no decision in time defaults to **deny** | deletion is not a tool the agent may use casually: the human grants the capability at the delegation and stays the only one who can say yes |
 
 Run it:
 
 ```bash
-cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
+cd demo && DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.egress.yml \
+  -f docker-compose.opa.yml \
+  up -d
 cd ..
 ./demo/mcp-demo.sh                        # A + B, then C and D if the sandbox is Ready
-./demo/mcp-demo.sh --no-openclaw          # skip C and D's sandbox legs (CI-safe)
+./demo/mcp-demo.sh --no-openclaw --no-human # A + B + host-driven D; no sandbox or wait
 ./demo/mcp-demo.sh --no-human             # D: the scripted human approves the delete
 ./demo/mcp-demo.sh --keep-crm             # keep the server's customer store across runs
 DELETE_TARGET=CUST-0001 ./demo/mcp-demo.sh   # pick the record Part D offboards
 ```
+
+`mcp-demo.sh` uses the loopback-only local Dex fixture; do not add the
+hardened external-IdP overlay for this scripted sign-in flow. If you already
+started the stack with another overlay, keep that overlay in the `docker
+compose` command above.
 
 ### How it is wired — and specifically, how DELETE is made human-gated
 
@@ -418,12 +499,14 @@ reverse proxy; it derives what each call *is* from the wire itself:
 
 | Wire call | resource | action | governed by |
 |---|---|---|---|
-| `POST /mcp` (any MCP tool call) | `/mcp` | `create` | the delegation's `/mcp*` grant |
+| `initialize` / `tools/list` on `POST /mcp` | `/mcp` | `initialize` / `list` | protocol-discovery actions in the delegation |
+| `tools/call add_customer` on `POST /mcp` | `/mcp` | `add_customer` | the delegation's named tool grant |
+| `tools/call lookup_customer` on `POST /mcp` | `/mcp` | `lookup_customer` | the delegation's named tool grant |
 | `DELETE /customers/CUST-0005` | `/customers/CUST-0005` | `delete` | the delegation's `/customers*` grant |
 
-Because the HTTP verb makes delete its own action — unlike MCP tool
-calls, which are all `POST /mcp` — the gateway can match a rule to
-deletions *alone*.
+The gateway parses MCP JSON-RPC bodies, so MCP tool calls are authorized by
+tool name even though they all use `POST /mcp`. The separate REST delete is
+used here to make the HTTP-method-based approval example easy to inspect.
 
 **3. The delegation (the actual control).** Part D rotates the rights and
 mints exactly this grant (via `POST` to the authz service — the same JSON
@@ -433,7 +516,7 @@ can be created in the admin console):
 {
   "agent_id": "openclaw-crm-agent",
   "resources": ["/mcp*", "/customers*"],
-  "actions": ["read", "create", "delete"],
+  "actions": ["initialize", "list", "add_customer", "lookup_customer", "delete"],
   "expires_in_seconds": 1800,
   "approval_rules": [{
     "when":   { "resource_pattern": "/customers*", "action_pattern": "delete" },
@@ -445,10 +528,10 @@ can be created in the admin console):
 
 What every field does at decision time:
 
-* `resources` + `actions` — scope: the agent *may* read (`/mcp*` reads,
-  `GET /customers`), create (MCP `add_customer`) and delete. Remove
-  `delete` from `actions` and every delete is outright **403**; remove
-  `/customers*` and the deletion is invisible to the agent entirely.
+* `resources` + `actions` — scope: `/mcp*` grants protocol initialization,
+  discovery and only the named MCP tools; `/customers*` plus `delete` grants
+  the REST deletion. Remove `delete` from `actions` and the REST delete is
+  outright **403**; remove `/customers*` and that route is outside the grant.
 * `approval_rules[].when` — pattern match: any decision whose resource
   starts with `/customers` **and** whose action is `delete` matches. Reads
   and creates in the same grant keep flowing automatically — the rule only
@@ -507,7 +590,7 @@ Verification points after the run:
 ```bash
 # out-of-band proof that the agent's customer landed (in-memory CRM):
 curl -s http://localhost:8091/customers | python3 -m json.tool
-# the MCP decisions on the audit trail (resource /mcp, action create):
+# the MCP decisions on the audit trail (resource /mcp, per-tool action):
 docker exec agent-gateway-postgres psql -U agentgw -d agent_gateway \
   -c "SELECT ts, agent_id, resource, action, outcome, reason FROM audit_events WHERE resource LIKE '/mcp%' ORDER BY ts DESC LIMIT 20;"
 # the delete decisions (Part D):
@@ -522,15 +605,12 @@ your own MCP servers (dedicated gateway instance, delegation JSON, agent
 client config, the approval-gated risky-operation pattern and today's
 limits) is [Protecting-Your-MCP.md](Protecting-Your-MCP.md).
 
-Honest limits (documented so nobody over-promises): at the `/mcp`
-endpoint the gateway derives `resource=/mcp`, `action=create` for every MCP
-tool call, so **per-server** governance is what you get today (the
-`per-tool` MCP adapter that parses `params.name` is on the gateway product's
-roadmap — see [Integration-Patterns.md](Integration-Patterns.md) Pattern C);
-that is why Part D's delete rides the CRM's REST surface
-(`DELETE /customers/{id}`), where the gateway can tell delete apart and hold
-it — when the per-tool MCP adapter ships, the same approval rule can move
-onto the MCP tool call itself; the agent's MCP token is a static header in
+The gateway parses MCP JSON-RPC requests: `tools/call` is authorized by the
+named tool, while protocol initialization and discovery use the `initialize`
+and `list` actions. Part D uses the CRM's REST surface
+(`DELETE /customers/{id}`) to demonstrate an HTTP-method-specific approval
+rule; MCP tool calls can also be held by matching an approval rule to the
+tool name. The agent's MCP token is a static header in
 the sandbox's `openclaw.json` with a TTL matching its delegation (30 min),
 the same trade-off any static-header MCP credential carries.
 
@@ -562,8 +642,10 @@ A dedicated demo for cutting off an agent's access to an upstream API at the
 enforcement point, at two levels:
 
 ```bash
-cd demo && docker compose -f docker-compose.yml -f docker-compose.egress.yml up -d
-./kill-switch-demo.sh
+cd demo
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com \
+docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 cd ..
 ./demo/kill-switch-demo.sh                  # compose, all scripted
 ./demo/kill-switch-demo.sh --node 192.168.1.74   # k3s cluster
@@ -674,7 +756,7 @@ The exact `<client>`, `<redirect>`, and `<connector_id>` depend on the tenant's 
 For convenience, `demo/obtain-id-token.sh` automates both flows:
 
 ```bash
-# Local demo stack — fully unattended (Dex mock connector needs no login)
+# Local demo stack — uses the loopback-only shared Dex demo account
 ID_TOKEN=$(./demo/obtain-id-token.sh)
 
 # Remote tenant — browser sign-in required, then paste the callback URL
@@ -703,16 +785,23 @@ ADMIN_TOKEN=<operator token> \
 
 An unattended R&D pilot proving what happens when consent arrives late or the
 proposed action changes. Requires Bash, curl, Python 3, the local Compose stack
-with Dex's mock connector, demoapi and gateway **1.0.32+**. No database edits
-or model credentials are needed.
+with its loopback-only Dex demo account, demoapi, and a gateway image that
+implements the `APPROVAL_TTL` setting. No database edits or model credentials
+are needed. Do not use the shared demo account outside a local development
+environment.
+
+**Image compatibility:** the current main gateway image (`1.0.36`) does not
+implement `APPROVAL_TTL` and creates a 15-minute approval instead. The expiry
+scenario therefore cannot complete with the default image. Use a gateway
+build that implements `APPROVAL_TTL`; the script detects the mismatch and
+stops rather than waiting for the default 15-minute expiry.
 
 ```bash
-# Repository root: recreate the gateway with a real 10-second approval TTL,
-# wait for health, then run the script (Docker/Podman auto-detected).
-make approval-edge-demo
-# Or start the stack explicitly and invoke the script:
-APPROVAL_TTL=10s docker compose -f demo/docker-compose.yml up -d --wait
-./demo/approval-edge-cases-demo.sh
+# Repository root: use a gateway image that implements APPROVAL_TTL, and
+# include the same overlays as the running local stack.
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com \
+  make approval-edge-demo APPROVAL_TTL=10s \
+  COMPOSE_OVERLAYS="-f demo/docker-compose.egress.yml -f demo/docker-compose.opa.yml"
 ```
 
 | Scenario | Expected evidence |
@@ -736,11 +825,12 @@ decision responses expose the stored status, approver and decision timestamp;
 hold/allow/deny events record enforcement and executed calls.
 
 **Configuration:** `APPROVAL_TTL` is a Go duration, default `15m`; unset,
-invalid and non-positive values fall back to that default. Managed images
-support it from **1.0.36**. It applies to newly created approvals and the
-consumption window after consent, not existing requests. `make
-approval-edge-demo APPROVAL_TTL=20s` overrides the test TTL. The script refuses
-to wait longer than `APPROVAL_WAIT` (default `60` seconds); set
+invalid and non-positive values fall back to that default in supporting
+gateway images. It applies to newly created approvals and the consumption
+window after consent, not existing requests. `make approval-edge-demo
+APPROVAL_TTL=20s COMPOSE_OVERLAYS="..."` overrides the test TTL only when the
+selected image implements the setting. The script refuses to wait longer than
+`APPROVAL_WAIT` (default `60` seconds); set
 `APPROVAL_WAIT=90` for longer pilots. It also accepts `GW`, `AUTHZ`, `TS`,
 `WEB`, `DEX`, `ADMIN_TOKEN` and `AGENT_ID` overrides; the scripted sign-in is
 for the local Dex demo, not a remote tenant's production IdP.
@@ -748,7 +838,9 @@ for the local Dex demo, not a remote tenant's production IdP.
 Restore the normal human decision window after the test:
 
 ```bash
-APPROVAL_TTL=15m docker compose -f demo/docker-compose.yml up -d --wait gateway
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com APPROVAL_TTL=15m docker compose \
+  -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+  -f demo/docker-compose.opa.yml up -d --wait gateway
 ```
 
 The Make target recreates the gateway because changing an environment value
@@ -788,13 +880,17 @@ uses real forecast and elevation data without an API key. All HTTP calls use
 
 ### Run it
 
-This demo uses its own weather overlay rather than the egress overlay in the
-general setup above. Run these commands **from the repository root**:
+This demo adds a dedicated weather gateway. Run these commands **from the
+repository root**, retaining the base, egress and OPA overlays from the
+standard local stack:
 
 ```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com \
+docker compose \
+  -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+  -f demo/docker-compose.opa.yml -f demo/docker-compose.weather.yml \
   up -d --wait tokensvc gateway-weather
-bash demo/public-weather-tutorial.sh
+DEX_ISSUER_URL=http://dex:5556/dex bash demo/public-weather-tutorial.sh --yes
 ```
 
 Requirements: Docker Compose v2 with `--wait` support (or a compatible Podman
@@ -834,7 +930,8 @@ directly accessible.
 Stop just the weather gateway afterward:
 
 ```bash
-docker compose -f demo/docker-compose.yml -f demo/docker-compose.weather.yml \
+docker compose -f demo/docker-compose.yml -f demo/docker-compose.egress.yml \
+  -f demo/docker-compose.opa.yml -f demo/docker-compose.weather.yml \
   stop gateway-weather
 ```
 
@@ -847,8 +944,10 @@ An agent reads email automatically and requires the mailbox owner's approval
 for every outgoing message. Start with fake mail and real approvals:
 
 ```bash
-make gmail-up
-make gmail-demo
+DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com GMAIL_MODE=fake \
+  make gmail-up \
+  COMPOSE_OVERLAYS="-f demo/docker-compose.egress.yml -f demo/docker-compose.opa.yml"
+GMAIL_MODE=fake make gmail-demo ARGS=--yes
 ```
 
 The dedicated MCP ingress listens on `http://localhost:8089/mcp-gmail`.
@@ -898,10 +997,11 @@ cd demo && docker compose down --remove-orphans
 
 | Symptom | Fix |
 |---|---|
-| Demo reports a service unhealthy | `cd demo && docker compose up -d` and wait ~20 s; check `docker compose ps` |
+| Demo reports a service unhealthy | Re-run the same full `docker compose -f ... up -d` command used to start the stack; do not drop the OPA, egress, weather, Gmail or hardened overlays. For local Dex testing with a tunnel URL in `.env`, prefix the command with `DEX_ISSUER_URL=http://dex:5556/dex`. |
 | `ERROR: Licence has expired on …` at startup | request a fresh licence token from the vendor; replace `demo/keys/license.token` and restart |
 | `Customer private key not found` | the images need `demo/keys/` mounted — do not delete that directory |
-| SSO sign-in step fails | ensure Dex is up: `curl http://localhost:5556/dex/.well-known/openid-configuration` |
+| Console login sends you to the wrong provider, or rejects the local demo account | Choose one mode. For local Dex, recreate with `DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com` and the base + desired overlays; use `alice@example.com` / `password`. For Google/Microsoft, use the hardened overlay, configured tunnel/provider and verified `WEB_ADMIN_EMAILS`; do not apply the local overrides. |
+| SSO sign-in step fails | ensure Dex is up: `curl http://localhost:5556/dex/.well-known/openid-configuration`; confirm its config matches the selected mode (`config.local-demo.yaml` vs generated hardened config) |
 | Graphical demo says tokensvc is down | make sure your compose file from this repo is ≥ the version matching `agent-gateway-web:1.0.18` |
 
 
@@ -911,7 +1011,8 @@ The gateway is a policy enforcement point in front of every agent call, so per-r
 
 ```bash
 # From the repository root
-cd demo && docker compose up -d
+cd demo && DEX_ISSUER_URL=http://dex:5556/dex OIDC_CONNECTOR_ID= WEB_ADMIN_EMAILS=alice@example.com docker compose \
+  -f docker-compose.yml -f docker-compose.egress.yml -f docker-compose.opa.yml up -d
 cd ..
 make bench                 # or ./demo/bench-engines.sh
 ```
