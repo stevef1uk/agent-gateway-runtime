@@ -82,6 +82,11 @@ One of the project's demonstrations explores this under **prompt injection**. Th
 
 The repository includes a local demonstration stack. Requirements are Docker Engine 24+ or Podman 4.7+, Compose, and `curl` (`jq` is optional). The short walkthrough below uses the signed, digest-pinned main images by default; the exact local image IDs used by STRIX and published-image verification steps are in the [image verification guide](docs/Container-Image-Security.md).
 
+`./ensure-secrets.sh` creates the ignored `demo/.env` from `.env.example` if
+it does not exist, generates independent local secrets, and restricts the
+file to your user. You do not need to copy `.env` from another machine; do
+not reuse a file containing machine-local image overrides or credentials.
+
 ```bash
 cd demo
 ./ensure-secrets.sh

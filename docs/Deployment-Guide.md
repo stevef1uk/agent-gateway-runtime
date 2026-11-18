@@ -176,7 +176,12 @@ WEB_IMAGE=agent-gateway/web:security-test
 ```
 
 Do not run `docker compose pull` for this option: these tags are local test
-images, not Docker Hub releases.
+images, not Docker Hub releases. They exist only in the local container
+engine where they were built and are not transferable by copying `demo/.env`
+to another machine. Select this option only if the `docker image inspect`
+command above succeeds on the machine running Compose. Otherwise choose
+option B and remove the four `*_IMAGE` overrides from `demo/.env`; Compose
+will then use the published, digest-pinned defaults.
 
 **B. Run the current published, signed main release instead.** From the
 runtime repository root, verify its signatures:

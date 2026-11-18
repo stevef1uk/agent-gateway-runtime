@@ -24,7 +24,14 @@ ensure_secret() {
   if [ -z "$value" ]; then
     value="$(openssl rand -hex 32)"
     if grep -q "^${name}=" .env; then
-      sed -i "s|^${name}=.*|${name}=${value}|" .env
+      tmp_file="$(mktemp "${demo_dir}/.env.XXXXXX")"
+      awk -v key="$name" -v replacement="$value" '
+        index($0, key "=") == 1 { print key "=" replacement; found=1; next }
+        { print }
+        END { if (!found) print key "=" replacement }
+      ' .env > "$tmp_file"
+      chmod 600 "$tmp_file"
+      mv "$tmp_file" .env
     else
       printf '%s=%s\n' "$name" "$value" >> .env
     fi
@@ -45,16 +52,11 @@ for name in JWT_SECRET GATEWAY_ADMIN_TOKEN; do
   ensure_secret "$name"
 done
 
-secrets=()
-for name in JWT_SECRET GATEWAY_ADMIN_TOKEN; do
-  value="$(read_env_value "$name")"
-  for previous in "${secrets[@]}"; do
-    if [ "$value" = "$previous" ]; then
-      echo "JWT_SECRET and GATEWAY_ADMIN_TOKEN in demo/.env must be independent" >&2
-      exit 1
-    fi
-  done
-  secrets+=("$value")
-done
+jwt_secret="$(read_env_value JWT_SECRET)"
+admin_token="$(read_env_value GATEWAY_ADMIN_TOKEN)"
+if [ "$jwt_secret" = "$admin_token" ]; then
+  echo "JWT_SECRET and GATEWAY_ADMIN_TOKEN in demo/.env must be independent" >&2
+  exit 1
+fi
 
 echo "Local demo JWT and admin secrets are configured in demo/.env."

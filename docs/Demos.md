@@ -34,6 +34,10 @@ four Agent Gateway services and pulls them if they are not already present.
 To test the exact local `security-test` images used by STRIX, explicitly set
 the four image overrides as described in the
 [Deployment Guide](Deployment-Guide.md#local-google-idp-test).
+Those `security-test` tags are local to the Docker engine where the images
+were built; they are not published and cannot be pulled on another machine.
+If you previously selected them on a different computer, remove the four
+image overrides from `demo/.env` to use the published digest-pinned defaults.
 
 Choose one sign-in mode and use its matching Compose configuration:
 
