@@ -16,7 +16,10 @@ That creates a practical question:
 
 > **How do you give an AI agent enough freedom to be useful without giving it unlimited authority?**
 
-**Agent Gateway is a control layer between AI agents and the systems they can affect.** Its defining capability is fine-grained delegation: a human scopes an agent's authority by what it can access and do, sets limits and expiry, and decides which actions require approval. The gateway checks each request against that authority, lets permitted work proceed, and holds consequential actions for a human decision.
+**Agent Gateway is the missing control layer for agent that actually do things.** 
+Scoped authority • Automatic for low risk • Human approval for high stakes • Instant revocation • Full audit trail
+
+Its defining capability is fine-grained delegation: a human scopes an agent's authority by what it can access and do, sets limits and expiry, and decides which actions require approval. The gateway checks each request against that authority, lets permitted work proceed, and holds consequential actions for a human decision.## Fine-grained delegation. Human approval when it matters.
 
 **The agent gets scoped authority to work autonomously. People retain control over consequential actions.**
 
