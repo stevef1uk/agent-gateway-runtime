@@ -3,7 +3,6 @@
 # Docker or Podman — see lib/engine.sh (CONTAINER_ENGINE env override).
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/engine.sh"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/admin-token.sh"
-load_admin_token
 
 # ============================================================================
 # Prove the egress rules: HTTP outward calls from OpenClaw's sandbox.
@@ -93,9 +92,23 @@ record_blocked() { # label actual
 }
 
 code() { # url-arg... — always run curl inside the sandbox
-  openshell sandbox exec -n "$SANDBOX_NAME" --no-tty --timeout 60 \
-    --env PROVIDER_API_KEY="$PROVIDER_API_KEY" -- \
-    curl -s "$@" 2>/dev/null | tail -1
+  local stderr_file output status curl_error
+  stderr_file=$(mktemp)
+  if output=$(openshell sandbox exec -n "$SANDBOX_NAME" --no-tty --timeout 60 \
+      --env PROVIDER_API_KEY="$PROVIDER_API_KEY" -- \
+      curl -sS "$@" 2>"$stderr_file"); then
+    :
+  else
+    status=$?
+    printf '  sandbox curl command failed (OpenShell exec exit %s)\n' "$status" >&2
+  fi
+  curl_error=$(grep -E '^curl: \([0-9]+\)' "$stderr_file" | tail -1 || true)
+  if [ -n "$curl_error" ]; then
+    printf '  %s\n' "$curl_error" >&2
+  fi
+  rm -f "$stderr_file"
+  output=$(printf '%s\n' "${output:-}" | tail -1)
+  printf '%s\n' "${output:-000}"
 }
 
 # Ask OpenClaw to run a command via its exec tool, then show the agent's reply.
@@ -142,6 +155,11 @@ for _arg in "$@"; do
     --no-dialogue|-nodialogue|--nodialogue) NO_DIALOGUE=1 ;;
   esac
 done
+
+if [ "$RUN_GW" = 1 ] && ! load_admin_token; then
+  bad "gateway admin token is required for --gateway; set GATEWAY_ADMIN_TOKEN in demo/.env"
+  exit 1
+fi
 
 # ============================================================================
 # Part B preamble (runs BEFORE Part A when --gateway: once the OpenShell
@@ -276,29 +294,70 @@ if [ "$RUN_GW" = 1 ]; then
 
   # The gateway's approvals list (admin API) is the source of truth for holds:
   # every held tunnel appears as a pending approval for this delegation.
-  pending_hint() { # label
-    curl -s --max-time 3 "$GW_URL/v1/approvals/" \
+  pending_hint() {
+    local response
+    if ! response=$(curl -fsS --max-time 3 "$GW_URL/v1/approvals/" \
       -H "X-Admin-Token: $ADMIN_TOKEN" \
-      | python3 -c "
+    ); then
+      bad "could not query the approvals API at $GW_URL (check gateway port and admin token)"
+      return 1
+    fi
+    printf '%s' "$response" | python3 -c "
 import sys, json
-try:
-    rows = json.load(sys.stdin)
-except Exception:
-    rows = []
+rows = json.load(sys.stdin)
 pend = [r for r in rows if r.get('status') == 'pending' and r.get('delegation_id') == '$DELEGATION_ID' and r.get('resource') == 'api.github.com']
 pend.sort(key=lambda r: r.get('created_at', ''))
-print(pend[-1]['id'] if pend else '')" 2>/dev/null
+print(pend[-1]['id'] if pend else '')"
+  }
+
+  approval_decision() { # approval-id, or empty for the latest hold
+    local approval_id="${1:-}" response
+    if ! response=$(curl -fsS --max-time 3 \
+      "$GW_URL/v1/audit/?delegation_id=$DELEGATION_ID&limit=100" \
+      -H "X-Admin-Token: $ADMIN_TOKEN"); then
+      bad "could not query the audit API at $GW_URL (check gateway port and admin token)"
+      return 1
+    fi
+    printf '%s' "$response" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+approval_id = sys.argv[1]
+events = [e for e in data.get("events", [])
+          if e.get("resource") == "api.github.com"
+          and e.get("action") == "connect"
+          and e.get("approval_id")]
+if not approval_id:
+    holds = [e for e in events if e.get("outcome") == "approval_required"]
+    holds.sort(key=lambda e: e.get("ts", ""))
+    approval_id = holds[-1].get("approval_id", "") if holds else ""
+decisions = [e for e in events if e.get("approval_id") == approval_id
+             and ((e.get("outcome") == "allow"
+                   and e.get("reason", "").startswith("approved by "))
+                  or e.get("outcome") == "deny")]
+decisions.sort(key=lambda e: e.get("ts", ""))
+state = "unknown"
+if decisions:
+    state = "approved" if decisions[-1].get("outcome") == "allow" else "denied"
+print(f"{state}|{approval_id}")' "$approval_id"
   }
 
   # Re-check the approvals list every POLL_INTERVAL seconds until the pending
-  # row disappears (the human decided) or the window closes. Returns 0 when a
-  # decision arrived, 1 on timeout; DECISION_WAIT holds the elapsed seconds.
+  # row disappears, then verify the decision in the audit trail. Returns 0 for
+  # approval, 1 for timeout, 2 for an unverifiable decision, and 3 for denial.
   DECISION_WAIT=0
   wait_for_decision() { # approval-id
-    local id="$1"
+    local id="$1" current
     DECISION_WAIT=0
     while [ "$DECISION_WAIT" -lt "$APPROVAL_WAIT" ]; do
-      [ "$(pending_hint)" != "$id" ] && return 0
+      current=$(pending_hint) || return 2
+      if [ "$current" != "$id" ]; then
+        current=$(approval_decision "$id") || return 2
+        case "$current" in
+          approved\|*) return 0 ;;
+          denied\|*) return 3 ;;
+          *) return 2 ;;
+        esac
+      fi
       sleep "$POLL_INTERVAL"
       DECISION_WAIT=$((DECISION_WAIT + POLL_INTERVAL))
       printf "  ⏳ %ds…\r" "$DECISION_WAIT"
@@ -329,28 +388,49 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
 
   step "First HTTPS tunnel to GitHub — held for your approval"
   C5=$(code -o /dev/null -w '%{http_code}' --max-time 20 https://api.github.com)
-  # A refused tunnel is the hold signal: the gateway did not execute the call.
-  # The pending row can already be gone when the human decides inside the poll
-  # window (the list is pending-only), so a missing id is not a failure — the
-  # decision step below and the retry prove whether the hold was real.
-  APR_ID=$(pending_hint)
+  # A non-200 alone is not proof of a hold; require a pending approval or an
+  # approved decision in the audit trail before counting the assertion.
+  if ! APR_ID=$(pending_hint); then
+    bad "cannot determine the first GitHub approval state; stopping instead of treating an API error as a hold"
+    exit 1
+  fi
+  FIRST_ALREADY_APPROVED=0
   if [ "$C5" != "200" ]; then
+    if [ -z "$APR_ID" ]; then
+      if ! FIRST_DECISION=$(approval_decision); then
+        bad "cannot verify the first GitHub approval state"
+        exit 1
+      fi
+      case "$FIRST_DECISION" in
+        approved\|*)
+          APR_ID="${FIRST_DECISION#*|}"
+          FIRST_ALREADY_APPROVED=1
+          ;;
+        denied\|*)
+          bad "the first GitHub approval was denied"
+          exit 1
+          ;;
+        *)
+          bad "GitHub request returned $C5 but no pending or approved decision exists"
+          exit 1
+          ;;
+      esac
+    fi
     okk "first connect: held for human approval (curl saw $C5 — tunnel refused, call not executed)"
     PASS=$((PASS+1))
-    if [ -n "$APR_ID" ]; then
-      line "approval_id: $APR_ID"
-      if [ "$NO_HUMAN" = 1 ]; then
-        line "--no-human: auto-approving immediately"
-      else
-        line "Telegram card sent — approve there (or in the console) to continue at once;"
-        line "the script polls every ${POLL_INTERVAL}s and auto-approves after ${APPROVAL_WAIT}s"
-      fi
+    line "approval_id: $APR_ID"
+    if [ "$FIRST_ALREADY_APPROVED" = 1 ]; then
+      line "approval was already recorded as approved"
+    elif [ "$NO_HUMAN" = 1 ]; then
+      line "--no-human: auto-approving immediately"
     else
-      line "no pending row — already decided (console/Telegram)"
+      line "Telegram card sent — approve there (or in the console) to continue at once;"
+      line "the script polls every ${POLL_INTERVAL}s and auto-approves after ${APPROVAL_WAIT}s"
     fi
   else
     bad "first connect executed without approval (curl=$C5)"; FAIL=$((FAIL+1))
     teach_routing
+    exit 1
   fi
 
   # 4. Let the human decide (Telegram/web console), then auto-approve if the
@@ -358,8 +438,8 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
   SUBJ=$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | python3 -c "import sys,json,base64; t=sys.stdin.read().strip(); t+='='*(-len(t)%4); print(json.loads(base64.urlsafe_b64decode(t)).get('sub',''))" 2>/dev/null || true)
 
   approved=0
-  if [ -z "$APR_ID" ]; then
-    okk "decision already made before the poll — human approval via console/Telegram"
+  if [ "$FIRST_ALREADY_APPROVED" = 1 ]; then
+    okk "decision already approved before the poll"
     PASS=$((PASS+1))
   elif [ "$NO_HUMAN" = 1 ]; then
     info "--no-human: auto-approving without waiting"
@@ -375,6 +455,14 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
       approved=1
       PASS=$((PASS+1))
     else
+      wait_status=$?
+      if [ "$wait_status" -eq 2 ]; then
+        bad "could not verify the approval decision; stopping"
+        exit 1
+      elif [ "$wait_status" -eq 3 ]; then
+        bad "GitHub approval was denied"
+        exit 1
+      fi
       info "no manual approval — auto-approving on your behalf"
       DEC=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW_URL/v1/approvals/" \
         -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
@@ -389,32 +477,72 @@ print(pend[-1]['id'] if pend else '')" 2>/dev/null
 
   step "Second tunnel — again held (single-use approvals)"
   C6=$(code -o /dev/null -w '%{http_code}' --max-time 20 https://api.github.com)
-  APR2=$(pending_hint)
+  if ! APR2=$(pending_hint); then
+    bad "cannot determine the second GitHub approval state; stopping instead of treating an API error as a hold"
+    exit 1
+  fi
+  SECOND_ALREADY_APPROVED=0
   if [ "$C6" != "200" ]; then
+    if [ -z "$APR2" ]; then
+      if ! SECOND_DECISION=$(approval_decision); then
+        bad "cannot verify the second GitHub approval state"
+        exit 1
+      fi
+      case "$SECOND_DECISION" in
+        approved\|*)
+          APR2="${SECOND_DECISION#*|}"
+          SECOND_ALREADY_APPROVED=1
+          ;;
+        denied\|*)
+          bad "the second GitHub approval was denied"
+          exit 1
+          ;;
+        *)
+          bad "second GitHub request returned $C6 but no pending or approved decision exists"
+          exit 1
+          ;;
+      esac
+    fi
     # The first approval was consumed by the retry above, so a fresh refusal
     # here proves approvals bind exactly once.
     okk "second connect: held again — approvals bind exactly once"
     PASS=$((PASS+1))
-    if [ -n "$APR2" ]; then
-      line "second approval_id: $APR2"
-      if [ "$NO_HUMAN" = 1 ]; then
-        info "--no-human: auto-approving without waiting"
-      else
-        info "waiting up to ${APPROVAL_WAIT}s for your approval via Telegram or the web console…"
-        if wait_for_decision "$APR2"; then
-          echo
-          okk "decision arrived via Telegram/console after ${DECISION_WAIT}s"
-        else
-          info "no manual approval — auto-approving on your behalf"
-        fi
-      fi
-      if [ "$(pending_hint)" = "$APR2" ]; then
-        curl -s -o /dev/null -X POST "$GW_URL/v1/approvals/" \
-          -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
-          -d "{\"approval_id\":\"$APR2\",\"approver_id\":\"$SUBJ\",\"approved\":true}"
-      fi
+    line "second approval_id: $APR2"
+    auto_approve=0
+    if [ "$SECOND_ALREADY_APPROVED" = 1 ]; then
+      line "second approval was already recorded as approved"
+    elif [ "$NO_HUMAN" = 1 ]; then
+      info "--no-human: auto-approving without waiting"
+      auto_approve=1
     else
-      line "no pending row — already decided (console/Telegram)"
+      info "waiting up to ${APPROVAL_WAIT}s for your approval via Telegram or the web console…"
+      if wait_for_decision "$APR2"; then
+        echo
+        okk "decision arrived via Telegram/console after ${DECISION_WAIT}s"
+      else
+        wait_status=$?
+        if [ "$wait_status" -eq 2 ]; then
+          bad "could not verify the second approval decision; stopping"
+          exit 1
+        elif [ "$wait_status" -eq 3 ]; then
+          bad "second GitHub approval was denied"
+          exit 1
+        fi
+        info "no manual approval — auto-approving on your behalf"
+        auto_approve=1
+      fi
+    fi
+    if [ "$auto_approve" = 1 ]; then
+      if ! CURRENT_APR=$(pending_hint); then
+        bad "could not re-check the second approval before deciding it"
+        exit 1
+      fi
+      if [ "$CURRENT_APR" = "$APR2" ]; then
+        DEC=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GW_URL/v1/approvals/" \
+          -H "Content-Type: application/json" -H "X-Admin-Token: $ADMIN_TOKEN" \
+          -d "{\"approval_id\":\"$APR2\",\"approver_id\":\"$SUBJ\",\"approved\":true}")
+        record "auto-approve (script acts as the human)" "200" "$DEC"
+      fi
     fi
     line "approved — retrying…"
     C6b=$(code -o /dev/null -w '%{http_code}' --max-time 20 https://api.github.com)
