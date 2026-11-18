@@ -68,10 +68,10 @@ services:
     security_opt: ["no-new-privileges:true"]
     # GATEWAY_HOST_PORT overrides the published PEP port (default 8080) when
     # something else already owns :8080 on the host, e.g. an OpenShell gateway.
-    # Keep host-local access and expose only the Docker bridge address so
-    # isolated test containers can reach the pen-test target without opening
-    # the gateway on every host interface.
-    ports: ["127.0.0.1:${GATEWAY_HOST_PORT:-8080}:8080", "172.17.0.1:${GATEWAY_HOST_PORT:-8080}:8080", "127.0.0.1:8088:8088"]
+    # Keep published ports loopback-only. Containers attached to this Compose
+    # network can reach the gateway directly at gateway:8080; do not bind to a
+    # fixed Docker bridge IP, which is Linux-specific and absent on Docker Desktop.
+    ports: ["127.0.0.1:${GATEWAY_HOST_PORT:-8080}:8080", "127.0.0.1:8088:8088"]
     environment:
       - AUTHZ_URL=http://authz:8081
       - AUTHZ_READ_TOKEN=${AUTHZ_READ_TOKEN:-agent-gateway-demo-authz-read}
