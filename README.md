@@ -61,7 +61,7 @@ A quick way to understand the project is to see it working:
 | **Introduction to Agent Gateway (AGW)** | An introduction to AGW. [Watch on YouTube](https://youtu.be/yrPyAH-Jc6s) |
 | **Quick Demo** | A short introduction to Agent Gateway and its core control model. [Watch on YouTube](https://youtu.be/0n9V7A_6KZg) |
 | **Console Wizard Demo** | A walkthrough of the console and guided onboarding experience. [Watch on YouTube](https://youtu.be/eHiA4wtHUFk) |
-| **Discovery Capability** | A walkthrough of forthcoming discovery capability. [Watch on YouTube](https://youtu.be/jx-_pXFf1SM) |
+| **Discovery Capability** | A walkthrough of a proposed roadmap capability offering discovery capability. [Watch on YouTube](https://youtu.be/jx-_pXFf1SM) |
 
 ## How it works
 
